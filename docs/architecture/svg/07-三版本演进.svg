@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 680 370" width="100%" role="img">
+  <title>三版本演进与资产复用策略</title>
+  <desc>V1补缺陷、V2解耦建立Service层、V3换Web UI复用Service，引擎层贯穿三版</desc>
+  <defs>
+    <style>
+      .t{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:12px;fill:#2C2C2A}
+      .ts{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;fill:#5F5E5A}
+      .th{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13px;font-weight:500;fill:#2C2C2A}
+      .cap{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;fill:#888780}
+      .w{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;font-weight:500;fill:#ffffff}
+      .key{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;font-weight:500;fill:#185FA5}
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <text class="th" x="340" y="26" text-anchor="middle" font-size="15">三版本演进 · 资产复用策略</text>
+  <text class="th" x="135" y="56" text-anchor="middle">V1 · 补缺陷·备份基线</text>
+  <text class="th" x="335" y="56" text-anchor="middle">V2 · 解耦重构·模块化</text>
+  <text class="th" x="535" y="56" text-anchor="middle">V3 · Web UI·审美交互</text>
+  <rect x="50" y="80" width="170" height="160" rx="8" fill="#AFA9EC"/>
+  <text class="w" x="135" y="150" text-anchor="middle">UI + 逻辑</text>
+  <text class="w" x="135" y="168" text-anchor="middle">(混合单体)</text>
+  <rect x="50" y="250" width="170" height="70" rx="8" fill="#5DCAA5"/>
+  <text class="w" x="135" y="290" text-anchor="middle">faster-whisper 引擎</text>
+  <rect x="250" y="80" width="170" height="60" rx="8" fill="#CECBF6"/>
+  <text class="w" x="335" y="114" text-anchor="middle">UI（薄·PySide6）</text>
+  <rect x="250" y="150" width="170" height="80" rx="8" fill="#85B7EB"/>
+  <text class="w" x="335" y="184" text-anchor="middle">Service 层</text>
+  <text class="w" x="335" y="202" text-anchor="middle">引擎封装·任务调度</text>
+  <rect x="250" y="250" width="170" height="70" rx="8" fill="#5DCAA5"/>
+  <text class="w" x="335" y="290" text-anchor="middle">faster-whisper 引擎</text>
+  <rect x="450" y="80" width="170" height="70" rx="8" fill="#9FE1CB"/>
+  <text class="w" x="535" y="120" text-anchor="middle">Web UI（HTML/CSS/JS）</text>
+  <rect x="450" y="160" width="170" height="70" rx="8" fill="#B5D4F4" stroke="#185FA5" stroke-width="1" stroke-dasharray="4 3"/>
+  <text class="w" x="535" y="200" text-anchor="middle">Service 层（复用 V2）</text>
+  <rect x="450" y="250" width="170" height="70" rx="8" fill="#5DCAA5"/>
+  <text class="w" x="535" y="290" text-anchor="middle">faster-whisper 引擎</text>
+  <path d="M222 130 L246 130" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <text class="cap" x="234" y="122" text-anchor="middle">补缺陷</text>
+  <text class="cap" x="234" y="148" text-anchor="middle">+解耦</text>
+  <path d="M422 130 L446 130" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <text class="cap" x="434" y="122" text-anchor="middle">换前端</text>
+  <text class="cap" x="434" y="148" text-anchor="middle">复用Service</text>
+  <line x1="50" y1="335" x2="620" y2="335" stroke="#1D9E75" stroke-width="1" stroke-dasharray="2 2"/>
+  <text class="cap" x="335" y="350" text-anchor="middle" fill="#0F6E56">引擎层贯穿三版不动（最大资产）</text>
+  <text class="key" x="335" y="74" text-anchor="middle">★ 关注点分离（V3 复用关键）</text>
+</svg>

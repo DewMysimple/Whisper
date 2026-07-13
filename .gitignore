@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+
+# 虚拟环境
+whisper_env/
+.env/
+venv/
+env/
+
+# 模型文件（体积大，应自行下载）
+models/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统
+Thumbs.db
+.DS_Store
+
+# 日志/临时文件
+*.log
+*.tmp
+temp/

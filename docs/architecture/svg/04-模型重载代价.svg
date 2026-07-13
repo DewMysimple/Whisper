@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 680 270" width="100%" role="img">
+  <title>每次开始重载模型的代价</title>
+  <desc>当前架构每次点击都新起进程重载模型(5.3s)，常驻进程架构后续点击0重载</desc>
+  <defs>
+    <style>
+      .t{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:12px;fill:#2C2C2A}
+      .ts{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;fill:#5F5E5A}
+      .th{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13px;font-weight:500;fill:#2C2C2A}
+      .w{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;font-weight:500;fill:#ffffff}
+      .cap{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;fill:#888780}
+      .bad{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;font-weight:500;fill:#A32D2D}
+      .good{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;font-weight:500;fill:#0F6E56}
+    </style>
+  </defs>
+  <text class="th" x="340" y="24" text-anchor="middle" font-size="15">每次「开始」重载模型的代价</text>
+  <rect x="150" y="42" width="12" height="12" rx="2" fill="#888780"/>
+  <text class="ts" x="168" y="52">进程启动+import(1s)</text>
+  <rect x="300" y="42" width="12" height="12" rx="2" fill="#EF9F27"/>
+  <text class="ts" x="318" y="52">模型加载(4.3s)</text>
+  <rect x="430" y="42" width="12" height="12" rx="2" fill="#378ADD"/>
+  <text class="ts" x="448" y="52">转录</text>
+  <text class="th" x="40" y="82">当前架构（每次新起进程）</text>
+  <text class="cap" x="40" y="98">第 1 次点击</text>
+  <rect x="40" y="104" width="30" height="28" fill="#888780"/>
+  <rect x="70" y="104" width="129" height="28" fill="#EF9F27"/>
+  <rect x="199" y="104" width="90" height="28" fill="#378ADD"/>
+  <text class="w" x="134" y="119" text-anchor="middle">4.3s</text>
+  <text class="w" x="244" y="119" text-anchor="middle">转录</text>
+  <text class="cap" x="310" y="98">第 2 次点击</text>
+  <rect x="310" y="104" width="30" height="28" fill="#888780"/>
+  <rect x="340" y="104" width="129" height="28" fill="#EF9F27"/>
+  <rect x="469" y="104" width="90" height="28" fill="#378ADD"/>
+  <text class="w" x="404" y="119" text-anchor="middle">4.3s</text>
+  <text class="w" x="514" y="119" text-anchor="middle">转录</text>
+  <path d="M134 104 L134 96 L404 96 L404 104" fill="none" stroke="#A32D2D" stroke-width="0.8" stroke-dasharray="3 2"/>
+  <text class="bad" x="269" y="92" text-anchor="middle">每次点击都付 5.3s 重载税</text>
+  <text class="cap" x="289" y="148" text-anchor="middle">↑ 进程结束·模型释放</text>
+  <text class="th" x="40" y="182">常驻进程（优化后）</text>
+  <text class="cap" x="40" y="198">首次点击</text>
+  <rect x="40" y="204" width="30" height="28" fill="#888780"/>
+  <rect x="70" y="204" width="129" height="28" fill="#EF9F27"/>
+  <rect x="199" y="204" width="90" height="28" fill="#378ADD"/>
+  <text class="w" x="134" y="219" text-anchor="middle">4.3s</text>
+  <text class="w" x="244" y="219" text-anchor="middle">转录</text>
+  <rect x="289" y="204" width="21" height="28" fill="none" stroke="#1D9E75" stroke-width="1" stroke-dasharray="3 2"/>
+  <text class="cap" x="310" y="198">再次点击</text>
+  <rect x="310" y="204" width="90" height="28" fill="#378ADD"/>
+  <text class="w" x="355" y="219" text-anchor="middle">转录</text>
+  <path d="M289 204 L289 196 L400 196 L400 204" fill="none" stroke="#0F6E56" stroke-width="0.8" stroke-dasharray="3 2"/>
+  <text class="good" x="355" y="192" text-anchor="middle">0 重载，直接转录</text>
+  <text class="cap" x="300" y="248" text-anchor="middle">↑ 进程常驻·模型留在显存</text>
+  <text class="cap" x="340" y="265" text-anchor="middle">实测：RTX 5070 Ti · large-v3-turbo · 进程启动+import ≈1s · 模型加载 ≈4.3s</text>
+</svg>

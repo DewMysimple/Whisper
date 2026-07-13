@@ -1,0 +1,109 @@
+# GUI 界面
+
+## GUI 界面与交互细节
+
+
+<div align="center" style="margin:1em 0;">
+<svg viewBox="0 0 680 470" width="100%" role="img">
+  <title>WhisperPyQtGUI 三栏布局</title>
+  <desc>左栏设置面板(440px)、中栏参数/监视双页(500px)、右栏日志，以及窗口尺寸与圆角细节</desc>
+  <defs>
+    <style>
+      .img1-t{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13px;fill:#2C2C2A}
+      .img1-ts{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;fill:#5F5E5A}
+      .img1-th{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:12px;font-weight:500;fill:#2C2C2A}
+      .img1-cap{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;fill:#888780}
+      .img1-sec{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:10px;fill:#adb5bd}
+      .img1-mono{font-family:ui-monospace,'SF Mono',Consolas,monospace;font-size:11px;fill:#495057}
+    </style>
+  </defs>
+  <text class="img1-th" x="340" y="24" text-anchor="middle" font-size="15">GUI 三栏布局 (WhisperPyQtGUI)</text>
+  <rect x="40" y="44" width="600" height="380" rx="12" fill="#ffffff" stroke="#e9ecef" stroke-width="1" />
+  <rect x="40" y="44" width="600" height="26" rx="12" fill="#f8f9fa" />
+  <rect x="40" y="58" width="600" height="12" fill="#f8f9fa" />
+  <text class="img1-ts" x="56" y="61">Whisper</text>
+  <text class="img1-cap" x="612" y="61" text-anchor="end">—  ⬜  ✕</text>
+  <line x1="40" y1="70" x2="640" y2="70" stroke="#e9ecef" stroke-width="0.5" />
+  <line x1="252" y1="70" x2="252" y2="424" stroke="#e9ecef" stroke-width="0.5" />
+  <line x1="452" y1="70" x2="452" y2="424" stroke="#e9ecef" stroke-width="0.5" />
+  <rect x="40" y="70" width="212" height="354" fill="#f8f9fa" />
+  <text class="img1-th" x="60" y="92">Logo  Whisper</text>
+  <text class="img1-ts" x="60" y="106">语音识别转文本</text>
+  <text class="img1-sec" x="60" y="130">文件路径</text>
+  <rect x="60" y="134" width="172" height="20" rx="5" fill="#ffffff" stroke="#e9ecef" stroke-width="0.5" />
+  <text class="img1-ts" x="66" y="147">输入文件或文件夹...</text>
+  <text class="img1-cap" x="60" y="166">浏览  清空</text>
+  <text class="img1-sec" x="60" y="186">输出目录</text>
+  <rect x="60" y="190" width="172" height="20" rx="5" fill="#ffffff" stroke="#e9ecef" stroke-width="0.5" />
+  <text class="img1-ts" x="66" y="203">留空则自动 Text 文件夹</text>
+  <text class="img1-cap" x="60" y="222">浏览  清空</text>
+  <text class="img1-sec" x="60" y="242">处理模式</text>
+  <text class="img1-t" x="60" y="260">◉ 中文转录</text>
+  <text class="img1-ts" x="60" y="274">○ 英文标准版  ○ 英文防幻觉</text>
+  <text class="img1-cap" x="60" y="288">中文语音转录，输出 Text 文件夹</text>
+  <rect x="60" y="298" width="11" height="11" rx="2" fill="#1a1a1a" />
+  <text class="img1-ts" x="76" y="308">自动保存到桌面并转 Markdown</text>
+  <rect x="60" y="324" width="112" height="28" rx="8" fill="#1a1a1a" />
+  <text class="img1-th" x="116" y="342" text-anchor="middle" fill="#ffffff">开始转录</text>
+  <rect x="180" y="324" width="52" height="28" rx="8" fill="#f8f9fa" stroke="#e9ecef" stroke-width="0.5" />
+  <text class="img1-ts" x="206" y="342" text-anchor="middle">停止</text>
+  <text class="img1-cap" x="60" y="366">就绪</text>
+  <text class="img1-cap" x="60" y="406">← 固定 440px</text>
+  <rect x="252" y="70" width="200" height="354" fill="#ffffff" />
+  <rect x="272" y="84" width="60" height="22" rx="6" fill="#f1f3f5" stroke="#e9ecef" stroke-width="0.5" />
+  <text class="img1-th" x="302" y="99" text-anchor="middle">参数 ▾</text>
+  <text class="img1-cap" x="432" y="99" text-anchor="end">切到「监视」</text>
+  <rect x="272" y="116" width="160" height="180" rx="10" fill="#f8f9fa" stroke="#e9ecef" stroke-width="0.5" />
+  <text class="img1-mono" x="282" y="134">language        zh</text>
+  <text class="img1-mono" x="282" y="150">task      transcribe</text>
+  <text class="img1-mono" x="282" y="166">beam_size         5</text>
+  <text class="img1-mono" x="282" y="182">temperature     0.0</text>
+  <text class="img1-mono" x="282" y="198">no_speech_thr  0.6</text>
+  <text class="img1-mono" x="282" y="214">cond_prev     True</text>
+  <text class="img1-mono" x="282" y="230">vad_filter     True</text>
+  <text class="img1-mono" x="282" y="246">min_silence   300ms</text>
+  <text class="img1-mono" x="282" y="262">后处理          无</text>
+  <text class="img1-cap" x="282" y="284">随模式切换实时刷新</text>
+  <rect x="272" y="306" width="160" height="98" rx="10" fill="#f8f9fa" stroke="#e9ecef" stroke-width="0.5" stroke-dasharray="3 2" />
+  <text class="img1-cap" x="352" y="324" text-anchor="middle">[ 监视页 ]</text>
+  <text class="img1-ts" x="282" y="344">CPU ▁▂▄▆▇</text>
+  <text class="img1-ts" x="282" y="362">内存 ▁▂▃▅▆</text>
+  <text class="img1-ts" x="282" y="380">GPU ▁▃▅▇█</text>
+  <text class="img1-ts" x="282" y="398">显存 ▁▂▄▅▇</text>
+  <rect x="452" y="70" width="188" height="354" fill="#ffffff" />
+  <rect x="472" y="84" width="50" height="22" rx="6" fill="#f1f3f5" stroke="#e9ecef" stroke-width="0.5" />
+  <text class="img1-th" x="497" y="99" text-anchor="middle">日志</text>
+  <text class="img1-cap" x="624" y="99" text-anchor="end">复制  清空</text>
+  <rect x="472" y="116" width="148" height="268" rx="10" fill="#f8f9fa" stroke="#e9ecef" stroke-width="0.5" />
+  <text class="img1-mono" x="482" y="136" fill="#2980b9">==================================================</text>
+  <text class="img1-mono" x="482" y="152" fill="#2980b9">▶ 启动转录 | 中文转录</text>
+  <text class="img1-mono" x="482" y="168" fill="#495057">📦 正在加载模型...</text>
+  <text class="img1-mono" x="482" y="184" fill="#495057">🎬 正在处理: a.mp4</text>
+  <text class="img1-mono" x="482" y="200" fill="#495057">📝 合并后句子数: 42</text>
+  <text class="img1-mono" x="482" y="216" fill="#27ae60">✅ 完成输出: a.txt</text>
+  <text class="img1-mono" x="482" y="232" fill="#e67e22">⚠️ 警告: ...</text>
+  <text class="img1-mono" x="482" y="248" fill="#c0392b">❌ 错误: ...</text>
+  <text class="img1-cap" x="482" y="270">关键词着色: 红=错 绿=成</text>
+  <text class="img1-cap" x="482" y="284">蓝=命令 橙=警告</text>
+  <text class="img1-cap" x="482" y="306">超 20000 行自动裁剪</text>
+  <rect x="540" y="396" width="36" height="20" rx="6" fill="#ffffff" stroke="#e9ecef" stroke-width="0.5" />
+  <text class="img1-cap" x="558" y="410" text-anchor="middle">50%</text>
+  <rect x="584" y="396" width="36" height="20" rx="6" fill="#ffffff" stroke="#e9ecef" stroke-width="0.5" />
+  <text class="img1-cap" x="602" y="410" text-anchor="middle">75%</text>
+  <text class="img1-cap" x="56" y="442">窗口: 屏幕 55%×65% · 最小 860×550 · Win11 DWM 圆角+浅色标题栏 · 字体 LXGW WenKai</text>
+  <text class="img1-cap" x="56" y="458">交互：开始→自动切监视页+启动性能定时器；停止→terminate→kill；完成→自动切回参数页</text>
+</svg>
+</div>
+
+
+**整体风格**：浅色极简（`#f8f9fa` 背景 / `#ffffff` 面板 / `#1a1a1a` 主色），字体 LXGW WenKai，Fusion 风格。窗口用 Win11 DWM API（`DwmSetWindowAttribute` attr 33/34/35）实现平滑圆角 + 浅色标题栏 + 浅灰边框。窗口默认屏幕 55%×65%，最小 860×550，右下角 50%/75% 缩放按钮。
+
+**三栏布局**：
+- **左栏（固定 440px）**：Logo+标题、文件路径（浏览/清空）、输出目录、处理模式三选一（带描述）、桌面保存复选框、开始转录/停止、状态标签。
+- **中栏（固定 500px，QStackedWidget 双页）**：分页菜单"参数▾/监视▾"。参数页为只读 QTableWidget，按模式列出全部 AI 参数；监视页 4 个自绘 `PerfChart` 折线图（CPU/内存/GPU/显存），psutil + pynvml 每 1 秒采样。
+- **右栏（自适应）**：日志框（圆角 QFrame 包 QPlainTextEdit），顶部"复制/清空"，日志按关键词自动着色——红=错误、绿=完成、蓝=命令、橙=警告；超 20000 行自动裁剪头部 1000 行。
+
+**交互节奏**：点"开始转录"→ 自动切监视页 + 启动性能定时器 + 启动 QProcess；子进程结束 → 按退出码显示"完成/异常" + 自动切回参数页；"停止"→ `terminate()` → 5 秒不退则 `kill()`。
+
+---
+

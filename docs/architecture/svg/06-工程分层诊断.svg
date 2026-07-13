@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 680 410" width="100%" role="img">
+  <title>WhisperSubtitle 工程分层新旧诊断</title>
+  <desc>把工程拆成5层，分别标注新旧程度：启动层老、引擎层最新、UI架构层该重构</desc>
+  <defs>
+    <style>
+      .t{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:12px;fill:#2C2C2A}
+      .ts{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;fill:#5F5E5A}
+      .th{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13px;font-weight:500;fill:#2C2C2A}
+      .cap{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;fill:#888780}
+      .r{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;font-weight:500}
+    </style>
+  </defs>
+  <text class="th" x="340" y="26" text-anchor="middle" font-size="15">WhisperSubtitle 分层新旧诊断</text>
+  <text class="cap" x="340" y="44" text-anchor="middle">越靠下越接近核心 · 颜色越红越该动</text>
+  <rect x="40" y="60" width="600" height="56" rx="10" fill="#FCEBEB"/>
+  <rect x="40" y="60" width="6" height="56" rx="3" fill="#A32D2D"/>
+  <text class="th" x="60" y="82">① 启动方式</text>
+  <text class="ts" x="60" y="102">VBS · launch.vbs（2000 年代的 Windows 脚本）</text>
+  <text class="r" x="624" y="92" text-anchor="end" fill="#A32D2D">确实老 · 建议换</text>
+  <rect x="40" y="124" width="600" height="56" rx="10" fill="#FAEEDA"/>
+  <rect x="40" y="124" width="6" height="56" rx="3" fill="#BA7517"/>
+  <text class="th" x="60" y="146">② 分发方式</text>
+  <text class="ts" x="60" y="166">venv + 快捷方式（绿色软件，非 exe/安装包）</text>
+  <text class="r" x="624" y="156" text-anchor="end" fill="#854F0B">能用 · 可选打 exe</text>
+  <rect x="40" y="188" width="600" height="56" rx="10" fill="#FAEEDA"/>
+  <rect x="40" y="188" width="6" height="56" rx="3" fill="#BA7517"/>
+  <text class="th" x="60" y="210">③ GUI 框架</text>
+  <text class="ts" x="60" y="230">PyQt5（PySide6 / PyQt6 是更现代的选择）</text>
+  <text class="r" x="624" y="220" text-anchor="end" fill="#854F0B">能用 · 可选升级</text>
+  <rect x="40" y="252" width="600" height="56" rx="10" fill="#FAECE7"/>
+  <rect x="40" y="252" width="6" height="56" rx="3" fill="#D85A30"/>
+  <text class="th" x="60" y="274">④ UI 架构</text>
+  <text class="ts" x="60" y="294">单体上帝对象（单类 1000 行，无分层）</text>
+  <text class="r" x="624" y="284" text-anchor="end" fill="#993C1D">该重构 · 最该治</text>
+  <rect x="40" y="316" width="600" height="56" rx="10" fill="#E1F5EE"/>
+  <rect x="40" y="316" width="6" height="56" rx="3" fill="#1D9E75"/>
+  <text class="th" x="60" y="338">⑤ 引擎 / 推理栈</text>
+  <text class="ts" x="60" y="358">faster-whisper + CTranslate2 + CUDA float16 + large-v3-turbo</text>
+  <text class="r" x="624" y="348" text-anchor="end" fill="#0F6E56">非常现代 · 别动</text>
+  <text class="cap" x="340" y="396" text-anchor="middle">老师说的“VBS 老”只命中第 ① 层；真正决定现代性的是 ⑤（已最新）和 ④（该重构）</text>
+</svg>

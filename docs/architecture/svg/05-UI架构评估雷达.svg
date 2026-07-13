@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 680 430" width="100%" role="img">
+  <title>WhisperPyQtGUI 架构评估雷达图</title>
+  <desc>六个维度评估当前UI架构：视觉设计高、可测试性低</desc>
+  <defs>
+    <style>
+      .t{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:12px;fill:#2C2C2A}
+      .ts{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;fill:#5F5E5A}
+      .th{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13px;font-weight:500;fill:#2C2C2A}
+      .cap{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;fill:#888780}
+      .score{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:11px;font-weight:500;fill:#534AB7}
+    </style>
+  </defs>
+  <text class="th" x="340" y="24" text-anchor="middle" font-size="15">WhisperPyQtGUI 架构评估</text>
+  <g fill="none" stroke="#e9ecef" stroke-width="0.5">
+    <polygon points="340,70 470,145 470,295 340,370 210,295 210,145"/>
+    <polygon points="340,100 444,160 444,280 340,340 236,280 236,160"/>
+    <polygon points="340,130 418,175 418,265 340,310 262,265 262,175"/>
+    <polygon points="340,160 392,190 392,250 340,280 288,250 288,190"/>
+    <polygon points="340,190 366,205 366,235 340,250 314,235 314,205"/>
+  </g>
+  <g stroke="#e9ecef" stroke-width="0.5">
+    <line x1="340" y1="220" x2="340" y2="70"/>
+    <line x1="340" y1="220" x2="470" y2="145"/>
+    <line x1="340" y1="220" x2="470" y2="295"/>
+    <line x1="340" y1="220" x2="340" y2="370"/>
+    <line x1="340" y1="220" x2="210" y2="295"/>
+    <line x1="340" y1="220" x2="210" y2="145"/>
+  </g>
+  <text class="cap" x="346" y="194">1</text>
+  <text class="cap" x="346" y="164">2</text>
+  <text class="cap" x="346" y="134">3</text>
+  <text class="cap" x="346" y="104">4</text>
+  <text class="cap" x="346" y="74">5</text>
+  <polygon points="340,85 392,190 405,258 340,280 262,265 314,205" fill="#7F77DD" fill-opacity="0.25" stroke="#534AB7" stroke-width="1.5"/>
+  <g fill="#534AB7">
+    <circle cx="340" cy="85" r="3.5"/>
+    <circle cx="392" cy="190" r="3.5"/>
+    <circle cx="405" cy="258" r="3.5"/>
+    <circle cx="340" cy="280" r="3.5"/>
+    <circle cx="262" cy="265" r="3.5"/>
+    <circle cx="314" cy="205" r="3.5"/>
+  </g>
+  <text class="th" x="340" y="56" text-anchor="middle">视觉设计</text>
+  <text class="score" x="340" y="42" text-anchor="middle">4.5</text>
+  <text class="th" x="492" y="132">代码组织</text>
+  <text class="score" x="492" y="118">2.0</text>
+  <text class="th" x="492" y="308">可维护性</text>
+  <text class="score" x="492" y="322">2.5</text>
+  <text class="th" x="340" y="394" text-anchor="middle">可扩展性</text>
+  <text class="score" x="340" y="408" text-anchor="middle">2.0</text>
+  <text class="th" x="188" y="308" text-anchor="end">健壮性</text>
+  <text class="score" x="188" y="322" text-anchor="end">3.0</text>
+  <text class="th" x="188" y="132" text-anchor="end">可测试性</text>
+  <text class="score" x="188" y="118" text-anchor="end">1.0</text>
+  <text class="cap" x="340" y="425" text-anchor="middle">满分 5 · 单文件单类约 1000 行 · 典型原型演进单体</text>
+</svg>
