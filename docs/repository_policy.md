@@ -9,8 +9,8 @@
 | `tests/benchmark/runs/` | benchmark 临时输出 | 忽略，不纳入版本控制 |
 | `docs/` | 当前架构、开发和迁移文档 | 当前文档使用英文 snake_case 路径 |
 | `docs/archive/` | 重构前资料 | 只读追溯，不代表当前实现 |
-| `Requirement/` | 用户提供的阶段需求原文 | 不重命名、不改写；新增需求单独保存 |
-| `Log/` | 分析、计划、证据和执行报告 | 按阶段保留；性能原始 JSON 可随报告保存 |
+| `Log/40-原始需求/` | 用户提供的阶段需求原文 | 不改写；新增需求单独保存并更新索引 |
+| `Log/` | 项目记忆、未来架构、原始需求、分析和执行证据 | 按类别与阶段保留；性能原始 JSON 可随报告保存 |
 | `assets/` | 便携启动资源源文件 | 与包内资源保持来源关系 |
 | `models/` | 本地大模型 | 忽略，不提交 |
 | `whisper_env/` | 本地虚拟环境 | 忽略，不提交 |
@@ -20,7 +20,7 @@
 ## 命名
 
 - 生产 Python 模块、测试和当前英文路径使用小写 snake_case。
-- 历史 Requirement、Log 和 archive 文件保留原名，避免破坏审计链。
+- 历史需求、Log 和 archive 文件保留原名，避免破坏审计链。
 - 新代码不以物理脚本名表达 preset；统一使用 preset ID/CLI alias。
 
 ## Golden 与 benchmark
