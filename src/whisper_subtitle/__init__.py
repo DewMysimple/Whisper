@@ -1,9 +1,14 @@
 """WhisperSubtitle application package and logging configuration."""
 
 import logging
-from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+from .paths import get_app_paths
+
+
+_APP_PATHS = get_app_paths()
+# Historical name retained for external callers. Installed mode resolves to
+# the runtime working directory rather than guessing from a src-layout path.
+PROJECT_ROOT = _APP_PATHS.portable_root or _APP_PATHS.working_directory
 LOGGER_NAME = "whisper_subtitle"
 
 

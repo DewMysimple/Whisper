@@ -2,50 +2,49 @@ Set WshShell = CreateObject("WScript.Shell")
 Set FSO = CreateObject("Scripting.FileSystemObject")
 
 appDir = FSO.GetParentFolderName(WScript.ScriptFullName)
-python = appDir & "\whisper_env\Scripts\python.exe"
-pythonw = appDir & "\whisper_env\Scripts\pythonw.exe"
-guiScript = appDir & "\src\whisper_subtitle\gui\WhisperPyQtGUI.py"
-testScript = appDir & "\src\whisper_subtitle\utils\test_env.py"
 errorFile = appDir & "\test_error.txt"
+python = WshShell.ExpandEnvironmentStrings("%WHISPER_SUBTITLE_PYTHON%")
 
-If Not FSO.FileExists(python) Then
-    MsgBox "python.exe not found!" & vbCrLf & python, vbCritical, "Launch Failed"
-    WScript.Quit 1
+If python = "%WHISPER_SUBTITLE_PYTHON%" Or python = "" Then
+    candidates = Array( _
+        appDir & "\whisper_env\Scripts\python.exe", _
+        appDir & "\.venv\Scripts\python.exe", _
+        appDir & "\venv\Scripts\python.exe" _
+    )
+    python = ""
+    For Each candidate In candidates
+        If FSO.FileExists(candidate) Then
+            python = candidate
+            Exit For
+        End If
+    Next
 End If
 
-If Not FSO.FileExists(guiScript) Then
-    MsgBox "GUI script not found!" & vbCrLf & guiScript, vbCritical, "Launch Failed"
-    WScript.Quit 1
-End If
+If python = "" Then python = "python"
+pythonw = FSO.BuildPath(FSO.GetParentFolderName(python), "pythonw.exe")
+If Not FSO.FileExists(pythonw) Then pythonw = python
 
-' Delete old error file
-If FSO.FileExists(errorFile) Then
-    FSO.DeleteFile(errorFile)
-End If
+If FSO.FileExists(errorFile) Then FSO.DeleteFile(errorFile)
 
-' Run test script (hidden window, wait for result)
-Dim testCmd
-testCmd = Chr(34) & python & Chr(34) & " -m whisper_subtitle.utils.test_env 2> " & Chr(34) & errorFile & Chr(34)
+comspec = WshShell.ExpandEnvironmentStrings("%COMSPEC%")
+testCmd = Chr(34) & comspec & Chr(34) & " /d /c " & Chr(34) & Chr(34) & python & Chr(34) & " -m whisper_subtitle check 2> " & Chr(34) & errorFile & Chr(34) & Chr(34)
 result = WshShell.Run(testCmd, 0, True)
 
 If result <> 0 Then
-    Dim errContent
     If FSO.FileExists(errorFile) Then
-        Dim errFile
         Set errFile = FSO.OpenTextFile(errorFile, 1)
         errContent = errFile.ReadAll
         errFile.Close
     Else
-        errContent = "Environment test failed."
+        errContent = "Environment check failed. Set WHISPER_SUBTITLE_PYTHON to a valid interpreter."
     End If
     MsgBox "Launch failed:" & vbCrLf & vbCrLf & errContent, vbCritical, "Error"
     If FSO.FileExists(errorFile) Then FSO.DeleteFile(errorFile)
     WScript.Quit 1
 End If
 
-' Test passed, clean up and launch GUI
 If FSO.FileExists(errorFile) Then FSO.DeleteFile(errorFile)
-WshShell.Run Chr(34) & pythonw & Chr(34) & " -m whisper_subtitle", 0, False
+WshShell.Run Chr(34) & pythonw & Chr(34) & " -m whisper_subtitle gui", 0, False
 
 Set WshShell = Nothing
 Set FSO = Nothing

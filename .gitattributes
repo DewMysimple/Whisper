@@ -1,0 +1,30 @@
+* text=auto
+
+# Repository control files have no extension, so list them explicitly.
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+
+# Source and documentation use LF in the repository and working tree.
+*.py text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Windows Script Host files use native Windows line endings.
+*.vbs text eol=crlf
+
+# Binary assets must never be line-ending normalized.
+*.wav binary
+*.mp3 binary
+*.m4a binary
+*.aac binary
+*.ogg binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.lnk binary

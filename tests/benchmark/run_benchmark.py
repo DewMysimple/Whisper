@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
 import shutil
+import statistics
 import subprocess
 import threading
 import time
@@ -15,11 +17,16 @@ from pathlib import Path
 import psutil
 import pynvml
 
-from whisper_subtitle.core.presets import get_preset
+from whisper_subtitle.domain.presets import (
+    CLI_ALIASES,
+    get_postprocess_label,
+    get_preset_by_cli_alias,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 INPUT_PATH = PROJECT_ROOT / "Log" / "执行2" / "baseline" / "regression_input.wav"
+AUTO_BACKUP_PATH = INPUT_PATH.parent / "Text" / f"{INPUT_PATH.stem}.txt"
 BENCHMARK_DIR = PROJECT_ROOT / "tests" / "benchmark"
 RUNS_DIR = BENCHMARK_DIR / "runs"
 GOLDEN_DIR = PROJECT_ROOT / "tests" / "golden"
@@ -27,16 +34,37 @@ BASELINE_PATH = BENCHMARK_DIR / "baseline.json"
 PARAMETERS_PATH = GOLDEN_DIR / "parameters.json"
 CLI_PATH = PROJECT_ROOT / "whisper_env" / "Scripts" / "whisper-subtitle.exe"
 
-PRESET_IDS = {
-    "en": "en_v1",
-    "en2": "en_v2",
-    "cn": "cn",
-    "cn2": "cn2",
+TIMING_METRICS = {
+    "startup_to_model_load_start_seconds",
+    "startup_to_model_ready_seconds",
+    "model_load_seconds",
+    "transcription_to_output_seconds",
+    "total_process_seconds",
 }
+MEMORY_METRICS = {
+    "peak_process_memory_mib",
+    "peak_gpu_memory_mib",
+    "peak_gpu_device_used_mib",
+    "gpu_baseline_used_mib",
+}
+NUMERIC_METRICS = TIMING_METRICS | MEMORY_METRICS
 
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+
+
+def snapshot_file(path: Path) -> tuple[bool, bytes]:
+    return path.is_file(), path.read_bytes() if path.is_file() else b""
+
+
+def restore_file(path: Path, snapshot: tuple[bool, bytes]) -> None:
+    existed, content = snapshot
+    if existed:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    elif path.exists():
+        path.unlink()
 
 
 def process_tree_rss(process: psutil.Process) -> int:
@@ -78,14 +106,14 @@ def gpu_process_memory(handle, pids: set[int]) -> int | None:
         return None
 
 
-def run_preset(preset_name: str, handle) -> dict:
-    run_dir = RUNS_DIR / preset_name
+def run_preset(preset_name: str, handle, run_label: str, cli_path: Path) -> dict:
+    run_dir = RUNS_DIR / preset_name / run_label
     if run_dir.exists():
         shutil.rmtree(run_dir)
-    run_dir.mkdir(parents=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     command = [
-        str(CLI_PATH),
+        str(cli_path),
         "transcribe",
         str(INPUT_PATH),
         "-o",
@@ -96,6 +124,8 @@ def run_preset(preset_name: str, handle) -> dict:
     environment = os.environ.copy()
     environment["PYTHONIOENCODING"] = "utf-8"
     environment["PYTHONUNBUFFERED"] = "1"
+    environment["HF_HUB_OFFLINE"] = "1"
+    environment["TRANSFORMERS_OFFLINE"] = "1"
 
     baseline_gpu = int(pynvml.nvmlDeviceGetMemoryInfo(handle).used)
     started = time.perf_counter()
@@ -185,7 +215,15 @@ def run_preset(preset_name: str, handle) -> dict:
     if not transcript.is_file() or transcript.stat().st_size == 0:
         raise RuntimeError(f"preset {preset_name} produced no transcript")
     golden = GOLDEN_DIR / f"{preset_name}_output.txt"
-    shutil.copyfile(transcript, golden)
+    if not golden.is_file():
+        raise RuntimeError(f"preset {preset_name} golden not found: {golden}")
+    transcript_hash = sha256(transcript)
+    golden_hash = sha256(golden)
+    if transcript_hash != golden_hash:
+        raise RuntimeError(
+            f"preset {preset_name} output changed: "
+            f"actual={transcript_hash}, golden={golden_hash}"
+        )
 
     peak_process_gpu = samples["peak_process_gpu"]
     peak_device_delta = max(0, samples["peak_device_gpu"] - baseline_gpu)
@@ -196,13 +234,13 @@ def run_preset(preset_name: str, handle) -> dict:
         peak_gpu = peak_device_delta
         gpu_method = "NVML device-used delta (process metric unavailable)"
 
-    preset = get_preset(PRESET_IDS[preset_name])
+    preset = get_preset_by_cli_alias(preset_name)
     return {
-        "preset_id": preset["id"],
-        "script": preset["script"],
+        "preset_id": preset.id,
+        "entrypoint": f"whisper-subtitle transcribe --preset {preset.cli_alias}",
         "model": "Whisper Large-V3-Turbo",
-        "params": preset["params"],
-        "postprocess": preset["postprocess"],
+        "params": preset.transcription_options(),
+        "postprocess": get_postprocess_label(preset),
         "metrics": {
             "startup_to_model_load_start_seconds": round(
                 events["model_load_start"] - started, 4
@@ -228,19 +266,107 @@ def run_preset(preset_name: str, handle) -> dict:
         "output": {
             "path": golden.relative_to(PROJECT_ROOT).as_posix(),
             "bytes": golden.stat().st_size,
-            "sha256": sha256(golden),
+            "sha256": golden_hash,
         },
     }
 
 
-def main() -> int:
-    if not CLI_PATH.is_file():
-        raise FileNotFoundError(f"CLI not found: {CLI_PATH}")
+def summarize_values(values: list[float], precision: int) -> dict:
+    if not values:
+        raise ValueError("cannot summarize an empty metric sample")
+    return {
+        "samples": values,
+        "median": round(statistics.median(values), precision),
+        "min": round(min(values), precision),
+        "max": round(max(values), precision),
+        "range": round(max(values) - min(values), precision),
+    }
+
+
+def summarize_phase(runs: list[dict]) -> dict:
+    if not runs:
+        raise ValueError("cannot summarize an empty benchmark phase")
+    metrics = {}
+    for metric_name in sorted(NUMERIC_METRICS):
+        precision = 2 if metric_name in MEMORY_METRICS else 4
+        metrics[metric_name] = summarize_values(
+            [run["metrics"][metric_name] for run in runs], precision
+        )
+    methods = sorted({run["metrics"]["gpu_measurement_method"] for run in runs})
+    return {
+        "run_count": len(runs),
+        "metrics": metrics,
+        "gpu_measurement_methods": methods,
+    }
+
+
+def build_preset_result(raw_runs: list[dict]) -> dict:
+    if not raw_runs:
+        raise ValueError("cannot build a preset result without runs")
+    first = raw_runs[0]
+    static_keys = (
+        "preset_id",
+        "entrypoint",
+        "model",
+        "params",
+        "postprocess",
+        "output",
+    )
+    result = {key: first[key] for key in static_keys}
+    result["measurements"] = {
+        phase: summarize_phase(
+            [run for run in raw_runs if run["benchmark_phase"] == phase]
+        )
+        for phase in ("cold_process", "warm_system_cache")
+    }
+    return result
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Run reproducible cold/warm four-preset benchmarks."
+    )
+    parser.add_argument(
+        "--runs-per-phase",
+        type=int,
+        default=3,
+        help="runs for each cold/warm phase and preset (minimum: 3)",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=BASELINE_PATH,
+        help="benchmark JSON destination (default: canonical baseline)",
+    )
+    parser.add_argument(
+        "--cli",
+        type=Path,
+        default=CLI_PATH,
+        help="console script to benchmark (default: portable environment CLI)",
+    )
+    args = parser.parse_args(argv)
+    if args.runs_per_phase < 3:
+        parser.error("--runs-per-phase must be at least 3")
+    return args
+
+
+def main(argv=None) -> int:
+    args = parse_args(argv)
+    cli_path = args.cli
+    if not cli_path.is_absolute():
+        cli_path = PROJECT_ROOT / cli_path
+    output_path = args.output
+    if not output_path.is_absolute():
+        output_path = PROJECT_ROOT / output_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if not cli_path.is_file():
+        raise FileNotFoundError(f"CLI not found: {cli_path}")
     if not INPUT_PATH.is_file():
         raise FileNotFoundError(f"input not found: {INPUT_PATH}")
 
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    backup_snapshot = snapshot_file(AUTO_BACKUP_PATH)
     pynvml.nvmlInit()
     try:
         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
@@ -248,12 +374,24 @@ def main() -> int:
         if isinstance(gpu_name, bytes):
             gpu_name = gpu_name.decode("utf-8", errors="replace")
         results = {}
-        for preset_name in PRESET_IDS:
-            print(f"benchmarking {preset_name}...", flush=True)
-            results[preset_name] = run_preset(preset_name, handle)
+        for preset_name in CLI_ALIASES:
+            preset_runs = []
+            preset_run_dir = RUNS_DIR / preset_name
+            if preset_run_dir.exists():
+                shutil.rmtree(preset_run_dir)
+            for phase in ("cold_process", "warm_system_cache"):
+                for run_index in range(1, args.runs_per_phase + 1):
+                    run_label = f"{phase}-{run_index}"
+                    print(
+                        f"benchmarking {preset_name} {run_label}...", flush=True
+                    )
+                    run = run_preset(preset_name, handle, run_label, cli_path)
+                    run["benchmark_phase"] = phase
+                    preset_runs.append(run)
+            results[preset_name] = build_preset_result(preset_runs)
 
         document = {
-            "schema_version": 1,
+            "schema_version": 3,
             "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             "input": {
                 "path": INPUT_PATH.relative_to(PROJECT_ROOT).as_posix(),
@@ -262,38 +400,52 @@ def main() -> int:
             },
             "environment": {
                 "gpu": str(gpu_name),
-                "measurement_runs_per_preset": 1,
+                "runs_per_phase": args.runs_per_phase,
+                "measurement_runs_per_preset": args.runs_per_phase * 2,
                 "resource_sample_interval_seconds": 0.05,
+                "offline_model_resolution": True,
+                "phase_definitions": {
+                    "cold_process": "fresh CLI process and fresh model instance",
+                    "warm_system_cache": (
+                        "fresh CLI process after prior runs have warmed OS/filesystem caches; "
+                        "this is not an in-process retained model"
+                    ),
+                },
             },
             "presets": results,
         }
-        BASELINE_PATH.write_text(
+        output_path.write_text(
             json.dumps(document, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
-        PARAMETERS_PATH.write_text(
-            json.dumps(
-                {
-                    name: {
-                        "preset_id": data["preset_id"],
-                        "script": data["script"],
-                        "model": data["model"],
-                        "params": data["params"],
-                        "postprocess": data["postprocess"],
-                    }
-                    for name, data in results.items()
-                },
-                ensure_ascii=False,
-                indent=2,
+        if output_path.resolve() == BASELINE_PATH.resolve():
+            PARAMETERS_PATH.write_text(
+                json.dumps(
+                    {
+                        name: {
+                            "preset_id": data["preset_id"],
+                            "entrypoint": data["entrypoint"],
+                            "model": data["model"],
+                            "params": data["params"],
+                            "postprocess": data["postprocess"],
+                        }
+                        for name, data in results.items()
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+                newline="\n",
             )
-            + "\n",
-            encoding="utf-8",
-        )
     finally:
         pynvml.nvmlShutdown()
+        restore_file(AUTO_BACKUP_PATH, backup_snapshot)
 
-    print(f"wrote {BASELINE_PATH}")
-    print(f"wrote {PARAMETERS_PATH}")
+    print(f"wrote {output_path}")
+    if output_path.resolve() == BASELINE_PATH.resolve():
+        print(f"wrote {PARAMETERS_PATH}")
     return 0
 
 

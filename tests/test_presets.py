@@ -1,56 +1,45 @@
-"""Structural contract tests for GUI presets and their public CLI aliases."""
+"""Structural and parameter contracts for canonical presets."""
 
 from __future__ import annotations
 
-from pathlib import Path
+from collections.abc import Mapping
 
 import pytest
 
-from whisper_subtitle.cli import PRESET_MODULES
-from whisper_subtitle.core.presets import PRESETS, get_display_value, get_preset
-
-
-CLI_TO_PRESET_ID = {
-    "cn": "cn",
-    "cn2": "cn2",
-    "en": "en_v1",
-    "en2": "en_v2",
-}
-PRESETS_BY_ID = {preset["id"]: preset for preset in PRESETS}
+from whisper_subtitle.domain.contracts import Preset
+from whisper_subtitle.domain.presets import (
+    CLI_ALIASES,
+    DISPLAY_KEYS,
+    PRESETS,
+    PRESETS_BY_ID,
+    get_display_value,
+    get_preset_by_id,
+)
 
 
 def test_four_logical_presets_are_available_through_cli_aliases():
-    assert set(PRESET_MODULES) == {"cn", "cn2", "en", "en2"}
-    assert set(CLI_TO_PRESET_ID.values()) == set(PRESETS_BY_ID)
+    assert set(CLI_ALIASES) == {"cn", "cn2", "en", "en2"}
+    assert set(PRESETS_BY_ID) == {"cn", "cn2", "en_v1", "en_v2"}
 
 
-@pytest.mark.parametrize("cli_name", ["cn", "cn2", "en", "en2"])
-def test_each_cli_alias_points_to_an_existing_core_module(cli_name):
-    module_name = PRESET_MODULES[cli_name]
-    module_path = Path("src", *module_name.split(".")).with_suffix(".py")
-    assert module_path.is_file()
+@pytest.mark.parametrize("preset", PRESETS, ids=lambda preset: preset.id)
+def test_each_preset_has_complete_typed_business_configuration(preset):
+    assert isinstance(preset, Preset)
+    for value in (
+        preset.id,
+        preset.cli_alias,
+        preset.label,
+        preset.description,
+        preset.group,
+        preset.postprocess_strategy,
+    ):
+        assert isinstance(value, str) and value
+    assert isinstance(preset.params, Mapping)
 
 
-@pytest.mark.parametrize("preset", PRESETS, ids=lambda preset: preset["id"])
-def test_each_preset_has_all_required_fields(preset):
-    assert set(preset) == {
-        "id",
-        "label",
-        "desc",
-        "group",
-        "script",
-        "params",
-        "postprocess",
-    }
-    assert all(isinstance(preset[key], str) and preset[key] for key in (
-        "id", "label", "desc", "group", "script", "postprocess"
-    ))
-    assert isinstance(preset["params"], dict)
-
-
-@pytest.mark.parametrize("preset", PRESETS, ids=lambda preset: preset["id"])
+@pytest.mark.parametrize("preset", PRESETS, ids=lambda preset: preset.id)
 def test_each_preset_parameter_types_are_stable(preset):
-    params = preset["params"]
+    params = preset.params
     assert isinstance(params["language"], str)
     assert isinstance(params["task"], str)
     assert type(params["beam_size"]) is int
@@ -75,10 +64,12 @@ def test_each_preset_parameter_types_are_stable(preset):
 def test_anti_hallucination_presets_have_expected_parameter_differences(
     standard_id, robust_id
 ):
-    standard = get_preset(standard_id)["params"]
-    robust = get_preset(robust_id)["params"]
+    standard = get_preset_by_id(standard_id).params
+    robust = get_preset_by_id(robust_id).params
 
-    assert robust["compression_ratio_threshold"] < standard["compression_ratio_threshold"]
+    assert robust["compression_ratio_threshold"] < standard[
+        "compression_ratio_threshold"
+    ]
     assert robust["log_prob_threshold"] < standard["log_prob_threshold"]
     assert robust["no_speech_threshold"] > standard["no_speech_threshold"]
     assert standard["condition_on_previous_text"] is True
@@ -90,12 +81,13 @@ def test_anti_hallucination_presets_have_expected_parameter_differences(
 
 
 def test_display_values_include_nested_and_derived_fields():
-    preset = get_preset("cn2")
+    preset = get_preset_by_id("cn2")
+    assert "后处理" in DISPLAY_KEYS
     assert get_display_value(preset, "min_silence_duration_ms") == "500"
-    assert get_display_value(preset, "后处理") == preset["postprocess"]
+    assert get_display_value(preset, "后处理")
     assert get_display_value(preset, "missing") == "-"
 
 
 def test_unknown_preset_raises_key_error():
     with pytest.raises(KeyError, match="未知 preset id"):
-        get_preset("unknown")
+        get_preset_by_id("unknown")

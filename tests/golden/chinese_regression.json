@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "input": {
+    "path": "tests/fixtures/chinese_short.wav",
+    "bytes": 234774,
+    "sha256": "3CFE0F9F16A05E307B19A00855EDF6BBA2E02B5DBC585ACE9F6E5F672346027D",
+    "channels": 1,
+    "sample_rate_hz": 22050,
+    "sample_width_bytes": 2,
+    "frames": 117364,
+    "duration_seconds": 5.3226
+  },
+  "expected_text": "今天天气很好，我们一起测试中文语音转录。\n",
+  "golden_line_endings": "LF (repository canonical)",
+  "presets": {
+    "cn": {
+      "output_path": "tests/golden/cn_real_output.txt",
+      "sha256": "83C3A8CAB6BDEB88CE0FF0B6C79C3BB73ADD9190E16388D17ECC05A0F4EF7ABD"
+    },
+    "cn2": {
+      "output_path": "tests/golden/cn2_real_output.txt",
+      "sha256": "83C3A8CAB6BDEB88CE0FF0B6C79C3BB73ADD9190E16388D17ECC05A0F4EF7ABD"
+    }
+  }
+}

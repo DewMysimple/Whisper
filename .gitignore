@@ -6,6 +6,12 @@ dist/
 build/
 *.egg
 *.whl
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # 虚拟环境
 whisper_env/
@@ -30,3 +36,5 @@ Thumbs.db
 *.log
 *.tmp
 temp/
+test_error.txt
+tests/benchmark/runs/

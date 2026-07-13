@@ -1,0 +1,25 @@
+# 批次 2 发现
+
+- 批次 2 的核心是稳定模块间数据和 preset 解析，不提前合并四个 Core 主流程。
+- 当前工作区是 `master` 普通 checkout；批次 0/1 未提交成果是本批测试前置，继续原地执行。
+- 当前统一 CLI 仍维护手写 `PRESET_MODULES`；`core/presets.py` 维护 GUI/preset 参数数据，两者构成两套映射。
+- 验收要求包括旧 `en_v1/en_v2` QSettings 值继续恢复、所有 golden 不变、CLI 与 GUI 对同一 preset 得到相同参数。
+- 批次开始时 13 个业务文件聚合 SHA256 为 `8F6D826960C1CF06B4B7C0600620E743FF670017B35883D6499625D61F236CB4`，126 条测试全部通过。
+- 四个 Core 仅在 `process_video()` 内通过兼容 `core.presets.get_preset(id)` 取参数；保持这个旧函数即可避免改动四条转录主流程。
+- GUI 约有 12 处字典式 preset 访问，适合迁移为 typed `Preset` 属性；QSettings 当前直接按旧 ID 查按钮，可改为统一 resolver 后继续兼容 `en_v1/en_v2`，同时兼容 CLI alias。
+- 决定将 typed registry 放在 `domain/presets.py`，`core/presets.py` 只提供由 registry 派生的旧字典视图；CLI 的 `PRESET_MODULES` 只作为派生兼容视图，不再是手写数据源。
+- 已新增 frozen/slots 类型化契约：`Preset`、`TranscriptionRequest`、`TranscriptionResult`、`ProgressEvent`、`BatchResult`；preset 参数含嵌套映射均冻结，旧 Core 获得独立可变字典副本。
+- registry 统一保存 canonical ID、CLI alias、模块入口、显示信息、参数和后处理策略 ID；导入时校验 ID/alias 唯一、模块存在、策略存在及完整参数类型。
+- CLI 的 `PRESET_MODULES` 现为从 registry 派生的只读兼容视图；GUI 直接使用同一批 typed `Preset` 对象；Core 继续通过旧 `core.presets.get_preset()` 获取派生字典。
+- GUI QSettings 恢复函数同时接受 `en_v1/en_v2`、`en/en2`，未知值回退 `en_v1`；保存仍使用 canonical ID。
+- benchmark 的手写 `PRESET_IDS` 已移除，改用相同 CLI alias resolver。
+- 新增契约/registry 相关测试后，选定的 81 条测试全部通过。
+- 完整测试在兼容细节补强后达到 153 条通过；随后又新增 benchmark 副作用恢复测试，最终数量待末次复测确认。
+- 真实四 preset benchmark 共 24 次全部成功，模块、参数、策略和输出哈希与批次 1 baseline 完全一致。
+- 候选相对基线的总进程时间最大回退为 cn `cold_process` 的 8.2%，其余为 2.9%–5.8%，全部低于本批采用的 20% 性能门禁。
+- 固定中文音频的 cn/cn2 真实 GPU 回归均输出 `今天天气很好，我们一起测试中文语音转录。`，匹配独立中文 golden。
+- `whisper-subtitle check`、console/module CLI 帮助、module/console GUI offscreen 启动均通过，无残留进程。
+- 真实 benchmark 会触发旧 Core 的自动 Text 备份副作用；runner 现会快照并在 `finally` 原样恢复输入旁备份，避免后续性能验证修改已跟踪数据。
+- 最终完整 pytest 为 `154 passed in 1.36s`；六份 golden 哈希不变，生产/测试工具手写重复映射计数为 0。
+- 最终业务 Python 文件数为 16，聚合 SHA256 为 `4F486387B42CE3C022F271B0C350C604157546387EF0E04B2E691D2AC8D0E7DC`。
+- typed 请求/结果/进度/批次契约在本批只定义并测试，尚未替换四个旧 Core 的函数签名；这是批次 6 统一应用服务的预留接口，不属于未完成迁移。

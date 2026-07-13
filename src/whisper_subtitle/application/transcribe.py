@@ -1,0 +1,329 @@
+"""The single application use case for every transcription preset."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+
+from ..bootstrap import configure_runtime
+from ..domain.contracts import (
+    BatchResult,
+    Preset,
+    ProgressEvent,
+    TranscriptionRequest,
+    TranscriptionResult,
+)
+from ..domain.postprocess import (
+    apply_strategy,
+    merge_chinese_segments_to_sentences,
+    merge_english_segments_to_sentences,
+)
+from ..domain.presets import resolve_preset
+from ..domain.transcription import TranscriptionEngine
+from ..infrastructure.hardware import HardwareDetector, HardwareInfo
+from ..infrastructure.media_files import MediaDiscoveryError, discover_media_files
+from ..infrastructure.output_store import (
+    build_output_plan,
+    prepare_forced_output_directory,
+    prepare_output_plan,
+    write_desktop_outputs,
+    write_primary_outputs,
+)
+from ..infrastructure.whisper_engine import (
+    FasterWhisperEngine,
+    ModelLocation,
+)
+
+
+ProgressReporter = Callable[[ProgressEvent], None]
+RuntimeConfigurer = Callable[[], ModelLocation]
+HardwareProbe = Callable[[], HardwareInfo]
+EngineLoader = Callable[[HardwareInfo, ModelLocation], TranscriptionEngine]
+
+
+def _ignore_progress(_event: ProgressEvent) -> None:
+    pass
+
+
+class TranscriptionService:
+    """Coordinate one complete batch without depending on a user interface."""
+
+    def __init__(
+        self,
+        *,
+        progress: ProgressReporter | None = None,
+        runtime_configurer: RuntimeConfigurer | None = None,
+        hardware_detector: HardwareProbe | None = None,
+        engine_loader: EngineLoader | None = None,
+    ) -> None:
+        self._progress = progress or _ignore_progress
+        self._configure_runtime = runtime_configurer or configure_runtime
+        self._detect_hardware = hardware_detector or HardwareDetector().detect
+        self._load_engine = engine_loader or FasterWhisperEngine.load
+
+    def _emit(
+        self,
+        stage: str,
+        message: str,
+        *,
+        current: int | None = None,
+        total: int | None = None,
+        preset_id: str | None = None,
+        input_path: Path | None = None,
+    ) -> None:
+        self._progress(
+            ProgressEvent(
+                stage=stage,
+                message=message,
+                current=current,
+                total=total,
+                preset_id=preset_id,
+                input_path=input_path,
+            )
+        )
+
+    def _create_default_engine(self, preset_id: str) -> TranscriptionEngine:
+        location = self._configure_runtime()
+        hardware = self._detect_hardware()
+        if hardware.cuda_available:
+            hardware_message = "\n".join(
+                (
+                    f"🖥️  检测到 GPU: {hardware.gpu_name}",
+                    f"🔧 CUDA 版本: {hardware.cuda_version}",
+                    "⚡ 使用 float16 半精度加速",
+                )
+            )
+        else:
+            hardware_message = "⚠️ 警告: CUDA 不可用，将回退到 CPU 运行 (速度极慢)"
+        self._emit(
+            "hardware_detected",
+            hardware_message,
+            preset_id=preset_id,
+        )
+        self._emit(
+            "model_loading",
+            "\n".join(
+                (
+                    "\n📦 正在加载 Whisper Large-V3-Turbo 模型...",
+                    f"   模型路径: {location.hub}",
+                    "   模型已内置在工程目录中，无需联网下载\n",
+                )
+            ),
+            preset_id=preset_id,
+        )
+        engine = self._load_engine(hardware, location)
+        self._emit("model_loaded", "✅ 模型加载完成\n", preset_id=preset_id)
+        return engine
+
+    def transcribe_file(
+        self,
+        request: TranscriptionRequest,
+        engine: TranscriptionEngine,
+        *,
+        current: int = 1,
+        total: int = 1,
+    ) -> TranscriptionResult:
+        """Transcribe one discovered file, propagating operational failures."""
+        preset = resolve_preset(request.preset_id)
+        media_path = request.input_path
+        self._emit(
+            "file_started",
+            "\n".join(("\n" + "=" * 60, f"🎬 正在处理: {media_path.name}", "=" * 60)),
+            current=current,
+            total=total,
+            preset_id=preset.id,
+            input_path=media_path,
+        )
+
+        output_plan = build_output_plan(
+            media_path,
+            request.output_dir,
+            desktop=request.desktop,
+        )
+        prepare_output_plan(output_plan)
+        params = preset.transcription_options()
+        segments, info = engine.transcribe(str(media_path), **params)
+        self._emit(
+            "language_detected",
+            f"🌐 检测到语言: {info.language} (概率: {info.language_probability:.2f})",
+            current=current,
+            total=total,
+            preset_id=preset.id,
+            input_path=media_path,
+        )
+
+        segment_list = list(segments)
+        self._emit(
+            "segments_collected",
+            f"🧩 原始片段数: {len(segment_list)}",
+            current=current,
+            total=total,
+            preset_id=preset.id,
+            input_path=media_path,
+        )
+        sentences = self._merge_segments(preset, segment_list)
+        self._emit(
+            "sentences_merged",
+            f"📝 合并后句子数: {len(sentences)}",
+            current=current,
+            total=total,
+            preset_id=preset.id,
+            input_path=media_path,
+        )
+        lines = apply_strategy(
+            preset.postprocess_strategy,
+            (str(sentence["text"]) for sentence in sentences),
+        )
+        show_line_count = preset.postprocess_strategy.endswith("anti_hallucination")
+        removed_count = len(sentences) - len(lines)
+        if show_line_count and removed_count > 0:
+            self._emit(
+                "repetitions_removed",
+                f"🧹 清理重复句: 删除 {removed_count} 句幻觉重复",
+                current=current,
+                total=total,
+                preset_id=preset.id,
+                input_path=media_path,
+            )
+
+        write_primary_outputs(output_plan, lines)
+        suffix = f" ({len(lines)} 句)" if show_line_count else ""
+        if output_plan.backup_txt is not None:
+            output_message = (
+                f"✅ 完成输出: {output_plan.primary_txt}{suffix} + "
+                f"备份: {output_plan.backup_txt}"
+            )
+        else:
+            output_message = f"✅ 完成输出: {output_plan.primary_txt}{suffix}"
+        self._emit(
+            "output_written",
+            output_message,
+            current=current,
+            total=total,
+            preset_id=preset.id,
+            input_path=media_path,
+        )
+
+        if request.desktop:
+            write_desktop_outputs(output_plan, lines)
+            self._emit(
+                "desktop_output_written",
+                f"📁 桌面保存: {output_plan.desktop_txt} + {output_plan.desktop_md}",
+                current=current,
+                total=total,
+                preset_id=preset.id,
+                input_path=media_path,
+            )
+        return TranscriptionResult(request, True, output_plan.primary_txt)
+
+    @staticmethod
+    def _merge_segments(preset: Preset, segments):
+        if preset.params["language"] == "zh":
+            return merge_chinese_segments_to_sentences(segments)
+        return merge_english_segments_to_sentences(segments)
+
+    def run(
+        self,
+        request: TranscriptionRequest,
+        *,
+        engine: TranscriptionEngine | None = None,
+    ) -> BatchResult:
+        """Run discovery, model setup and every file in a resilient batch."""
+        preset = resolve_preset(request.preset_id)
+        try:
+            media_files = discover_media_files(request.input_path)
+        except MediaDiscoveryError as exc:
+            message = str(exc)
+            self._emit(
+                "input_invalid",
+                message,
+                preset_id=preset.id,
+                input_path=request.input_path,
+            )
+            return BatchResult.from_results(
+                [TranscriptionResult(request, False, error=message)]
+            )
+
+        forced_output_dir = None
+        if request.output_dir is not None:
+            forced_output_dir = prepare_forced_output_directory(request.output_dir)
+        normalized_request = TranscriptionRequest(
+            request.input_path,
+            preset.id,
+            forced_output_dir,
+            request.desktop,
+        )
+        active_engine = (
+            engine if engine is not None else self._create_default_engine(preset.id)
+        )
+        listing = "\n".join(f"   • {path}" for path in media_files)
+        self._emit(
+            "media_discovered",
+            f"📁 找到 {len(media_files)} 个媒体文件:\n{listing}\n",
+            current=0,
+            total=len(media_files),
+            preset_id=preset.id,
+            input_path=request.input_path,
+        )
+
+        results = []
+        total = len(media_files)
+        for current, media_path in enumerate(media_files, start=1):
+            file_request = TranscriptionRequest(
+                media_path,
+                preset.id,
+                normalized_request.output_dir,
+                normalized_request.desktop,
+            )
+            try:
+                result = self.transcribe_file(
+                    file_request,
+                    active_engine,
+                    current=current,
+                    total=total,
+                )
+            except Exception as exc:
+                error = str(exc) or type(exc).__name__
+                result = TranscriptionResult(file_request, False, error=error)
+                self._emit(
+                    "file_failed",
+                    f"\n❌ 处理 {media_path.name} 时出错: {error}",
+                    current=current,
+                    total=total,
+                    preset_id=preset.id,
+                    input_path=media_path,
+                )
+            results.append(result)
+
+        batch = BatchResult.from_results(results)
+        output_message = (
+            f"📂 强制输出目录: {normalized_request.output_dir.absolute()}"
+            if normalized_request.output_dir is not None
+            else "📂 输出位置: 各媒体文件所在目录的 Text 子文件夹中"
+        )
+        self._emit(
+            "batch_completed",
+            "\n".join(
+                (
+                    "\n" + "=" * 60,
+                    f"🎉 全部处理完成! 成功: {batch.success_count} / {total}",
+                    output_message,
+                    "=" * 60,
+                )
+            ),
+            current=total,
+            total=total,
+            preset_id=preset.id,
+            input_path=request.input_path,
+        )
+        return batch
+
+
+def transcribe(
+    request: TranscriptionRequest,
+    *,
+    engine: TranscriptionEngine | None = None,
+    progress: ProgressReporter | None = None,
+) -> BatchResult:
+    """Convenience function for callers that do not need a service instance."""
+    return TranscriptionService(progress=progress).run(request, engine=engine)

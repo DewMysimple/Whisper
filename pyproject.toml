@@ -12,14 +12,10 @@ dependencies = [
     "PyQt5>=5.15",
     "psutil>=5.9",
     "nvidia-ml-py>=12.0",
+    "nvidia-cublas-cu12>=12.0,<13",
 ]
 
 [project.optional-dependencies]
-gpu = [
-    "torch>=2.0,<2.12",
-    "torchaudio>=2.0,<2.12",
-    "torchvision>=0.15,<0.27",
-]
 dev = ["setuptools>=68,<82", "pytest>=7.0"]
 
 [project.scripts]
@@ -30,3 +26,13 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+whisper_subtitle = ["resources/*.png", "resources/*.ico"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = ["-ra", "--strict-config", "--strict-markers"]
+xfail_strict = true

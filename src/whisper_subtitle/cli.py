@@ -1,18 +1,17 @@
 """Unified command-line interface for WhisperSubtitle."""
 
 import argparse
-import importlib
+import os
 import sys
+from pathlib import Path
 
 from . import logger
-
-
-PRESET_MODULES = {
-    "cn": "whisper_subtitle.core.WhisperProjectCN",
-    "cn2": "whisper_subtitle.core.WhisperProjectCN2",
-    "en": "whisper_subtitle.core.WhisperProject",
-    "en2": "whisper_subtitle.core.WhisperProject2",
-}
+from .domain.presets import (
+    CLI_ALIASES,
+    DEFAULT_CLI_ALIAS,
+    get_preset_by_cli_alias,
+)
+from .paths import MODEL_DIR_ENV
 
 
 def _configure_cli_encoding():
@@ -38,9 +37,24 @@ def _build_parser():
     transcribe.add_argument("-o", "--output", default=".", help="输出目录")
     transcribe.add_argument(
         "--preset",
-        choices=tuple(PRESET_MODULES),
-        default="en",
+        choices=CLI_ALIASES,
+        default=DEFAULT_CLI_ALIAS,
         help="转录预设（默认: en）",
+    )
+    transcribe.add_argument(
+        "--desktop",
+        action="store_true",
+        help="额外保存到桌面 Whisper语音列表 并转 Markdown",
+    )
+    transcribe.add_argument(
+        "--progress",
+        choices=("text", "jsonl"),
+        default="text",
+        help="进度输出格式（默认: text）",
+    )
+    transcribe.add_argument(
+        "--model-dir",
+        help="本地模型目录或 Hugging Face 缓存根目录",
     )
 
     subparsers.add_parser("gui", help="启动图形界面")
@@ -49,31 +63,40 @@ def _build_parser():
 
 
 def _run_transcribe(args):
-    module = importlib.import_module(PRESET_MODULES[args.preset])
-    forwarded = [args.input]
-    if args.output != ".":
-        forwarded.extend(["-o", args.output])
+    from .domain.contracts import TranscriptionRequest
+    from .presentation.console import run_transcription_request
 
-    previous_argv = sys.argv
-    sys.argv = [f"whisper-subtitle transcribe --preset {args.preset}", *forwarded]
+    preset = get_preset_by_cli_alias(args.preset)
+    request = TranscriptionRequest(
+        input_path=Path(args.input),
+        preset_id=preset.id,
+        output_dir=None if args.output == "." else Path(args.output),
+        desktop=args.desktop,
+    )
+    previous_model_dir = os.environ.get(MODEL_DIR_ENV)
+    if args.model_dir:
+        os.environ[MODEL_DIR_ENV] = args.model_dir
     try:
-        return int(module.main() or 0)
+        return run_transcription_request(request, progress_format=args.progress)
     finally:
-        sys.argv = previous_argv
+        if args.model_dir:
+            if previous_model_dir is None:
+                os.environ.pop(MODEL_DIR_ENV, None)
+            else:
+                os.environ[MODEL_DIR_ENV] = previous_model_dir
 
 
 def _run_check():
-    from .utils.test_env import main as check_main
+    from .infrastructure.environment_check import main as check_main
 
     try:
-        check_main()
+        return int(check_main() or 0)
     except SystemExit as exc:
         return int(exc.code or 0)
-    return 0
 
 
 def _run_gui():
-    from .gui.WhisperPyQtGUI import main as gui_main
+    from .presentation.gui.main_window import main as gui_main
 
     return gui_main()
 

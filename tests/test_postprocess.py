@@ -1,30 +1,17 @@
-"""Unit tests for the post-processing functions kept in the four core modules."""
+"""Unit tests for pure post-processing functions."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from whisper_subtitle.core import WhisperProject as en
-from whisper_subtitle.core import WhisperProject2 as en2
-from whisper_subtitle.core import WhisperProjectCN as cn
-from whisper_subtitle.core import WhisperProjectCN2 as cn2
+from whisper_subtitle.domain.postprocess import (
+    clean_inner_repetition,
+    clean_repetition,
+    ensure_chinese_punctuation,
+    ensure_proper_case,
+)
 
 
-@pytest.mark.parametrize("module", [en, en2, cn, cn2], ids=["en", "en2", "cn", "cn2"])
-def test_txt_to_md_preserves_utf8_content_and_paragraphs(module, tmp_path: Path):
-    source = tmp_path / "source.txt"
-    target = tmp_path / "target.md"
-    content = "# 标题\n\nFirst paragraph.\n第二段。\n"
-    source.write_text(content, encoding="utf-8")
-
-    module.txt_to_md(source, target, tmp_path / "unused-video.mp4")
-
-    assert target.read_text(encoding="utf-8") == content
-
-
-@pytest.mark.parametrize("module", [en, en2], ids=["en", "en2"])
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
@@ -35,11 +22,10 @@ def test_txt_to_md_preserves_utf8_content_and_paragraphs(module, tmp_path: Path)
         ("  hello", "Hello"),
     ],
 )
-def test_ensure_proper_case_common_and_edge_cases(module, source, expected):
-    assert module.ensure_proper_case(source) == expected
+def test_ensure_proper_case_common_and_edge_cases(source, expected):
+    assert ensure_proper_case(source) == expected
 
 
-@pytest.mark.parametrize("module", [cn, cn2], ids=["cn", "cn2"])
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
@@ -51,11 +37,10 @@ def test_ensure_proper_case_common_and_edge_cases(module, source, expected):
         ("已经结束。", "已经结束。"),
     ],
 )
-def test_ensure_chinese_punctuation_common_and_edge_cases(module, source, expected):
-    assert module.ensure_chinese_punctuation(source) == expected
+def test_ensure_chinese_punctuation_common_and_edge_cases(source, expected):
+    assert ensure_chinese_punctuation(source) == expected
 
 
-@pytest.mark.parametrize("function", [en2.clean_repetition, cn2.clean_repetition])
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
@@ -66,8 +51,8 @@ def test_ensure_chinese_punctuation_common_and_edge_cases(module, source, expect
         (["start", "tail", "tail", "tail", "tail", "tail"], ["start", "tail"]),
     ],
 )
-def test_clean_repetition_only_removes_consecutive_duplicates(function, source, expected):
-    assert function(source) == expected
+def test_clean_repetition_only_removes_consecutive_duplicates(source, expected):
+    assert clean_repetition(source) == expected
 
 
 @pytest.mark.parametrize(
@@ -82,4 +67,4 @@ def test_clean_repetition_only_removes_consecutive_duplicates(function, source, 
     ],
 )
 def test_clean_inner_repetition_keeps_normal_double_emphasis(source, expected):
-    assert cn2.clean_inner_repetition(source) == expected
+    assert clean_inner_repetition(source) == expected

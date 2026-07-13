@@ -1,0 +1,24 @@
+# 批次 1 发现
+
+- 计划定义的批次 1 是补强架构重构测试护栏；用户要求不修改业务代码、不自动提交 Git。
+- 当前测试基线为 71 条，覆盖后处理纯函数、preset 基础结构、四份 golden 哈希和旧 benchmark 元数据。
+- 当前缺口包括 CLI 参数转发与退出码、文件夹批处理边界、无权限/损坏输入/模型缺失等失败路径。
+- 当前 benchmark schema_version 为 1，每个 preset 只运行 1 次，尚无冷/热启动分类、中位数和波动范围。
+- 现有中文 golden 是把英文固定音频按中文 preset 转录得到；批次 1 需要新增真正的固定中文短音频及其 cn/cn2 输出保护。
+- 批次开始时共收集到 71 条测试。
+- 13 个业务 Python 文件的当前聚合 SHA256 为 `8F6D826960C1CF06B4B7C0600620E743FF670017B35883D6499625D61F236CB4`；本批次结束时必须保持一致，并以 `git diff -- src/whisper_subtitle` 复核。
+- 四个 Core 的 `main()` 在模型加载前处理输入不存在、不支持格式与空目录，返回 1；模型构造和强制输出目录创建异常目前会直接向上抛出；单个媒体处理异常会被记录并使最终退出码为 1。
+- 本机存在 `Microsoft Huihui Desktop - Chinese (Simplified)` SAPI 语音，可离线生成固定 PCM WAV 中文测试夹具。
+- 新增 CLI/Core 契约测试共 42 条并全部通过；这些测试不实例化真实 Whisper 模型。
+- 现有行为中，统一 CLI 能传播旧 Core 的返回码并在正常/异常路径恢复 `sys.argv`；四个 Core 对支持格式的递归扫描顺序一致。
+- 模型缺失和强制输出目录权限错误目前会直接抛出异常而不是形成统一错误结构；批次 1 先固定现状，留待批次 6 的统一应用服务处理。
+- 固定中文 WAV 为 234774 字节、5.3226 秒、22.05 kHz/16-bit/单声道，SHA256 为 `3CFE0F9F...6027D`；cn/cn2 真实输出文本完全一致。
+- Windows 运行时输出使用 CRLF，而仓库 TXT 属性要求 LF；新增中文 golden 明确保存为规范 LF，并同时锁定 UTF-8 文本和规范文件哈希。原四份 golden 未改动。
+- benchmark runner 已改为只校验而不覆盖现有 golden；schema v2 将 `cold_process` 与 `warm_system_cache` 分开，每阶段默认 3 次，并为每个数值指标记录 samples/median/min/max/range。
+- 当前“热启动”精确定义为先前运行已预热系统/文件缓存后的全新 CLI 进程，不宣称复用同一进程中的模型；该定义已写入 baseline schema。
+- 首轮 24 次真实 benchmark 在第 23 次因 Hugging Face 代理瞬断失败；本地模型本身存在且前 22 次均成功。为消除网络噪声，runner 现显式启用 Hugging Face/Transformers 离线解析。
+- 离线 cn2 冒烟通过后，第二轮 24 次真实 benchmark 全部成功；四 preset 的输出哈希与原 golden 逐字节一致。
+- v2 baseline 中总进程时间中位数：en 冷 3.6049s/热 3.5770s，en2 冷 3.5892s/热 3.5972s，cn 冷 3.5801s/热 3.5987s，cn2 冷 3.6008s/热 3.5810s。
+- 最终测试总数从 71 增至 126；业务源码聚合哈希保持 `8F6D8269...36CB4`，`git diff -- src/whisper_subtitle` 为空。
+- module GUI 与 console GUI 均通过 2 秒 Qt offscreen 持续运行检查，测试进程已全部回收。
+- benchmark writer 已显式指定 LF；v2 baseline CRLF 数为 0，`git diff --check` 无错误或换行警告。

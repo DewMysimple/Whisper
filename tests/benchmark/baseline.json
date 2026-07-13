@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "generated_at": "2026-07-13T17:45:23+08:00",
+  "schema_version": 2,
+  "generated_at": "2026-07-13T18:25:03+08:00",
   "input": {
     "path": "Log/执行2/baseline/regression_input.wav",
     "bytes": 383588,
@@ -8,8 +8,14 @@
   },
   "environment": {
     "gpu": "NVIDIA GeForce RTX 5070 Ti",
-    "measurement_runs_per_preset": 1,
-    "resource_sample_interval_seconds": 0.05
+    "runs_per_phase": 3,
+    "measurement_runs_per_preset": 6,
+    "resource_sample_interval_seconds": 0.05,
+    "offline_model_resolution": true,
+    "phase_definitions": {
+      "cold_process": "fresh CLI process and fresh model instance",
+      "warm_system_cache": "fresh CLI process after prior runs have warmed OS/filesystem caches; this is not an in-process retained model"
+    }
   },
   "presets": {
     "en": {
@@ -37,22 +43,226 @@
         }
       },
       "postprocess": "无",
-      "metrics": {
-        "startup_to_model_load_start_seconds": 1.2024,
-        "startup_to_model_ready_seconds": 3.5776,
-        "model_load_seconds": 2.3752,
-        "transcription_to_output_seconds": 0.4863,
-        "total_process_seconds": 4.3915,
-        "peak_process_memory_mib": 2147.34,
-        "peak_gpu_memory_mib": 2321.63,
-        "peak_gpu_device_used_mib": 3670.98,
-        "gpu_baseline_used_mib": 1349.34,
-        "gpu_measurement_method": "NVML device-used delta (process metric unavailable)"
-      },
       "output": {
         "path": "tests/golden/en_output.txt",
         "bytes": 102,
         "sha256": "D6AD4418CE220D3981878CB84FB903B6E483FF2497FCBD6A9D5C65C15463DE78"
+      },
+      "measurements": {
+        "cold_process": {
+          "run_count": 3,
+          "metrics": {
+            "gpu_baseline_used_mib": {
+              "samples": [
+                1584.59,
+                1581.4,
+                1560.28
+              ],
+              "median": 1581.4,
+              "min": 1560.28,
+              "max": 1584.59,
+              "range": 24.31
+            },
+            "model_load_seconds": {
+              "samples": [
+                1.598,
+                1.5836,
+                1.5774
+              ],
+              "median": 1.5836,
+              "min": 1.5774,
+              "max": 1.598,
+              "range": 0.0206
+            },
+            "peak_gpu_device_used_mib": {
+              "samples": [
+                3901.6,
+                3880.47,
+                3879.97
+              ],
+              "median": 3880.47,
+              "min": 3879.97,
+              "max": 3901.6,
+              "range": 21.63
+            },
+            "peak_gpu_memory_mib": {
+              "samples": [
+                2317.01,
+                2299.07,
+                2319.7
+              ],
+              "median": 2317.01,
+              "min": 2299.07,
+              "max": 2319.7,
+              "range": 20.63
+            },
+            "peak_process_memory_mib": {
+              "samples": [
+                2124.93,
+                2186.29,
+                2151.75
+              ],
+              "median": 2151.75,
+              "min": 2124.93,
+              "max": 2186.29,
+              "range": 61.36
+            },
+            "startup_to_model_load_start_seconds": {
+              "samples": [
+                1.2003,
+                1.1967,
+                1.193
+              ],
+              "median": 1.1967,
+              "min": 1.193,
+              "max": 1.2003,
+              "range": 0.0073
+            },
+            "startup_to_model_ready_seconds": {
+              "samples": [
+                2.7984,
+                2.7802,
+                2.7704
+              ],
+              "median": 2.7802,
+              "min": 2.7704,
+              "max": 2.7984,
+              "range": 0.028
+            },
+            "total_process_seconds": {
+              "samples": [
+                3.6346,
+                3.5871,
+                3.6049
+              ],
+              "median": 3.6049,
+              "min": 3.5871,
+              "max": 3.6346,
+              "range": 0.0475
+            },
+            "transcription_to_output_seconds": {
+              "samples": [
+                0.4933,
+                0.4729,
+                0.4949
+              ],
+              "median": 0.4933,
+              "min": 0.4729,
+              "max": 0.4949,
+              "range": 0.022
+            }
+          },
+          "gpu_measurement_methods": [
+            "NVML device-used delta (process metric unavailable)"
+          ]
+        },
+        "warm_system_cache": {
+          "run_count": 3,
+          "metrics": {
+            "gpu_baseline_used_mib": {
+              "samples": [
+                1559.78,
+                1560.09,
+                1560.03
+              ],
+              "median": 1560.03,
+              "min": 1559.78,
+              "max": 1560.09,
+              "range": 0.31
+            },
+            "model_load_seconds": {
+              "samples": [
+                1.58,
+                1.5737,
+                1.5736
+              ],
+              "median": 1.5737,
+              "min": 1.5736,
+              "max": 1.58,
+              "range": 0.0064
+            },
+            "peak_gpu_device_used_mib": {
+              "samples": [
+                3880.41,
+                3880.22,
+                3880.04
+              ],
+              "median": 3880.22,
+              "min": 3880.04,
+              "max": 3880.41,
+              "range": 0.37
+            },
+            "peak_gpu_memory_mib": {
+              "samples": [
+                2320.63,
+                2320.13,
+                2320.01
+              ],
+              "median": 2320.13,
+              "min": 2320.01,
+              "max": 2320.63,
+              "range": 0.62
+            },
+            "peak_process_memory_mib": {
+              "samples": [
+                2146.55,
+                2182.76,
+                2182.92
+              ],
+              "median": 2182.76,
+              "min": 2146.55,
+              "max": 2182.92,
+              "range": 36.37
+            },
+            "startup_to_model_load_start_seconds": {
+              "samples": [
+                1.1822,
+                1.1828,
+                1.185
+              ],
+              "median": 1.1828,
+              "min": 1.1822,
+              "max": 1.185,
+              "range": 0.0028
+            },
+            "startup_to_model_ready_seconds": {
+              "samples": [
+                2.7622,
+                2.7565,
+                2.7587
+              ],
+              "median": 2.7587,
+              "min": 2.7565,
+              "max": 2.7622,
+              "range": 0.0057
+            },
+            "total_process_seconds": {
+              "samples": [
+                3.577,
+                3.57,
+                3.5983
+              ],
+              "median": 3.577,
+              "min": 3.57,
+              "max": 3.5983,
+              "range": 0.0283
+            },
+            "transcription_to_output_seconds": {
+              "samples": [
+                0.4673,
+                0.4759,
+                0.4997
+              ],
+              "median": 0.4759,
+              "min": 0.4673,
+              "max": 0.4997,
+              "range": 0.0324
+            }
+          },
+          "gpu_measurement_methods": [
+            "NVML device-used delta (process metric unavailable)"
+          ]
+        }
       }
     },
     "en2": {
@@ -80,22 +290,226 @@
         }
       },
       "postprocess": "clean_repetition()",
-      "metrics": {
-        "startup_to_model_load_start_seconds": 1.1831,
-        "startup_to_model_ready_seconds": 3.4484,
-        "model_load_seconds": 2.2654,
-        "transcription_to_output_seconds": 0.4854,
-        "total_process_seconds": 4.2765,
-        "peak_process_memory_mib": 2167.16,
-        "peak_gpu_memory_mib": 2320.57,
-        "peak_gpu_device_used_mib": 3671.35,
-        "gpu_baseline_used_mib": 1350.78,
-        "gpu_measurement_method": "NVML device-used delta (process metric unavailable)"
-      },
       "output": {
         "path": "tests/golden/en2_output.txt",
         "bytes": 102,
         "sha256": "D6AD4418CE220D3981878CB84FB903B6E483FF2497FCBD6A9D5C65C15463DE78"
+      },
+      "measurements": {
+        "cold_process": {
+          "run_count": 3,
+          "metrics": {
+            "gpu_baseline_used_mib": {
+              "samples": [
+                1559.84,
+                1559.96,
+                1560.09
+              ],
+              "median": 1559.96,
+              "min": 1559.84,
+              "max": 1560.09,
+              "range": 0.25
+            },
+            "model_load_seconds": {
+              "samples": [
+                1.5838,
+                1.575,
+                1.5672
+              ],
+              "median": 1.575,
+              "min": 1.5672,
+              "max": 1.5838,
+              "range": 0.0166
+            },
+            "peak_gpu_device_used_mib": {
+              "samples": [
+                3880.16,
+                3880.04,
+                3880.16
+              ],
+              "median": 3880.16,
+              "min": 3880.04,
+              "max": 3880.16,
+              "range": 0.12
+            },
+            "peak_gpu_memory_mib": {
+              "samples": [
+                2320.32,
+                2320.07,
+                2320.07
+              ],
+              "median": 2320.07,
+              "min": 2320.07,
+              "max": 2320.32,
+              "range": 0.25
+            },
+            "peak_process_memory_mib": {
+              "samples": [
+                2183.16,
+                2132.68,
+                2148.02
+              ],
+              "median": 2148.02,
+              "min": 2132.68,
+              "max": 2183.16,
+              "range": 50.48
+            },
+            "startup_to_model_load_start_seconds": {
+              "samples": [
+                1.1801,
+                1.204,
+                1.1801
+              ],
+              "median": 1.1801,
+              "min": 1.1801,
+              "max": 1.204,
+              "range": 0.0239
+            },
+            "startup_to_model_ready_seconds": {
+              "samples": [
+                2.7639,
+                2.779,
+                2.7472
+              ],
+              "median": 2.7639,
+              "min": 2.7472,
+              "max": 2.779,
+              "range": 0.0318
+            },
+            "total_process_seconds": {
+              "samples": [
+                3.5892,
+                3.6079,
+                3.5626
+              ],
+              "median": 3.5892,
+              "min": 3.5626,
+              "max": 3.6079,
+              "range": 0.0453
+            },
+            "transcription_to_output_seconds": {
+              "samples": [
+                0.4878,
+                0.4892,
+                0.4759
+              ],
+              "median": 0.4878,
+              "min": 0.4759,
+              "max": 0.4892,
+              "range": 0.0133
+            }
+          },
+          "gpu_measurement_methods": [
+            "NVML device-used delta (process metric unavailable)"
+          ]
+        },
+        "warm_system_cache": {
+          "run_count": 3,
+          "metrics": {
+            "gpu_baseline_used_mib": {
+              "samples": [
+                1559.96,
+                1559.9,
+                1560.09
+              ],
+              "median": 1559.96,
+              "min": 1559.9,
+              "max": 1560.09,
+              "range": 0.19
+            },
+            "model_load_seconds": {
+              "samples": [
+                1.579,
+                1.567,
+                1.5793
+              ],
+              "median": 1.579,
+              "min": 1.567,
+              "max": 1.5793,
+              "range": 0.0123
+            },
+            "peak_gpu_device_used_mib": {
+              "samples": [
+                3880.1,
+                3880.29,
+                3880.04
+              ],
+              "median": 3880.1,
+              "min": 3880.04,
+              "max": 3880.29,
+              "range": 0.25
+            },
+            "peak_gpu_memory_mib": {
+              "samples": [
+                2320.13,
+                2320.38,
+                2319.95
+              ],
+              "median": 2320.13,
+              "min": 2319.95,
+              "max": 2320.38,
+              "range": 0.43
+            },
+            "peak_process_memory_mib": {
+              "samples": [
+                2148.6,
+                2187.7,
+                2126.97
+              ],
+              "median": 2148.6,
+              "min": 2126.97,
+              "max": 2187.7,
+              "range": 60.73
+            },
+            "startup_to_model_load_start_seconds": {
+              "samples": [
+                1.1849,
+                1.1821,
+                1.186
+              ],
+              "median": 1.1849,
+              "min": 1.1821,
+              "max": 1.186,
+              "range": 0.0039
+            },
+            "startup_to_model_ready_seconds": {
+              "samples": [
+                2.7639,
+                2.7491,
+                2.7653
+              ],
+              "median": 2.7639,
+              "min": 2.7491,
+              "max": 2.7653,
+              "range": 0.0162
+            },
+            "total_process_seconds": {
+              "samples": [
+                3.61,
+                3.5972,
+                3.5746
+              ],
+              "median": 3.5972,
+              "min": 3.5746,
+              "max": 3.61,
+              "range": 0.0354
+            },
+            "transcription_to_output_seconds": {
+              "samples": [
+                0.5115,
+                0.5029,
+                0.471
+              ],
+              "median": 0.5029,
+              "min": 0.471,
+              "max": 0.5115,
+              "range": 0.0405
+            }
+          },
+          "gpu_measurement_methods": [
+            "NVML device-used delta (process metric unavailable)"
+          ]
+        }
       }
     },
     "cn": {
@@ -123,22 +537,226 @@
         }
       },
       "postprocess": "无",
-      "metrics": {
-        "startup_to_model_load_start_seconds": 1.1887,
-        "startup_to_model_ready_seconds": 3.5222,
-        "model_load_seconds": 2.3335,
-        "transcription_to_output_seconds": 0.4857,
-        "total_process_seconds": 4.3377,
-        "peak_process_memory_mib": 2185.02,
-        "peak_gpu_memory_mib": 2320.26,
-        "peak_gpu_device_used_mib": 3671.48,
-        "gpu_baseline_used_mib": 1351.22,
-        "gpu_measurement_method": "NVML device-used delta (process metric unavailable)"
-      },
       "output": {
         "path": "tests/golden/cn_output.txt",
         "bytes": 108,
         "sha256": "69D77F85DDD53B7F98F9A0E63F3639D6F8D194F33430278B96CBAAE798E2CD3D"
+      },
+      "measurements": {
+        "cold_process": {
+          "run_count": 3,
+          "metrics": {
+            "gpu_baseline_used_mib": {
+              "samples": [
+                1559.84,
+                1560.03,
+                1560.28
+              ],
+              "median": 1560.03,
+              "min": 1559.84,
+              "max": 1560.28,
+              "range": 0.44
+            },
+            "model_load_seconds": {
+              "samples": [
+                1.5661,
+                1.5705,
+                1.5569
+              ],
+              "median": 1.5661,
+              "min": 1.5569,
+              "max": 1.5705,
+              "range": 0.0136
+            },
+            "peak_gpu_device_used_mib": {
+              "samples": [
+                3880.22,
+                3880.47,
+                3880.29
+              ],
+              "median": 3880.29,
+              "min": 3880.22,
+              "max": 3880.47,
+              "range": 0.25
+            },
+            "peak_gpu_memory_mib": {
+              "samples": [
+                2320.38,
+                2320.45,
+                2320.01
+              ],
+              "median": 2320.38,
+              "min": 2320.01,
+              "max": 2320.45,
+              "range": 0.44
+            },
+            "peak_process_memory_mib": {
+              "samples": [
+                2101.19,
+                2183.45,
+                2148.3
+              ],
+              "median": 2148.3,
+              "min": 2101.19,
+              "max": 2183.45,
+              "range": 82.26
+            },
+            "startup_to_model_load_start_seconds": {
+              "samples": [
+                1.231,
+                1.1841,
+                1.1946
+              ],
+              "median": 1.1946,
+              "min": 1.1841,
+              "max": 1.231,
+              "range": 0.0469
+            },
+            "startup_to_model_ready_seconds": {
+              "samples": [
+                2.7971,
+                2.7546,
+                2.7514
+              ],
+              "median": 2.7546,
+              "min": 2.7514,
+              "max": 2.7971,
+              "range": 0.0457
+            },
+            "total_process_seconds": {
+              "samples": [
+                3.6169,
+                3.5801,
+                3.5706
+              ],
+              "median": 3.5801,
+              "min": 3.5706,
+              "max": 3.6169,
+              "range": 0.0463
+            },
+            "transcription_to_output_seconds": {
+              "samples": [
+                0.4852,
+                0.4847,
+                0.4797
+              ],
+              "median": 0.4847,
+              "min": 0.4797,
+              "max": 0.4852,
+              "range": 0.0055
+            }
+          },
+          "gpu_measurement_methods": [
+            "NVML device-used delta (process metric unavailable)"
+          ]
+        },
+        "warm_system_cache": {
+          "run_count": 3,
+          "metrics": {
+            "gpu_baseline_used_mib": {
+              "samples": [
+                1560.09,
+                1559.65,
+                1559.96
+              ],
+              "median": 1559.96,
+              "min": 1559.65,
+              "max": 1560.09,
+              "range": 0.44
+            },
+            "model_load_seconds": {
+              "samples": [
+                1.5628,
+                1.5729,
+                1.5621
+              ],
+              "median": 1.5628,
+              "min": 1.5621,
+              "max": 1.5729,
+              "range": 0.0108
+            },
+            "peak_gpu_device_used_mib": {
+              "samples": [
+                3879.97,
+                3880.16,
+                3880.16
+              ],
+              "median": 3880.16,
+              "min": 3879.97,
+              "max": 3880.16,
+              "range": 0.19
+            },
+            "peak_gpu_memory_mib": {
+              "samples": [
+                2319.88,
+                2320.51,
+                2320.2
+              ],
+              "median": 2320.2,
+              "min": 2319.88,
+              "max": 2320.51,
+              "range": 0.63
+            },
+            "peak_process_memory_mib": {
+              "samples": [
+                2175.59,
+                2120.24,
+                2138.13
+              ],
+              "median": 2138.13,
+              "min": 2120.24,
+              "max": 2175.59,
+              "range": 55.35
+            },
+            "startup_to_model_load_start_seconds": {
+              "samples": [
+                1.1906,
+                1.1843,
+                1.1971
+              ],
+              "median": 1.1906,
+              "min": 1.1843,
+              "max": 1.1971,
+              "range": 0.0128
+            },
+            "startup_to_model_ready_seconds": {
+              "samples": [
+                2.7534,
+                2.7572,
+                2.7592
+              ],
+              "median": 2.7572,
+              "min": 2.7534,
+              "max": 2.7592,
+              "range": 0.0058
+            },
+            "total_process_seconds": {
+              "samples": [
+                3.6086,
+                3.5987,
+                3.5973
+              ],
+              "median": 3.5987,
+              "min": 3.5973,
+              "max": 3.6086,
+              "range": 0.0113
+            },
+            "transcription_to_output_seconds": {
+              "samples": [
+                0.5182,
+                0.5083,
+                0.5029
+              ],
+              "median": 0.5083,
+              "min": 0.5029,
+              "max": 0.5182,
+              "range": 0.0153
+            }
+          },
+          "gpu_measurement_methods": [
+            "NVML device-used delta (process metric unavailable)"
+          ]
+        }
       }
     },
     "cn2": {
@@ -166,22 +784,226 @@
         }
       },
       "postprocess": "中文标点 + clean_inner_repetition + clean_repetition",
-      "metrics": {
-        "startup_to_model_load_start_seconds": 1.2417,
-        "startup_to_model_ready_seconds": 3.5534,
-        "model_load_seconds": 2.3118,
-        "transcription_to_output_seconds": 0.5262,
-        "total_process_seconds": 4.414,
-        "peak_process_memory_mib": 2154.22,
-        "peak_gpu_memory_mib": 2320.13,
-        "peak_gpu_device_used_mib": 3671.41,
-        "gpu_baseline_used_mib": 1351.28,
-        "gpu_measurement_method": "NVML device-used delta (process metric unavailable)"
-      },
       "output": {
         "path": "tests/golden/cn2_output.txt",
         "bytes": 108,
         "sha256": "69D77F85DDD53B7F98F9A0E63F3639D6F8D194F33430278B96CBAAE798E2CD3D"
+      },
+      "measurements": {
+        "cold_process": {
+          "run_count": 3,
+          "metrics": {
+            "gpu_baseline_used_mib": {
+              "samples": [
+                1560.09,
+                1559.84,
+                1559.78
+              ],
+              "median": 1559.84,
+              "min": 1559.78,
+              "max": 1560.09,
+              "range": 0.31
+            },
+            "model_load_seconds": {
+              "samples": [
+                1.5761,
+                1.5721,
+                1.5874
+              ],
+              "median": 1.5761,
+              "min": 1.5721,
+              "max": 1.5874,
+              "range": 0.0153
+            },
+            "peak_gpu_device_used_mib": {
+              "samples": [
+                3880.04,
+                3879.97,
+                3935.66
+              ],
+              "median": 3880.04,
+              "min": 3879.97,
+              "max": 3935.66,
+              "range": 55.69
+            },
+            "peak_gpu_memory_mib": {
+              "samples": [
+                2319.95,
+                2320.13,
+                2375.88
+              ],
+              "median": 2320.13,
+              "min": 2319.95,
+              "max": 2375.88,
+              "range": 55.93
+            },
+            "peak_process_memory_mib": {
+              "samples": [
+                2145.63,
+                2172.35,
+                2182.86
+              ],
+              "median": 2172.35,
+              "min": 2145.63,
+              "max": 2182.86,
+              "range": 37.23
+            },
+            "startup_to_model_load_start_seconds": {
+              "samples": [
+                1.1941,
+                1.1725,
+                1.1847
+              ],
+              "median": 1.1847,
+              "min": 1.1725,
+              "max": 1.1941,
+              "range": 0.0216
+            },
+            "startup_to_model_ready_seconds": {
+              "samples": [
+                2.7701,
+                2.7446,
+                2.772
+              ],
+              "median": 2.7701,
+              "min": 2.7446,
+              "max": 2.772,
+              "range": 0.0274
+            },
+            "total_process_seconds": {
+              "samples": [
+                3.6008,
+                3.5806,
+                3.6193
+              ],
+              "median": 3.6008,
+              "min": 3.5806,
+              "max": 3.6193,
+              "range": 0.0387
+            },
+            "transcription_to_output_seconds": {
+              "samples": [
+                0.498,
+                0.4862,
+                0.4915
+              ],
+              "median": 0.4915,
+              "min": 0.4862,
+              "max": 0.498,
+              "range": 0.0118
+            }
+          },
+          "gpu_measurement_methods": [
+            "NVML device-used delta (process metric unavailable)"
+          ]
+        },
+        "warm_system_cache": {
+          "run_count": 3,
+          "metrics": {
+            "gpu_baseline_used_mib": {
+              "samples": [
+                1617.15,
+                1580.34,
+                1593.65
+              ],
+              "median": 1593.65,
+              "min": 1580.34,
+              "max": 1617.15,
+              "range": 36.81
+            },
+            "model_load_seconds": {
+              "samples": [
+                1.5575,
+                1.5681,
+                1.5787
+              ],
+              "median": 1.5681,
+              "min": 1.5575,
+              "max": 1.5787,
+              "range": 0.0212
+            },
+            "peak_gpu_device_used_mib": {
+              "samples": [
+                3900.54,
+                3917.04,
+                3910.97
+              ],
+              "median": 3910.97,
+              "min": 3900.54,
+              "max": 3917.04,
+              "range": 16.5
+            },
+            "peak_gpu_memory_mib": {
+              "samples": [
+                2283.38,
+                2336.7,
+                2317.32
+              ],
+              "median": 2317.32,
+              "min": 2283.38,
+              "max": 2336.7,
+              "range": 53.32
+            },
+            "peak_process_memory_mib": {
+              "samples": [
+                2194.57,
+                2180.32,
+                2182.53
+              ],
+              "median": 2182.53,
+              "min": 2180.32,
+              "max": 2194.57,
+              "range": 14.25
+            },
+            "startup_to_model_load_start_seconds": {
+              "samples": [
+                1.1947,
+                1.2012,
+                1.2633
+              ],
+              "median": 1.2012,
+              "min": 1.1947,
+              "max": 1.2633,
+              "range": 0.0686
+            },
+            "startup_to_model_ready_seconds": {
+              "samples": [
+                2.7523,
+                2.7693,
+                2.842
+              ],
+              "median": 2.7693,
+              "min": 2.7523,
+              "max": 2.842,
+              "range": 0.0897
+            },
+            "total_process_seconds": {
+              "samples": [
+                3.5707,
+                3.581,
+                3.6802
+              ],
+              "median": 3.581,
+              "min": 3.5707,
+              "max": 3.6802,
+              "range": 0.1095
+            },
+            "transcription_to_output_seconds": {
+              "samples": [
+                0.4828,
+                0.4688,
+                0.5011
+              ],
+              "median": 0.4828,
+              "min": 0.4688,
+              "max": 0.5011,
+              "range": 0.0323
+            }
+          },
+          "gpu_measurement_methods": [
+            "NVML device-used delta (process metric unavailable)"
+          ]
+        }
       }
     }
   }
