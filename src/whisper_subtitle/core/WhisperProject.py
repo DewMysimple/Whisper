@@ -12,16 +12,34 @@ import os
 import sys
 import re
 import argparse
+import logging
 import warnings
 from pathlib import Path
 
+from .. import PROJECT_ROOT
+
+logger = logging.getLogger(__name__)
+
 # 设置 HF_HOME，将模型缓存放在工程目录内
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 os.environ["HF_HOME"] = str(PROJECT_ROOT / "models" / "huggingface")
 
 from faster_whisper import WhisperModel
 
 warnings.filterwarnings("ignore")
+
+
+def _configure_cli_encoding():
+    """避免 Windows GBK 控制台因 emoji 日志触发 UnicodeEncodeError。"""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(errors="replace")
+            except (OSError, ValueError) as exc:
+                logger.warning(
+                    "无法配置标准流编码（%s）: %s",
+                    type(exc).__name__, exc,
+                )
 
 
 def ensure_proper_case(text: str) -> str:
@@ -144,7 +162,7 @@ def process_video(video_path: Path, model: WhisperModel, forced_output_dir: Path
     text_dir.mkdir(parents=True, exist_ok=True)
 
     # 转录参数 —— 从 presets.py 单一数据源读取
-    from presets import get_preset
+    from .presets import get_preset
     segments, info = model.transcribe(str(video_path), **get_preset("en_v1")["params"])
 
     print(f"🌐 检测到语言: {info.language} (概率: {info.language_probability:.2f})")
@@ -227,10 +245,10 @@ def main():
       → 输出到 D:\\字幕\\课程1.txt
         """
     )
-    parser.add_argument('input', help='输入视频文件或文件夹路径')
+    parser.add_argument('input', help='输入媒体文件或文件夹路径')
     parser.add_argument(
         '-o', '--output', default='.',
-        help='强制指定输出文件夹路径 (默认: 在视频所在目录自动创建 Text 文件夹)'
+        help='强制指定输出文件夹路径 (默认: 在媒体文件所在目录自动创建 Text 文件夹)'
     )
     parser.add_argument(
         '--desktop', action='store_true',
@@ -239,6 +257,29 @@ def main():
     args = parser.parse_args()
 
     input_path = Path(args.input)
+
+    # 加载模型前先校验输入，避免无效路径或格式白费启动时间与显存
+    media_extensions = {
+        '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpeg', '.mpg',
+        '.mp3', '.wav', '.m4a', '.aac', '.ogg',
+    }
+    if input_path.is_file():
+        if input_path.suffix.lower() not in media_extensions:
+            print(f"❌ 错误: 不支持的文件格式 {input_path.suffix}")
+            return 1
+        video_files = [input_path]
+    elif input_path.is_dir():
+        video_files = sorted([
+            f for f in input_path.rglob('*')
+            if f.is_file() and f.suffix.lower() in media_extensions
+        ])
+    else:
+        print(f"❌ 错误: 输入路径不存在 {input_path}")
+        return 1
+
+    if not video_files:
+        print("❌ 未找到媒体文件，支持格式: " + ", ".join(sorted(media_extensions)))
+        return 1
 
     # 判断是否用户显式指定了输出目录
     forced_output_dir = Path(args.output) if args.output != '.' else None
@@ -273,29 +314,7 @@ def main():
     )
     print("✅ 模型加载完成\n")
 
-    # 收集待处理视频
-    video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpeg', '.mpg'}
-
-    if input_path.is_file():
-        if input_path.suffix.lower() not in video_extensions:
-            print(f"❌ 错误: 不支持的文件格式 {input_path.suffix}")
-            sys.exit(1)
-        video_files = [input_path]
-    elif input_path.is_dir():
-        # 🔧 修改：递归扫描所有子文件夹中的视频文件
-        video_files = sorted([
-            f for f in input_path.rglob('*')
-            if f.is_file() and f.suffix.lower() in video_extensions
-        ])
-    else:
-        print(f"❌ 错误: 输入路径不存在 {input_path}")
-        sys.exit(1)
-
-    if not video_files:
-        print("❌ 未找到视频文件，支持格式: " + ", ".join(video_extensions))
-        sys.exit(1)
-
-    print(f"📁 找到 {len(video_files)} 个视频文件:")
+    print(f"📁 找到 {len(video_files)} 个媒体文件:")
     for vf in video_files:
         print(f"   • {vf}")
     print()
@@ -316,9 +335,11 @@ def main():
     if forced_output_dir:
         print(f"📂 强制输出目录: {forced_output_dir.absolute()}")
     else:
-        print(f"📂 输出位置: 各视频所在目录的 Text 子文件夹中")
+        print(f"📂 输出位置: 各媒体文件所在目录的 Text 子文件夹中")
     print(f"{'='*60}")
+    return 0 if success_count == len(video_files) else 1
 
 
 if __name__ == "__main__":
-    main()
+    _configure_cli_encoding()
+    sys.exit(main())

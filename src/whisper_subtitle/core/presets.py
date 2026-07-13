@@ -4,8 +4,8 @@
 ================================
 脚本侧与 GUI 共享此文件，避免参数两套维护导致漂移。
 
-- 脚本：`from presets import get_preset` 后 `model.transcribe(path, **preset["params"])`
-- GUI  ：`from presets import PRESETS, get_display_value, DISPLAY_KEYS` 遍历渲染
+- 脚本：`from .presets import get_preset` 后 `model.transcribe(path, **preset["params"])`
+- GUI  ：`from ..core.presets import PRESETS, get_display_value, DISPLAY_KEYS` 遍历渲染
 
 本文件只含纯数据与取值函数，不 import 任何重依赖，
 GUI 进程 import 零成本。

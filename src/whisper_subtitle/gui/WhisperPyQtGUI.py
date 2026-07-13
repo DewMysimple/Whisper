@@ -7,11 +7,17 @@ Whisper 语音识别 — 极简白色质感 GUI（PyQt5）
 
 import os
 import sys
+import logging
 from collections import deque
 from pathlib import Path
 
+from .. import PROJECT_ROOT
+from ..core.presets import DISPLAY_KEYS, PRESETS, get_display_value, get_preset
+
+logger = logging.getLogger(__name__)
+
 try:
-    from PyQt5.QtCore import QProcess, QProcessEnvironment, Qt, QTimer
+    from PyQt5.QtCore import QProcess, QProcessEnvironment, QSettings, Qt, QTimer
     from PyQt5.QtGui import QColor, QFont, QTextCursor, QTextCharFormat, QPixmap, QIcon
     from PyQt5.QtWidgets import (
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -19,32 +25,26 @@ try:
         QFileDialog, QMessageBox, QSizePolicy, QRadioButton, QSplitter,
         QListWidget, QStackedWidget, QMenu, QCheckBox, QTableWidget, QHeaderView, QTableWidgetItem
     )
-except ImportError:
-    import tkinter
-    tkinter.messagebox.showerror(
-        "缺少依赖",
-        "本界面需要 PyQt5 库。\n\n"
-        "请手动执行：\n"
-        "whisper_env\\Scripts\\pip install PyQt5\n\n"
-        "安装完成后重新打开。"
-    )
-    raise SystemExit(1)
+except ImportError as exc:
+    logger.error("无法导入 PyQt5（%s）: %s", type(exc).__name__, exc)
+    raise SystemExit("缺少 PyQt5，无法启动图形界面") from exc
 
 # ============================================================
 # 路径配置
-# 当前脚本在 src/gui/，项目根目录是父目录的父目录
+# 路径配置
 # ============================================================
-PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 VENV_PYTHON = PROJECT_ROOT / "whisper_env" / "Scripts" / "python.exe"
 ICON_PATH = PROJECT_ROOT / "assets" / "logo.png"
-# 让 GUI 能 import src/core/presets.py（参数单一数据源）
-sys.path.insert(0, str(PROJECT_ROOT / "src" / "core"))
-from presets import PRESETS, get_preset, get_display_value, DISPLAY_KEYS
 
 
 def script_path(preset):
     """根据 preset 取脚本绝对路径"""
-    return PROJECT_ROOT / "src" / "core" / preset["script"]
+    return PROJECT_ROOT / "src" / "whisper_subtitle" / "core" / preset["script"]
+
+
+def script_module(preset):
+    """根据 preset 生成可由 ``python -m`` 执行的模块名。"""
+    return f"whisper_subtitle.core.{Path(preset['script']).stem}"
 
 
 def check_env():
@@ -161,6 +161,7 @@ class PerfChart(QWidget):
 class WhisperMinimalGUI(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.settings = QSettings("WhisperSubtitle", "WhisperSubtitle")
         self.setWindowTitle("Whisper")
         # 原生 Windows 窗口，保留系统标题栏和按钮
         self.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint)
@@ -182,9 +183,15 @@ class WhisperMinimalGUI(QMainWindow):
         self.is_running = False
         self.process = QProcess(self)
         self._user_stopped = False
+        self._close_pending = False
+        self._stop_timeout_timer = QTimer(self)
+        self._stop_timeout_timer.setSingleShot(True)
+        self._stop_timeout_timer.setInterval(5000)
+        self._stop_timeout_timer.timeout.connect(self._kill_process_if_running)
 
         self._setup_process()
         self._build_ui()
+        self._restore_settings()
         self._enable_win11_rounded_corners()
         self._check_startup()
         self._update_params()
@@ -240,8 +247,8 @@ class WhisperMinimalGUI(QMainWindow):
                 ctypes.byref(ctypes.c_int(caption_color)),
                 ctypes.sizeof(ctypes.c_int)
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("无法启用 Windows 11 圆角（%s）: %s", type(exc).__name__, exc)
 
     def showEvent(self, event):
         """窗口显示后的初始化"""
@@ -253,6 +260,13 @@ class WhisperMinimalGUI(QMainWindow):
 
     def closeEvent(self, event):
         """程序关闭前清理"""
+        if self.process.state() != QProcess.NotRunning:
+            event.ignore()
+            if not self._close_pending:
+                self._close_pending = True
+                self._stop()
+            return
+        self._save_settings()
         super().closeEvent(event)
 
     # ==================== UI 构建 ====================
@@ -319,6 +333,9 @@ class WhisperMinimalGUI(QMainWindow):
         self.file_edit = QLineEdit()
         self.file_edit.setPlaceholderText("输入文件或文件夹路径...")
         self.file_edit.setStyleSheet(self._input_style())
+        self.file_edit.textChanged.connect(
+            lambda value: self.settings.setValue("paths/input", value)
+        )
         left_layout.addWidget(self.file_edit)
         left_layout.addSpacing(12)
         self.file_btn = QPushButton("浏览")
@@ -378,6 +395,9 @@ class WhisperMinimalGUI(QMainWindow):
         self.out_edit = QLineEdit()
         self.out_edit.setPlaceholderText("留空则自动创建 Text 文件夹")
         self.out_edit.setStyleSheet(self._input_style())
+        self.out_edit.textChanged.connect(
+            lambda value: self.settings.setValue("paths/output", value)
+        )
         left_layout.addWidget(self.out_edit)
         left_layout.addSpacing(12)
         self.out_btn = QPushButton("浏览")
@@ -602,8 +622,8 @@ class WhisperMinimalGUI(QMainWindow):
             pynvml.nvmlInit()
             self._nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             self._has_nvidia = True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("无法初始化 NVIDIA 监控（%s）: %s", type(exc).__name__, exc)
 
         # --- 右侧日志面板 ---
         right = QFrame()
@@ -866,46 +886,76 @@ class WhisperMinimalGUI(QMainWindow):
         # UI 构建过程中 setChecked 可能提前触发本函数，此时控件尚未就绪，跳过
         if not hasattr(self, 'mode_desc') or not hasattr(self, 'param_table'):
             return
-        self.mode_desc.setText(self._current_preset()["desc"])
+        preset = self._current_preset()
+        self.mode_desc.setText(preset["desc"])
+        self.settings.setValue("transcription/preset", preset["id"])
         self._update_params()
 
     def _browse_input(self):
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        path = filedialog.askopenfilename(
-            filetypes=[
-                ("视频/音频文件", "*.mp4;*.mkv;*.avi;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpeg;*.mpg;*.mp3;*.wav;*.m4a;*.aac;*.ogg"),
-                ("所有文件", "*.*")
-            ]
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择视频/音频文件",
+            self._dialog_start_dir(self.file_edit.text()),
+            "视频/音频文件 (*.mp4 *.mkv *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpeg *.mpg *.mp3 *.wav *.m4a *.aac *.ogg);;所有文件 (*)",
         )
-        root.destroy()
         if path:
             self.file_edit.setText(path)
 
     def _browse_input_folder(self):
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        path = filedialog.askdirectory(title="选择包含视频/音频的文件夹")
-        root.destroy()
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "选择包含视频/音频的文件夹",
+            self._dialog_start_dir(self.file_edit.text()),
+        )
         if path:
             self.file_edit.setText(path)
 
     def _browse_output(self):
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        path = filedialog.askdirectory(title="选择输出目录")
-        root.destroy()
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "选择输出目录",
+            self._dialog_start_dir(self.out_edit.text()),
+        )
         if path:
             self.out_edit.setText(path)
+
+    @staticmethod
+    def _dialog_start_dir(value):
+        """Return a stable existing directory for a QFileDialog."""
+        candidate = Path(value.strip()).expanduser() if value.strip() else Path.home()
+        if candidate.is_file():
+            return str(candidate.parent)
+        if candidate.is_dir():
+            return str(candidate)
+        if candidate.parent.is_dir():
+            return str(candidate.parent)
+        return str(Path.home())
+
+    def _restore_settings(self):
+        """Restore paths, preset and window geometry from QSettings."""
+        self.file_edit.setText(self.settings.value("paths/input", "", type=str))
+        self.out_edit.setText(self.settings.value("paths/output", "", type=str))
+
+        preset_id = self.settings.value(
+            "transcription/preset", PRESETS[0]["id"], type=str
+        )
+        button = self.mode_buttons.get(preset_id)
+        if button is not None:
+            button.setChecked(True)
+
+        geometry = self.settings.value("window/geometry")
+        if geometry is not None and not self.restoreGeometry(geometry):
+            logger.warning("QSettings 中的窗口几何信息无效，已使用默认窗口位置")
+
+    def _save_settings(self):
+        """Persist current paths, preset and window geometry."""
+        self.settings.setValue("paths/input", self.file_edit.text())
+        self.settings.setValue("paths/output", self.out_edit.text())
+        self.settings.setValue("transcription/preset", self._current_preset()["id"])
+        self.settings.setValue("window/geometry", self.saveGeometry())
+        self.settings.sync()
+        if self.settings.status() != QSettings.NoError:
+            logger.warning("QSettings 写入失败，状态码: %s", self.settings.status())
 
     def _copy_log(self):
         text = self.log_edit.toPlainText()
@@ -1022,8 +1072,8 @@ class WhisperMinimalGUI(QMainWindow):
             total_gb = mem.total / (1024 ** 3)
             self.mem_chart.detail = f"{used_gb:.1f}/{total_gb:.1f} GB ({mem.percent:.0f}%)"
             self.mem_chart.append(mem.percent)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("无法读取 CPU/内存监控（%s）: %s", type(exc).__name__, exc)
         if self._has_nvidia:
             try:
                 import pynvml
@@ -1037,8 +1087,8 @@ class WhisperMinimalGUI(QMainWindow):
                 mem_pct = (mem_info.used / mem_info.total) * 100 if mem_info.total > 0 else 0
                 self.gpu_mem_chart.detail = f"{used_gb:.1f}/{total_gb:.1f} GB ({mem_pct:.0f}%)"
                 self.gpu_mem_chart.append(mem_pct)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("无法读取 GPU 监控（%s）: %s", type(exc).__name__, exc)
 
     def _start(self):
         input_p = self.file_edit.text().strip()
@@ -1050,11 +1100,10 @@ class WhisperMinimalGUI(QMainWindow):
             return
         # 根据处理模式选择脚本（从 presets 单一数据源读取）
         preset = self._current_preset()
-        script = script_path(preset)
         mode_str = preset["label"]
 
         output_p = self.out_edit.text().strip()
-        cmd = [str(VENV_PYTHON), str(script), input_p]
+        cmd = [str(VENV_PYTHON), "-m", script_module(preset), input_p]
         if output_p:
             cmd.extend(["-o", output_p])
         if self.desktop_cb.isChecked():
@@ -1082,6 +1131,7 @@ class WhisperMinimalGUI(QMainWindow):
                 self._append_log(line.strip())
 
     def _on_finished(self, exit_code, exit_status):
+        self._stop_timeout_timer.stop()
         if self._user_stopped:
             self._append_log("\n已停止", "#e67e22")
             self.status_lbl.setText("已停止")
@@ -1098,6 +1148,9 @@ class WhisperMinimalGUI(QMainWindow):
         self._perf_timer.stop()
         if self.center_stack.currentIndex() == 1:
             self._toggle_center_page()
+        if self._close_pending:
+            self._close_pending = False
+            QTimer.singleShot(0, self.close)
 
     def _reset_ui(self):
         self.is_running = False
@@ -1110,9 +1163,13 @@ class WhisperMinimalGUI(QMainWindow):
             self._user_stopped = True
             self._append_log("\n请求停止...", "#e67e22")
             self.process.terminate()
-            if not self.process.waitForFinished(5000):
-                self.process.kill()
-                self._append_log("强制终止", "#e67e22")
+            self._stop_timeout_timer.start()
+
+    def _kill_process_if_running(self):
+        """terminate 超时后异步强制终止，避免阻塞 GUI 主线程。"""
+        if self.process.state() != QProcess.NotRunning:
+            self.process.kill()
+            self._append_log("强制终止", "#e67e22")
 
 
 def main():

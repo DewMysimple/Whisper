@@ -1,0 +1,106 @@
+{
+  "en": {
+    "preset_id": "en_v1",
+    "script": "WhisperProject.py",
+    "model": "Whisper Large-V3-Turbo",
+    "params": {
+      "language": "en",
+      "task": "transcribe",
+      "beam_size": 5,
+      "best_of": 5,
+      "patience": 1.5,
+      "length_penalty": 1.0,
+      "temperature": 0.0,
+      "compression_ratio_threshold": 2.4,
+      "log_prob_threshold": -1.0,
+      "no_speech_threshold": 0.6,
+      "condition_on_previous_text": true,
+      "initial_prompt": "Please transcribe the following English audio accurately. Use proper punctuation, capitalization, and grammar. Ensure each sentence is complete and ends with a period, exclamation mark, or question mark.",
+      "word_timestamps": false,
+      "vad_filter": true,
+      "vad_parameters": {
+        "min_silence_duration_ms": 300,
+        "max_speech_duration_s": 999999
+      }
+    },
+    "postprocess": "无"
+  },
+  "en2": {
+    "preset_id": "en_v2",
+    "script": "WhisperProject2.py",
+    "model": "Whisper Large-V3-Turbo",
+    "params": {
+      "language": "en",
+      "task": "transcribe",
+      "beam_size": 5,
+      "best_of": 5,
+      "patience": 1.5,
+      "length_penalty": 1.0,
+      "temperature": 0.0,
+      "compression_ratio_threshold": 2.0,
+      "log_prob_threshold": -1.5,
+      "no_speech_threshold": 0.8,
+      "condition_on_previous_text": false,
+      "initial_prompt": "Please transcribe the following English audio accurately. Use proper punctuation, capitalization, and grammar. Ensure each sentence is complete and ends with a period, exclamation mark, or question mark.",
+      "word_timestamps": false,
+      "vad_filter": true,
+      "vad_parameters": {
+        "min_silence_duration_ms": 500,
+        "max_speech_duration_s": 999999
+      }
+    },
+    "postprocess": "clean_repetition()"
+  },
+  "cn": {
+    "preset_id": "cn",
+    "script": "WhisperProjectCN.py",
+    "model": "Whisper Large-V3-Turbo",
+    "params": {
+      "language": "zh",
+      "task": "transcribe",
+      "beam_size": 5,
+      "best_of": 5,
+      "patience": 1.5,
+      "length_penalty": 1.0,
+      "temperature": 0.0,
+      "compression_ratio_threshold": 2.4,
+      "log_prob_threshold": -1.0,
+      "no_speech_threshold": 0.6,
+      "condition_on_previous_text": true,
+      "initial_prompt": "请准确转录以下中文音频。使用正确的中文标点符号。确保每个句子完整，并以句号、感叹号或问号结尾。保持原文的语气和表达方式。",
+      "word_timestamps": false,
+      "vad_filter": true,
+      "vad_parameters": {
+        "min_silence_duration_ms": 300,
+        "max_speech_duration_s": 999999
+      }
+    },
+    "postprocess": "无"
+  },
+  "cn2": {
+    "preset_id": "cn2",
+    "script": "WhisperProjectCN2.py",
+    "model": "Whisper Large-V3-Turbo",
+    "params": {
+      "language": "zh",
+      "task": "transcribe",
+      "beam_size": 5,
+      "best_of": 5,
+      "patience": 1.5,
+      "length_penalty": 1.0,
+      "temperature": 0.0,
+      "compression_ratio_threshold": 2.0,
+      "log_prob_threshold": -1.5,
+      "no_speech_threshold": 0.8,
+      "condition_on_previous_text": false,
+      "initial_prompt": "请准确转录以下中文音频。使用正确的中文标点符号。确保每个句子完整，并以句号、感叹号或问号结尾。保持原文的语气和表达方式。",
+      "word_timestamps": false,
+      "vad_filter": true,
+      "vad_parameters": {
+        "min_silence_duration_ms": 500,
+        "max_speech_duration_s": 999999
+      }
+    },
+    "postprocess": "中文标点 + clean_inner_repetition + clean_repetition"
+  }
+}

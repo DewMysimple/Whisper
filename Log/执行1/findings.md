@@ -1,0 +1,22 @@
+# 执行1 实施发现
+
+- 需求来源：`Requirement/执行1.md`。
+- 当前工作区在 `master`，用户明确选择直接修改，不使用 worktree。
+- 基线：四个 Core 的 `--help` 均返回 0；耗时约 1.35–1.66 秒；`test_env.py` 返回 0。
+- 四个 Core 的 `main()` 结构一致，可采用相同修复：参数解析后先发现/校验媒体，再创建输出目录、探测设备并加载模型；循环结束根据失败数返回退出码。
+- 编码修复应放在 CLI 入口并对 `stdout/stderr.reconfigure(errors="replace")`，因为进程启动后再设置 `PYTHONIOENCODING` 不会重配当前流。
+- GUI 已导入并使用 `QTimer`；可为停止超时单独增加 single-shot timer，不需要布局变化。
+- 基线 `src/` 无用户未提交修改，可以安全实施；其余用户状态保持不动。
+- 四个 Core 已统一支持 15 种媒体扩展名（原 10 种视频 + 5 种音频）。
+- 替身模型测试全部通过：无效扩展名在 `model_init` 前返回 1；WAV 能进入模型/转录流程；转录异常最终返回 1。
+- 在 `PYTHONIOENCODING=gbk:strict` 下运行四个 CLI 的不存在路径用例，均无 `UnicodeEncodeError`，且未出现模型加载日志。
+- 四个脚本的 `--help`、AST 和 `git diff --check` 均通过；换行符提示是 Git 的现有 Windows CRLF 策略，不是语法错误。
+- `test_env.py` 已补入 CN2；实际自检返回 0，模拟 CN2 缺失时返回 1 且错误信息包含该脚本名。
+- GUI 关闭不能只调用 `terminate` 后立即销毁窗口，否则拥有 kill 超时逻辑的 timer 也会销毁；应在进程结束前忽略 close event，并由 `finished` 信号再次触发关闭。
+- Windows 无窗口控制台子进程可能不响应 `QProcess.terminate()`；真实关闭测试因此需要等 5 秒后走 kill 升级路径，这正是超时 timer 必须保留到进程结束的原因。
+- GUI 停止路径替身测试确认 `_stop()` 约 0.04 ms 返回，timer 到期后执行 kill；不存在主线程等待。
+- GUI 真实 QProcess 关闭测试确认：首次 close 被挂起，超时 kill 后进程状态为 NotRunning、pending 标记清除、窗口完成关闭。
+- 产品默认 kill 超时仍为 5000 ms；测试仅在断言默认值后临时缩短 timer 以加速验证。
+- 最终差异范围严格限定为需求指定的 6 个源码文件：四个 Core、一个 GUI、一个环境自检文件。
+- 最终回归通过：四个 Core 帮助/媒体文案、无效输入前置校验、WAV 接受、失败退出码、GBK 容错；test_env 正常/缺失路径；GUI 异步停止/超时 kill/关闭清理；7 个 Python 文件 AST；`git diff --check`。
+- 未执行真实 Whisper 模型推理，因此不对模型精度、CUDA 实际加载和完整音频输出做本轮声明。

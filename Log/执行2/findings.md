@@ -1,0 +1,30 @@
+# 执行2 实施发现
+
+- 需求来源：`Requirement/执行2.md`。
+- `.workbuddy` 三个 Git 跟踪文件当前处于删除状态；用户明确要求保留，需要恢复到 HEAD 内容。
+- `requirements.txt` 当前也处于删除状态，但本轮要求重写；先依赖现有虚拟环境完成真实音频基线。
+- 当前源码包含执行1尚未提交的修改，迁移时必须完整保留。
+- `.workbuddy` 已恢复，Git 状态不再显示其删除。
+- 仓库中没有现成 WAV/MP3/M4A/AAC/OGG；将用 Windows 本地语音合成生成可复现英文 WAV 作为真实音频回归样本。
+- F 盘剩余约 122.2 GiB，可并行创建新虚拟环境并保留旧环境直至验证成功。
+- 当前环境：Python 3.14.2、faster-whisper 1.2.1、PyQt5 5.15.11、torch 2.12 nightly CUDA 12.8。
+- 当前静默异常共包括四个 Core 的编码容错、GUI 的 DWM/NVML/性能监控等位置；迁移后全部改为带异常类型与消息的日志。
+- 已生成 383,588 字节的英文 TTS WAV，SHA256：`AAC601EEE806B2981CD4EE61EC8F6CCB520DCACE422E6ADFDFE60C05E765CB4E`。
+- 改动前真实 GPU 转录通过（RTX 5070 Ti / CUDA 12.8 / float16），输出：`Hello, this is a whisper transcription regression test. The quick brown fox jumps over the lazy dog.`
+- 基准 TXT SHA256：`D6AD4418CE220D3981878CB84FB903B6E483FF2497FCBD6A9D5C65C15463DE78`。
+- 包结构迁移完成：12 个 Python 文件 AST 通过，旧 `src/core|gui|utils` 已无 `.py` 源文件，未发现 `sys.path.insert/append` 或旧式 `from presets`。
+- 现有环境已通过 `pip install -e . --no-deps` 安装 editable 包；四个 Core 模块帮助和环境检查均通过。
+- `python -m whisper_subtitle` 在离屏环境保持运行 1 秒，证明 GUI 正常启动；随后由测试主动终止，故最终进程码不作为应用失败判断。
+- 统一 CLI 的帮助、check 和 GUI 启动通过；首次 transcribe 非法输入测试发现 CLI 直接调用 Core `main()` 会绕过 Core 文件底部的 `_configure_cli_encoding()`，需在 CLI 自身统一配置。
+- CLI 编码容错已上移并验证：GBK 控制台非法输入显示替代字符但不崩溃，返回码为 1；check 返回 0。
+- `rg`/AST 确认所有 `except: pass`、`except Exception: pass` 已清除，异常现在进入标准 package logger。
+- Qt 原生对话框三条路径测试通过；源码不再含 tkinter 或阻塞式 `waitForFinished`。
+- 隔离 QSettings 测试确认输入目录、输出目录、GUI preset `en_v2` 和 900×600 窗口尺寸均可跨实例恢复。
+- `whisper-subtitle gui` 离屏启动保持运行，GUI 迁移后仍可启动。
+- 新环境首次安装本身成功且 `pip check` 通过，但 PyPI 解析到 `torch 2.13.0+cpu`，`torch.cuda.is_available()` 为 false，属于性能功能回退。
+- `test_env` 还证明 psutil 是项目直接运行依赖；GUI 的 GPU 图表直接导入 pynvml，因此二者不能作为“间接依赖”删除。
+- PyTorch 官方 cu128 索引当前兼容 Python 3.14 的最新组合是 torch 2.11.0+cu128、torchaudio 2.11.0+cu128、torchvision 0.26.0+cu128。
+- torch CUDA wheel 大小约 2,771 MB；首次 pip 下载因 SSL EOF 中断，需使用支持续传的下载方式。
+- 用户续传完成的 torch wheel 为 2,770,971,557 字节，ZIP 完整性测试通过，SHA256 为 `D6C21797FF75271B4FBDD905E2D703BE4ECEA5EA5BBDDE4D1C201E9C71BC411D`。
+- CUDA 三件套安装成功并识别 RTX 5070 Ti（CUDA 12.8、计算能力 12.0）；torch 2.11.0+cu128 对 setuptools 有 `<82` 约束，故 setuptools 属于需要显式约束的项目构建工具。
+- 改动后真实转录输出与改动前完全一致：两者均为 102 字节，SHA256 均为 `D6AD4418CE220D3981878CB84FB903B6E483FF2497FCBD6A9D5C65C15463DE78`。

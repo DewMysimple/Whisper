@@ -4,8 +4,8 @@ Set FSO = CreateObject("Scripting.FileSystemObject")
 appDir = FSO.GetParentFolderName(WScript.ScriptFullName)
 python = appDir & "\whisper_env\Scripts\python.exe"
 pythonw = appDir & "\whisper_env\Scripts\pythonw.exe"
-guiScript = appDir & "\src\gui\WhisperPyQtGUI.py"
-testScript = appDir & "\src\utils\test_env.py"
+guiScript = appDir & "\src\whisper_subtitle\gui\WhisperPyQtGUI.py"
+testScript = appDir & "\src\whisper_subtitle\utils\test_env.py"
 errorFile = appDir & "\test_error.txt"
 
 If Not FSO.FileExists(python) Then
@@ -25,7 +25,7 @@ End If
 
 ' Run test script (hidden window, wait for result)
 Dim testCmd
-testCmd = Chr(34) & python & Chr(34) & " " & Chr(34) & testScript & Chr(34) & " 2> " & Chr(34) & errorFile & Chr(34)
+testCmd = Chr(34) & python & Chr(34) & " -m whisper_subtitle.utils.test_env 2> " & Chr(34) & errorFile & Chr(34)
 result = WshShell.Run(testCmd, 0, True)
 
 If result <> 0 Then
@@ -45,7 +45,7 @@ End If
 
 ' Test passed, clean up and launch GUI
 If FSO.FileExists(errorFile) Then FSO.DeleteFile(errorFile)
-WshShell.Run Chr(34) & pythonw & Chr(34) & " " & Chr(34) & guiScript & Chr(34), 0, False
+WshShell.Run Chr(34) & pythonw & Chr(34) & " -m whisper_subtitle", 0, False
 
 Set WshShell = Nothing
 Set FSO = Nothing

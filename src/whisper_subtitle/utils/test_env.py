@@ -15,13 +15,15 @@
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+from .. import PROJECT_ROOT
+
 VENV_PYTHON = PROJECT_ROOT / "whisper_env" / "Scripts" / "python.exe"
-GUI_SCRIPT = PROJECT_ROOT / "src" / "gui" / "WhisperPyQtGUI.py"
+GUI_SCRIPT = PROJECT_ROOT / "src" / "whisper_subtitle" / "gui" / "WhisperPyQtGUI.py"
 CORE_SCRIPTS = [
-    PROJECT_ROOT / "src" / "core" / "WhisperProject.py",
-    PROJECT_ROOT / "src" / "core" / "WhisperProject2.py",
-    PROJECT_ROOT / "src" / "core" / "WhisperProjectCN.py",
+    PROJECT_ROOT / "src" / "whisper_subtitle" / "core" / "WhisperProject.py",
+    PROJECT_ROOT / "src" / "whisper_subtitle" / "core" / "WhisperProject2.py",
+    PROJECT_ROOT / "src" / "whisper_subtitle" / "core" / "WhisperProjectCN.py",
+    PROJECT_ROOT / "src" / "whisper_subtitle" / "core" / "WhisperProjectCN2.py",
 ]
 MODEL_DIR = PROJECT_ROOT / "models" / "huggingface" / "hub"
 
