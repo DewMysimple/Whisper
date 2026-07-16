@@ -8,7 +8,9 @@ import pytest
 
 from whisper_subtitle.infrastructure import output_store
 from whisper_subtitle.infrastructure.output_store import (
+    OutputConflictError,
     atomic_write_text,
+    build_configurable_output_plans,
     build_output_plan,
     copy_utf8_text,
     prepare_forced_output_directory,
@@ -144,3 +146,67 @@ def test_directory_permission_error_is_propagated(tmp_path: Path, monkeypatch):
 
     with pytest.raises(PermissionError, match="directory denied"):
         atomic_write_text(destination, "content")
+
+
+def custom_policy(root: Path, *, conflict="fail", preserve=True):
+    return {
+        "mode": "custom",
+        "root_directory": str(root),
+        "txt": {"enabled": True},
+        "markdown": {"enabled": True},
+        "preserve_source_txt": preserve,
+        "conflict_policy": conflict,
+    }
+
+
+def test_custom_plan_uses_shared_root_subdirectories_and_source_backup(tmp_path):
+    media = tmp_path / "input" / "course.wav"
+
+    plan = build_configurable_output_plans(
+        [media], custom_policy(tmp_path / "output")
+    )[0]
+
+    assert plan.primary_txt == tmp_path / "output" / "Text" / "course.txt"
+    assert plan.primary_md == tmp_path / "output" / "Markdown" / "course.md"
+    assert plan.backup_txt == tmp_path / "input" / "Text" / "course.txt"
+
+
+def test_custom_target_directories_override_shared_root(tmp_path):
+    policy = custom_policy(tmp_path / "shared", preserve=False)
+    policy["txt"]["directory"] = str(tmp_path / "txt-only")
+    policy["markdown"]["directory"] = str(tmp_path / "md-only")
+
+    plan = build_configurable_output_plans([tmp_path / "a.wav"], policy)[0]
+
+    assert plan.primary_txt == tmp_path / "txt-only" / "a.txt"
+    assert plan.primary_md == tmp_path / "md-only" / "a.md"
+    assert plan.backup_txt is None
+
+
+def test_fail_conflict_is_detected_before_writing_any_output(tmp_path):
+    destination = tmp_path / "output" / "Text" / "same.txt"
+    destination.parent.mkdir(parents=True)
+    destination.write_text("existing", encoding="utf-8")
+
+    with pytest.raises(OutputConflictError):
+        build_configurable_output_plans(
+            [tmp_path / "input" / "same.wav"],
+            custom_policy(tmp_path / "output", preserve=False),
+        )
+
+    assert destination.read_text(encoding="utf-8") == "existing"
+
+
+def test_auto_rename_reserves_txt_and_markdown_with_one_suffix(tmp_path):
+    root = tmp_path / "output"
+    existing = root / "Text" / "same.txt"
+    existing.parent.mkdir(parents=True)
+    existing.write_text("existing", encoding="utf-8")
+
+    plan = build_configurable_output_plans(
+        [tmp_path / "same.wav"],
+        custom_policy(root, conflict="auto_rename", preserve=False),
+    )[0]
+
+    assert plan.primary_txt == root / "Text" / "same (2).txt"
+    assert plan.primary_md == root / "Markdown" / "same (2).md"

@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "batch": 6,
+  "date": "2026-07-16",
+  "status": "implementation_complete_user_acceptance_pending",
+  "platform": {
+    "os": "Microsoft Windows 11 Professional",
+    "os_version": "10.0.26200",
+    "build": "26200",
+    "architecture": "x64",
+    "gpu": "NVIDIA GeForce RTX 5070 Ti",
+    "driver_version": "32.0.16.1062",
+    "windows_10_validation": "not_in_scope"
+  },
+  "artifacts": {
+    "setup": {
+      "path": "dist/release/WhisperSubtitle-offline-installer/WhisperSubtitle_0.1.0_x64-setup.exe",
+      "bytes": 727597165,
+      "sha256": "56FFE944546AE76C6A14E543D3F3522F963D665770817540C5A5A506BFF02E8B",
+      "authenticode": "NotSigned"
+    },
+    "portable_executable": {
+      "path": "dist/release/WhisperSubtitle-portable/whisper-subtitle-desktop.exe",
+      "sha256": "FDE4EE92CE29A0B996C4A6A365F61741C1D917F620B61F253E6E185ACF4BF450"
+    },
+    "portable_worker": {
+      "path": "dist/release/WhisperSubtitle-portable/worker/whisper-subtitle-worker.exe",
+      "sha256": "19DF55E64AE0A6B3EEEAE86710E481CE720AB82C085D1411C87D79E97903506D"
+    },
+    "model": {
+      "bytes": 1617884929,
+      "sha256": "E76620F83D5F5B69EFD3D87E3DC180C1BD21DF9FBEBACFD4335E5E1EFCC018DA"
+    },
+    "manifest": true,
+    "sha256sums_entries": 6,
+    "cyclonedx_python_sbom": true
+  },
+  "build": {
+    "python": "3.14.2",
+    "pyinstaller": "6.21.0",
+    "rust": "1.97.0",
+    "node": "24.16.0",
+    "pnpm": "10.34.5",
+    "fresh_environment_pip_check": "No broken requirements found.",
+    "frozen_pyqt5": false,
+    "frozen_tkinter": false,
+    "nsis_webview_mode": "offlineInstaller",
+    "installer_mode": "currentUser",
+    "media_layout": "setup_plus_adjacent_model_pack"
+  },
+  "gpu_validation": {
+    "device": "cuda",
+    "compute_type": "float16",
+    "presets": ["cn", "cn2"],
+    "model_loading_events": 1,
+    "normalized_sha256": "83C3A8CAB6BDEB88CE0FF0B6C79C3BB73ADD9190E16388D17ECC05A0F4EF7ABD",
+    "raw_sha256": "AB9BFF2E61B06DF8E49C20D483BE49A284C39D1E18089D1192F885C7634498FF",
+    "portable_seconds": 2.542,
+    "installed_seconds": 2.7346,
+    "passed": true
+  },
+  "desktop_lifecycle": {
+    "window_title": "WhisperSubtitle",
+    "packaged_workers": 1,
+    "new_python_processes": 0,
+    "tcp_listeners": 0,
+    "exit_code": 0,
+    "remaining_workers": 0
+  },
+  "install_upgrade_uninstall": {
+    "install_exit_code": 0,
+    "installed_version": "0.1.0",
+    "upgrade_path": "0.1.0_to_temporary_0.1.1",
+    "upgrade_exit_code": 0,
+    "upgrade_user_data_files_preserved": 206,
+    "uninstall_exit_code": 0,
+    "uninstall_registry_entry_remaining": false,
+    "uninstall_install_directory_remaining": false,
+    "user_data_files_before_uninstall": 208,
+    "user_data_files_after_uninstall": 208
+  },
+  "regression": {
+    "pytest": {"passed": 245},
+    "vitest": {"passed": 8},
+    "playwright": {"passed": 3},
+    "prettier": "passed",
+    "eslint": "passed",
+    "typescript": "passed",
+    "rustfmt": "passed",
+    "clippy_deny_warnings": "passed",
+    "cargo_test": {"passed": 9, "ignored": 1}
+  },
+  "limitations": [
+    "Validation used a fresh build environment and frozen processes on the same physical Windows 11 GPU host, not a second clean machine.",
+    "Artifacts are unsigned because no code-signing certificate was supplied.",
+    "Automatic updates remain disabled; offline NSIS replacement upgrade was validated."
+  ]
+}

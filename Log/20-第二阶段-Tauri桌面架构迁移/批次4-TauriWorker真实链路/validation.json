@@ -1,0 +1,36 @@
+{
+  "batch": 4,
+  "date": "2026-07-15",
+  "status": "complete_accepted",
+  "platform": "Windows 11 x64",
+  "toolchain": {
+    "node": "24.16.0",
+    "pnpm": "10.34.5",
+    "rustc": "1.97.0",
+    "python": "3.14.2",
+    "faster_whisper": "1.2.1",
+    "ctranslate2": "4.8.1"
+  },
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5070 Ti",
+    "driver": "610.62"
+  },
+  "checks": {
+    "python_tests": "239 passed",
+    "frontend_tests": "6 passed",
+    "rust_tests": "7 passed; 1 real-GPU test invoked separately for cn and en_v1",
+    "fresh_environment_pip_check": "passed",
+    "fresh_environment_check": "passed",
+    "tauri_production_build": "passed",
+    "tcp_listeners": 0,
+    "normal_exit_code": 0,
+    "remaining_worker_processes": 0
+  },
+  "gpu_outputs": {
+    "chinese_matches_existing_golden": true,
+    "chinese_normalized_sha256": "83C3A8CAB6BDEB88CE0FF0B6C79C3BB73ADD9190E16388D17ECC05A0F4EF7ABD",
+    "english_cli_host_outputs_equal": true,
+    "english_normalized_sha256": "C74C03B1FEECABF85170791D25127B96C789EA2B5C6E3B49B1AB88F0B8922FE0"
+  },
+  "git_actions": []
+}

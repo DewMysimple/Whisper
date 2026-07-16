@@ -23,6 +23,7 @@ from ..domain.transcription import TranscriptionEngine
 from ..infrastructure.hardware import HardwareDetector, HardwareInfo
 from ..infrastructure.media_files import MediaDiscoveryError, discover_media_files
 from ..infrastructure.output_store import (
+    OutputPlan,
     build_output_plan,
     prepare_forced_output_directory,
     prepare_output_plan,
@@ -39,10 +40,19 @@ ProgressReporter = Callable[[ProgressEvent], None]
 RuntimeConfigurer = Callable[[], ModelLocation]
 HardwareProbe = Callable[[], HardwareInfo]
 EngineLoader = Callable[[HardwareInfo, ModelLocation], TranscriptionEngine]
+CancellationProbe = Callable[[], bool]
 
 
 def _ignore_progress(_event: ProgressEvent) -> None:
     pass
+
+
+def _not_cancelled() -> bool:
+    return False
+
+
+class TranscriptionCancelled(RuntimeError):
+    """Raised at safe application checkpoints when a Worker task is cancelled."""
 
 
 class TranscriptionService:
@@ -55,11 +65,17 @@ class TranscriptionService:
         runtime_configurer: RuntimeConfigurer | None = None,
         hardware_detector: HardwareProbe | None = None,
         engine_loader: EngineLoader | None = None,
+        cancelled: CancellationProbe | None = None,
     ) -> None:
         self._progress = progress or _ignore_progress
         self._configure_runtime = runtime_configurer or configure_runtime
         self._detect_hardware = hardware_detector or HardwareDetector().detect
         self._load_engine = engine_loader or FasterWhisperEngine.load
+        self._cancelled = cancelled or _not_cancelled
+
+    def _check_cancelled(self) -> None:
+        if self._cancelled():
+            raise TranscriptionCancelled("transcription task was cancelled")
 
     def _emit(
         self,
@@ -122,10 +138,13 @@ class TranscriptionService:
         *,
         current: int = 1,
         total: int = 1,
+        preset: Preset | None = None,
+        output_plan: OutputPlan | None = None,
     ) -> TranscriptionResult:
         """Transcribe one discovered file, propagating operational failures."""
-        preset = resolve_preset(request.preset_id)
+        preset = preset or resolve_preset(request.preset_id)
         media_path = request.input_path
+        self._check_cancelled()
         self._emit(
             "file_started",
             "\n".join(("\n" + "=" * 60, f"🎬 正在处理: {media_path.name}", "=" * 60)),
@@ -135,12 +154,11 @@ class TranscriptionService:
             input_path=media_path,
         )
 
-        output_plan = build_output_plan(
-            media_path,
-            request.output_dir,
-            desktop=request.desktop,
+        output_plan = output_plan or build_output_plan(
+            media_path, request.output_dir, desktop=request.desktop
         )
         prepare_output_plan(output_plan)
+        self._check_cancelled()
         params = preset.transcription_options()
         segments, info = engine.transcribe(str(media_path), **params)
         self._emit(
@@ -152,7 +170,10 @@ class TranscriptionService:
             input_path=media_path,
         )
 
-        segment_list = list(segments)
+        segment_list = []
+        for segment in segments:
+            self._check_cancelled()
+            segment_list.append(segment)
         self._emit(
             "segments_collected",
             f"🧩 原始片段数: {len(segment_list)}",
@@ -186,15 +207,12 @@ class TranscriptionService:
                 input_path=media_path,
             )
 
+        self._check_cancelled()
         write_primary_outputs(output_plan, lines)
         suffix = f" ({len(lines)} 句)" if show_line_count else ""
-        if output_plan.backup_txt is not None:
-            output_message = (
-                f"✅ 完成输出: {output_plan.primary_txt}{suffix} + "
-                f"备份: {output_plan.backup_txt}"
-            )
-        else:
-            output_message = f"✅ 完成输出: {output_plan.primary_txt}{suffix}"
+        output_message = "✅ 完成输出: " + " + ".join(
+            str(path) for path in output_plan.content_paths
+        ) + suffix
         self._emit(
             "output_written",
             output_message,
@@ -214,7 +232,7 @@ class TranscriptionService:
                 preset_id=preset.id,
                 input_path=media_path,
             )
-        return TranscriptionResult(request, True, output_plan.primary_txt)
+        return TranscriptionResult(request, True, output_plan.result_path)
 
     @staticmethod
     def _merge_segments(preset: Preset, segments):
@@ -282,6 +300,8 @@ class TranscriptionService:
                     current=current,
                     total=total,
                 )
+            except TranscriptionCancelled:
+                raise
             except Exception as exc:
                 error = str(exc) or type(exc).__name__
                 result = TranscriptionResult(file_request, False, error=error)

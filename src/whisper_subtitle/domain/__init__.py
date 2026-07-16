@@ -17,3 +17,6 @@ __all__ = [
     "TranscriptionResult",
     "TranscriptionEngine",
 ]
+from .presets import EDITABLE_PARAMETER_RULES, derive_preset
+
+__all__ = ["EDITABLE_PARAMETER_RULES", "derive_preset"]

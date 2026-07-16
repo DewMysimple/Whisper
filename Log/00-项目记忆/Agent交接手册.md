@@ -16,7 +16,7 @@ WhisperSubtitle 是面向 Windows 与 NVIDIA GPU 的本地离线字幕转录桌�
    .\whisper_env\Scripts\python.exe -m pip check
    ```
 
-4. 若准备实施下一代架构，先阅读[新架构愿景与技术选型](../10-未来架构/新架构愿景与技术选型.md)和[分阶段迁移路线](../10-未来架构/分阶段迁移路线.md)。
+4. 若准备实施下一代架构或后续桌面阶段，先阅读[第二阶段索引](../20-第二阶段-Tauri桌面架构迁移/README.md)、[新架构愿景与技术选型](../20-第二阶段-Tauri桌面架构迁移/新架构愿景与技术选型.md)和[分阶段迁移路线](../20-第二阶段-Tauri桌面架构迁移/分阶段迁移路线.md)。
 5. 一次只执行一个被用户确认的批次，不跨批次顺手改造。
 
 ## 已完成工作
@@ -35,60 +35,64 @@ WhisperSubtitle 是面向 Windows 与 NVIDIA GPU 的本地离线字幕转录桌�
 - 将 preset 收敛为类型化单一注册表。
 - 将中英文后处理抽取为纯函数和策略链。
 - 将媒体发现、原子输出、硬件探测、CUDA 运行时和 faster-whisper 封装为基础设施模块。
-- GUI 统一通过 canonical CLI 和 JSONL 进度协议启动任务。
+- 历史 PyQt5 GUI 曾统一通过 canonical CLI 和 JSONL 进度协议启动任务，并已在新架构批次 7 经用户确认退役。
+- 新架构批次 1–6 已完成并获验收；批次 7 已切换 Tauri 正式入口、退役 PyQt5，并等待用户最终验收。
 - 支持安装模式与便携模式，不再依赖固定源码层级。
 - 发布依赖移除 torch/torchaudio/torchvision，环境体积下降约 71%。
 - 经用户确认，旧 Core 和大写 GUI 兼容入口已发送到 Windows 回收站。
 - 最终成果已提交为 `0b3a289`，未推送。
 
-完整历史见[历史执行索引](../20-历史执行/README.md)。
+第一阶段完整历史见[第一阶段索引](../10-第一阶段-基础修复与模块化重构/README.md)。
 
 ## 当前实现与未来提案的边界
 
 当前存在且可运行的是：
 
 - Python 业务核心。
-- PyQt5 GUI。
 - CLI 与 JSONL 进度输出。
-- GUI 通过 QProcess 启动短生命周期 Python 转录进程。
+- `contracts/desktop_ipc/v1` 与 `whisper_subtitle.protocol` 的版本化桌面协议契约。
+- `python -m whisper_subtitle worker` 常驻入口和 Desktop IPC v1 stdin/stdout 循环。
+- Worker 单 dispatcher 任务队列、模型缓存、空闲释放、取消和异常隔离。
+- `apps/web` React/TypeScript 表现层、typed mock/Tauri bridge、原生路径输入和真实任务状态。
+- `apps/web` 的版本化设置、任务历史/重试/详情、真实性能趋势、主题、键盘和无障碍体验。
+- `apps/desktop` Tauri 2 / Rust WebView2 Host、Worker 监管、严格协议校验、白名单原生能力和受限文本预览；不监听端口。
+- PyInstaller onedir 冻结 Worker、Tauri NSIS 两部分离线安装介质、完整便携目录、发布 manifest、SHA-256 和 CycloneDX Python SBOM。
+- 安装快捷方式/安装目录 EXE 与便携 `whisper-subtitle-desktop.exe` 是正式桌面入口；Python CLI 保留 `transcribe/check/worker`，VBS 已退役。
 
 当前尚不存在的是：
 
-- Tauri 2 工程。
-- React/TypeScript 前端。
-- Rust 桌面宿主。
-- 常驻 Python Worker。
-- JSON-RPC 双向 IPC。
-- 新版 WebView 桌面表现层、任务历史、波形编辑和自动更新。
+- 正式 Authenticode 签名产物和自动更新；签名接线已实现，但没有提供证书，自动更新按 P2 禁用。
+- 实时片段、波形、时间轴和字幕编辑。
 
-后续 Agent 必须把上述内容当作“待批准和分批实施的架构提案”，不能假设已经搭好骨架。
+后续 Agent 必须区分“已经完成并验证的发布 sidecar/安装器”与“尚未完成的正式签名、外部干净机复核和自动更新”。不能把同机新鲜环境验证误称为第二台物理干净机验证，也不能把未签名产物误称为正式签名发布。
 
 ## 推荐的下一步
 
-如果用户继续推进新架构，推荐从“新架构批次 0：架构决策与功能基线”开始，而不是直接删除 PyQt5 或创建完整前端。
+批次 0–6 已完成并获验收；批次 7 已实现并等待用户最终验收。本迁移计划没有批次 8，后续功能必须重新定义独立范围。
 
-第一批应只完成：
+批次 7 已完成的范围：
 
-- 固化当前功能清单和截图基线。
-- 编写 ADR，确认 Tauri 2 + React/TypeScript + Python Worker。
-- 定义 monorepo 目录和责任边界。
-- 定义 IPC schema 初稿。
-- 明确 Node、Rust、WebView2、Python 和 CUDA 的版本策略。
-- 不修改转录算法，不删除现有 GUI，不自动提交 Git。
+- 安装版与便携版 Tauri EXE 均真实通过；VBS 启动层已按用户最终偏好送入回收站。
+- PyQt5 表现层及两个专属测试已送入回收站；项目、构建、wheel、冻结 Worker 与 SBOM 不再依赖 PyQt5。
+- Python CLI 保留 `transcribe/check/worker`，`gui` 子命令退役。
+- 新鲜发布构建、安装版/便携版 CUDA/float16 cn/cn2 golden、最终安装/卸载和用户数据保留通过。
+- Python 235 项、Vitest 8 项、Playwright 3 项、Rust fmt/strict Clippy/9 项测试通过。
+- preset、算法、后处理、命名和输出保持不变。
+
+当前产物未签名，自动更新未启用，也未在第二台物理干净 Windows 机器复核。实时片段、波形、时间轴和字幕编辑尚未获独立实施授权。
 
 ## 当前待用户补回的本地文件
 
-- `Log/40-原始需求/执行1.md`、`执行2.md`、`执行3.md` 已从 Git 原始 blob 恢复，哈希与 `HEAD` 完全一致。
+- `Log/90-原始需求/执行1.md`、`执行2.md`、`执行3.md` 已从 Git 原始 blob 恢复，哈希与 `HEAD` 完全一致。
 - 原先未跟踪的 `Requirement/isolate.md` 在 2026-07-13 的目录整理期间随原 `Requirement` 进入 Windows 回收站，随后回收站对象被清除。
 - 该文件从未进入 Git，工作区、F 盘、`.workbuddy` 和回收站均无可用副本，因此不能推测或伪造其内容。
-- 用户重新提供 `isolate.md` 后，应原样放入 `F:\WhisperSubtitle\Log\40-原始需求\isolate.md`，不要改写。
+- 用户重新提供 `isolate.md` 后，应原样放入 `F:\WhisperSubtitle\Log\90-原始需求\isolate.md`，不要改写。
 
 ## 容易误判的地方
 
-- PyQt5 仍是当前正式 GUI；批次 10 删除的是旧大写兼容入口，不是整个 PyQt5 表现层。
+- Tauri/React 已是正式 GUI；历史批次 10 只删除旧大写兼容入口，PyQt5 的最终退役发生在新架构批次 7。
 - 当前 application 层仍为默认组合直接导入部分 infrastructure；它是实用型分层，不是完全端口适配器架构。
-- `ProgressEvent` 虽然结构化，但 message 仍包含中文展示文本；下一代 IPC 需要稳定事件码和数据字段。
-- GUI 已从 1189 行单体拆开，但 `main_window.py` 和 `widgets/panels.py` 仍各约 550 行。
+- 旧 `ProgressEvent`/CLI JSONL 的 message 仍包含中文展示文本；Desktop IPC v1 已由 Worker 发出，因此两条通道在迁移期并存。
 - 当前环境测试通过不等于新打包形态通过；涉及依赖、CUDA 或桌面壳时必须重新做从零安装和真实 GPU 验证。
 - 历史报告中的 Git 状态只代表报告生成时刻。
 

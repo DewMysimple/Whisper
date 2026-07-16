@@ -109,7 +109,7 @@ def _model_location(model_home: Path, source: str) -> ModelLocation:
 
 @dataclass(frozen=True, slots=True)
 class AppPaths:
-    """All runtime paths needed by CLI and GUI presentation layers."""
+    """All runtime paths needed by CLI, Worker and desktop entry points."""
 
     package_dir: Path
     python_executable: Path

@@ -1,0 +1,409 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://whisper-subtitle.local/contracts/desktop-ipc/v1/desktop_ipc.schema.json",
+  "title": "WhisperSubtitle Desktop IPC v1",
+  "oneOf": [
+    { "$ref": "#/$defs/CommandMessage" },
+    { "$ref": "#/$defs/EventMessage" },
+    { "$ref": "#/$defs/ErrorMessage" }
+  ],
+  "$defs": {
+    "SchemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "Identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "CommandMethod": {
+      "type": "string",
+      "enum": [
+        "system.health",
+        "system.environment",
+        "system.metrics",
+        "model.load",
+        "model.unload",
+        "transcription.start",
+        "transcription.cancel",
+        "worker.shutdown"
+      ]
+    },
+    "EventCode": {
+      "type": "string",
+      "enum": [
+        "worker.ready",
+        "command.completed",
+        "model.loading",
+        "model.ready",
+        "task.queued",
+        "task.progress",
+        "task.completed",
+        "task.failed",
+        "task.cancelled"
+      ]
+    },
+    "TaskStage": {
+      "type": "string",
+      "enum": [
+        "input.validating",
+        "input.discovering",
+        "model.loading",
+        "transcription.running",
+        "postprocess.running",
+        "output.writing",
+        "task.finalizing"
+      ]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "protocol.invalid_json",
+        "protocol.invalid_message",
+        "protocol.unsupported_version",
+        "protocol.unknown_method",
+        "request.invalid",
+        "task.not_found",
+        "task.conflict",
+        "worker.busy",
+        "worker.internal",
+        "environment.unavailable",
+        "model.load_failed",
+        "transcription.failed",
+        "output.failed"
+      ]
+    },
+    "EmptyObject": {
+      "type": "object",
+      "maxProperties": 0
+    },
+    "InputSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "kind", "origin"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["file", "directory"] },
+        "origin": { "enum": ["dialog", "drop", "paste", "manual"] }
+      }
+    },
+    "ParameterOverrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "beam_size": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "best_of": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "patience": { "type": "number", "minimum": 0, "maximum": 5 },
+        "length_penalty": { "type": "number", "minimum": 0, "maximum": 2 },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 1 },
+        "compression_ratio_threshold": { "type": "number", "minimum": 0, "maximum": 10 },
+        "log_prob_threshold": { "type": "number", "minimum": -10, "maximum": 0 },
+        "no_speech_threshold": { "type": "number", "minimum": 0, "maximum": 1 },
+        "condition_on_previous_text": { "type": "boolean" },
+        "min_silence_duration_ms": { "type": "integer", "minimum": 0, "maximum": 10000 }
+      }
+    },
+    "TranscriptionProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_preset_id", "overrides"],
+      "properties": {
+        "base_preset_id": { "enum": ["cn", "cn2", "en_v1", "en_v2"] },
+        "overrides": { "$ref": "#/$defs/ParameterOverrides" }
+      }
+    },
+    "OutputTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "directory": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "OutputPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "txt",
+        "markdown",
+        "preserve_source_txt",
+        "conflict_policy"
+      ],
+      "properties": {
+        "mode": { "enum": ["compatibility", "custom"] },
+        "root_directory": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        },
+        "txt": { "$ref": "#/$defs/OutputTarget" },
+        "markdown": { "$ref": "#/$defs/OutputTarget" },
+        "preserve_source_txt": { "type": "boolean" },
+        "conflict_policy": { "enum": ["overwrite", "fail", "auto_rename"] }
+      },
+      "allOf": [
+        {
+          "anyOf": [
+            { "properties": { "txt": { "properties": { "enabled": { "const": true } } } } },
+            { "properties": { "markdown": { "properties": { "enabled": { "const": true } } } } }
+          ]
+        },
+        {
+          "if": { "properties": { "mode": { "const": "custom" } } },
+          "then": {
+            "anyOf": [
+              {
+                "required": ["root_directory"],
+                "properties": { "root_directory": { "type": "string", "minLength": 1 } }
+              },
+              {
+                "allOf": [
+                  {
+                    "anyOf": [
+                      { "properties": { "txt": { "properties": { "enabled": { "const": false } } } } },
+                      { "properties": { "txt": { "required": ["directory"], "properties": { "directory": { "type": "string", "minLength": 1 } } } } }
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      { "properties": { "markdown": { "properties": { "enabled": { "const": false } } } } },
+                      { "properties": { "markdown": { "required": ["directory"], "properties": { "directory": { "type": "string", "minLength": 1 } } } } }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "TranscriptionStartParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputs", "profile", "output"],
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/InputSource" }
+        },
+        "profile": { "$ref": "#/$defs/TranscriptionProfile" },
+        "output": { "$ref": "#/$defs/OutputPolicy" }
+      }
+    },
+    "ModelLoadParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "TranscriptionCancelParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id"],
+      "properties": {
+        "task_id": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "CommandMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "request_id", "method", "params"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/SchemaVersion" },
+        "type": { "const": "command" },
+        "request_id": { "$ref": "#/$defs/Identifier" },
+        "method": { "$ref": "#/$defs/CommandMethod" },
+        "params": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "method": { "enum": ["system.health", "system.environment", "system.metrics", "model.unload", "worker.shutdown"] } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/EmptyObject" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "model.load" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/ModelLoadParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "transcription.start" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/TranscriptionStartParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "transcription.cancel" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/TranscriptionCancelParams" } } }
+        }
+      ]
+    },
+    "WorkerReadyData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pid", "capabilities"],
+      "properties": {
+        "pid": { "type": "integer", "minimum": 1 },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["methods", "events"],
+          "properties": {
+            "methods": { "type": "array", "items": { "$ref": "#/$defs/CommandMethod" }, "uniqueItems": true },
+            "events": { "type": "array", "items": { "$ref": "#/$defs/EventCode" }, "uniqueItems": true }
+          }
+        }
+      }
+    },
+    "CommandCompletedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "result"],
+      "properties": {
+        "method": { "$ref": "#/$defs/CommandMethod" },
+        "result": { "type": "object" }
+      }
+    },
+    "ModelLoadingData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id"],
+      "properties": {
+        "model_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ModelReadyData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "device", "compute_type"],
+      "properties": {
+        "model_id": { "type": "string", "minLength": 1 },
+        "device": { "type": "string", "minLength": 1 },
+        "compute_type": { "type": "string", "minLength": 1 }
+      }
+    },
+    "TaskQueuedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "input_count", "effective_parameters"],
+      "properties": {
+        "position": { "type": "integer", "minimum": 0 },
+        "input_count": { "type": "integer", "minimum": 1 },
+        "effective_parameters": { "type": "object" }
+      }
+    },
+    "TaskProgressData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "current", "total"],
+      "properties": {
+        "stage": { "$ref": "#/$defs/TaskStage" },
+        "current": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 },
+        "input_path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "TaskCompletedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["success_count", "failure_count", "outputs"],
+      "properties": {
+        "success_count": { "type": "integer", "minimum": 0 },
+        "failure_count": { "type": "integer", "minimum": 0 },
+        "outputs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "TaskFailedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["error_code", "details"],
+      "properties": {
+        "error_code": { "$ref": "#/$defs/ErrorCode" },
+        "details": { "type": "object" }
+      }
+    },
+    "TaskCancelledData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "properties": {
+        "reason": { "enum": ["user", "shutdown", "superseded"] }
+      }
+    },
+    "EventMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "event", "data"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/SchemaVersion" },
+        "type": { "const": "event" },
+        "request_id": { "$ref": "#/$defs/Identifier" },
+        "task_id": { "$ref": "#/$defs/Identifier" },
+        "event": { "$ref": "#/$defs/EventCode" },
+        "data": { "type": "object" },
+        "message": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "event": { "const": "worker.ready" } } },
+          "then": { "properties": { "data": { "$ref": "#/$defs/WorkerReadyData" } } }
+        },
+        {
+          "if": { "properties": { "event": { "const": "command.completed" } } },
+          "then": { "required": ["request_id"], "properties": { "data": { "$ref": "#/$defs/CommandCompletedData" } } }
+        },
+        {
+          "if": { "properties": { "event": { "const": "model.loading" } } },
+          "then": { "properties": { "data": { "$ref": "#/$defs/ModelLoadingData" } } }
+        },
+        {
+          "if": { "properties": { "event": { "const": "model.ready" } } },
+          "then": { "properties": { "data": { "$ref": "#/$defs/ModelReadyData" } } }
+        },
+        {
+          "if": { "properties": { "event": { "const": "task.queued" } } },
+          "then": { "required": ["request_id", "task_id"], "properties": { "data": { "$ref": "#/$defs/TaskQueuedData" } } }
+        },
+        {
+          "if": { "properties": { "event": { "const": "task.progress" } } },
+          "then": { "required": ["task_id"], "properties": { "data": { "$ref": "#/$defs/TaskProgressData" } } }
+        },
+        {
+          "if": { "properties": { "event": { "const": "task.completed" } } },
+          "then": { "required": ["task_id"], "properties": { "data": { "$ref": "#/$defs/TaskCompletedData" } } }
+        },
+        {
+          "if": { "properties": { "event": { "const": "task.failed" } } },
+          "then": { "required": ["task_id"], "properties": { "data": { "$ref": "#/$defs/TaskFailedData" } } }
+        },
+        {
+          "if": { "properties": { "event": { "const": "task.cancelled" } } },
+          "then": { "required": ["task_id"], "properties": { "data": { "$ref": "#/$defs/TaskCancelledData" } } }
+        }
+      ]
+    },
+    "ErrorMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type", "code", "data"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/SchemaVersion" },
+        "type": { "const": "error" },
+        "request_id": { "$ref": "#/$defs/Identifier" },
+        "task_id": { "$ref": "#/$defs/Identifier" },
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "data": { "type": "object" },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

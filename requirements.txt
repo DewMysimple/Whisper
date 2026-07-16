@@ -1,6 +1,5 @@
 # 运行依赖
 faster-whisper>=1.0
-PyQt5>=5.15
 psutil>=5.9
 nvidia-ml-py>=12.0
 nvidia-cublas-cu12>=12.0,<13

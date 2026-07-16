@@ -1,0 +1,26 @@
+{
+  "name": "whisper-subtitle-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "pnpm": ">=10.0.0 <11"
+  },
+  "scripts": {
+    "build": "corepack pnpm --filter @whisper-subtitle/web build",
+    "check": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test",
+    "desktop:build": "corepack pnpm build && corepack pnpm --filter @whisper-subtitle/desktop tauri build --no-bundle",
+    "desktop:dev": "corepack pnpm build && corepack pnpm --filter @whisper-subtitle/desktop tauri dev",
+    "e2e": "corepack pnpm --filter @whisper-subtitle/web e2e",
+    "release:build": "powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_release.ps1",
+    "format": "prettier --write package.json pnpm-workspace.yaml .prettierrc.json apps",
+    "format:check": "prettier --check package.json pnpm-workspace.yaml .prettierrc.json apps",
+    "lint": "corepack pnpm --filter @whisper-subtitle/web lint",
+    "test": "corepack pnpm --filter @whisper-subtitle/web test",
+    "typecheck": "corepack pnpm --filter @whisper-subtitle/web typecheck"
+  },
+  "devDependencies": {
+    "prettier": "3.9.5"
+  }
+}

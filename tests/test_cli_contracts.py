@@ -6,7 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 
 import pytest
 
@@ -144,14 +144,11 @@ def test_check_subcommand_converts_system_exit_to_return_code(monkeypatch):
     assert cli.main(["check"]) == 3
 
 
-def test_gui_subcommand_propagates_return_code(monkeypatch):
-    fake_module = ModuleType("whisper_subtitle.presentation.gui.main_window")
-    fake_module.main = lambda: 5
-    monkeypatch.setitem(
-        sys.modules, "whisper_subtitle.presentation.gui.main_window", fake_module
-    )
+def test_retired_gui_subcommand_is_an_argparse_usage_error():
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["gui"])
 
-    assert cli.main(["gui"]) == 5
+    assert exc_info.value.code == 2
 
 
 def test_invalid_preset_is_an_argparse_usage_error():
@@ -164,3 +161,16 @@ def test_invalid_preset_is_an_argparse_usage_error():
 def test_no_subcommand_prints_help_and_succeeds(capsys):
     assert cli.main([]) == 0
     assert "transcribe" in capsys.readouterr().out
+
+
+def test_worker_subcommand_forwards_idle_timeout(monkeypatch):
+    observed = {}
+
+    def fake_worker_main(*, idle_timeout_seconds):
+        observed["idle_timeout_seconds"] = idle_timeout_seconds
+        return 9
+
+    monkeypatch.setattr("whisper_subtitle.worker.stdio.main", fake_worker_main)
+
+    assert cli.main(["worker", "--model-idle-timeout", "12.5"]) == 9
+    assert observed == {"idle_timeout_seconds": 12.5}

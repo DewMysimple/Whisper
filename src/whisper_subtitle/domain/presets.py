@@ -46,6 +46,21 @@ DISPLAY_KEYS = (
 DEFAULT_PRESET_ID = "en_v1"
 DEFAULT_CLI_ALIAS = "en"
 
+EDITABLE_PARAMETER_RULES = MappingProxyType(
+    {
+        "beam_size": (int, 1, 20),
+        "best_of": (int, 1, 20),
+        "patience": (float, 0, 5),
+        "length_penalty": (float, 0, 2),
+        "temperature": (float, 0, 1),
+        "compression_ratio_threshold": (float, 0, 10),
+        "log_prob_threshold": (float, -10, 0),
+        "no_speech_threshold": (float, 0, 1),
+        "condition_on_previous_text": (bool, 0, 1),
+        "min_silence_duration_ms": (int, 0, 10000),
+    }
+)
+
 
 def _params(
     *,
@@ -249,6 +264,46 @@ def resolve_preset(value: str) -> Preset:
 
 def canonical_preset_id(value: str) -> str:
     return resolve_preset(value).id
+
+
+def derive_preset(
+    base_preset_id: str,
+    overrides: Mapping[str, Any],
+) -> Preset:
+    """Create a validated task-local preset without mutating the registry."""
+    base = get_preset_by_id(base_preset_id)
+    if not isinstance(overrides, Mapping):
+        raise TypeError("overrides must be a mapping")
+    unknown = set(overrides) - set(EDITABLE_PARAMETER_RULES)
+    if unknown:
+        raise ValueError(f"unsupported parameter overrides: {sorted(unknown)}")
+
+    params = base.transcription_options()
+    for name, value in overrides.items():
+        expected_type, minimum, maximum = EDITABLE_PARAMETER_RULES[name]
+        if expected_type is bool:
+            valid_type = type(value) is bool
+        elif expected_type is int:
+            valid_type = type(value) is int
+        else:
+            valid_type = type(value) in {int, float}
+        if not valid_type or not minimum <= value <= maximum:
+            raise ValueError(f"invalid override for {name}: {value!r}")
+        normalized = float(value) if expected_type is float else value
+        if name == "min_silence_duration_ms":
+            params["vad_parameters"][name] = normalized
+        else:
+            params[name] = normalized
+
+    return Preset(
+        id=base.id,
+        cli_alias=base.cli_alias,
+        label=base.label,
+        description=base.description,
+        group=base.group,
+        params=params,
+        postprocess_strategy=base.postprocess_strategy,
+    )
 
 
 def get_postprocess_label(preset: Preset) -> str:

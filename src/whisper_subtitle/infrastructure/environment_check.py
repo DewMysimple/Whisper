@@ -9,7 +9,8 @@ from collections.abc import Callable
 from ..paths import AppPaths, ModelNotFoundError, get_app_paths
 
 
-REQUIRED_MODULES = ("PyQt5", "psutil", "faster_whisper")
+REQUIRED_MODULES = ("psutil", "faster_whisper", "ctranslate2")
+WORKER_REQUIRED_MODULES = REQUIRED_MODULES
 
 
 def check_environment(
@@ -30,6 +31,31 @@ def check_environment(
             errors.append(
                 f"缺少运行依赖 {module_name}；请在当前 Python 环境中安装项目依赖"
             )
+    if not paths.python_executable.is_file():
+        errors.append(f"当前 Python 解释器不存在: {paths.python_executable}")
+    try:
+        paths.model_location.require_model("large-v3-turbo")
+    except ModelNotFoundError as exc:
+        errors.append(str(exc))
+    return errors
+
+
+def check_worker_environment(
+    app_paths: AppPaths | None = None,
+    *,
+    find_spec: Callable[[str], object | None] = importlib.util.find_spec,
+) -> list[str]:
+    """Return the requirements for the packaged headless Worker."""
+    paths = app_paths or get_app_paths()
+    errors = []
+    for module_name in WORKER_REQUIRED_MODULES:
+        try:
+            available = find_spec(module_name) is not None
+        except (ImportError, AttributeError, ValueError) as exc:
+            errors.append(f"依赖检查失败 {module_name}: {exc}")
+            continue
+        if not available:
+            errors.append(f"缺少 Worker 运行依赖 {module_name}")
     if not paths.python_executable.is_file():
         errors.append(f"当前 Python 解释器不存在: {paths.python_executable}")
     try:

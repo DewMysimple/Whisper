@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-15",
+  "environment": {
+    "python": "3.14.2",
+    "installation": "fresh venv from current batch wheel",
+    "pip_check": "No broken requirements found",
+    "environment_check": "passed"
+  },
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5070 Ti",
+    "driver": "610.62",
+    "device": "cuda",
+    "compute_type": "float16"
+  },
+  "worker": {
+    "tasks": 2,
+    "model_loading_events": 1,
+    "model_ready_events": 1,
+    "duration_seconds": 2.3858
+  },
+  "input": "tests/fixtures/chinese_short.wav",
+  "results": [
+    {
+      "preset_id": "cn",
+      "normalized_sha256": "83C3A8CAB6BDEB88CE0FF0B6C79C3BB73ADD9190E16388D17ECC05A0F4EF7ABD",
+      "golden_match": true
+    },
+    {
+      "preset_id": "cn2",
+      "normalized_sha256": "83C3A8CAB6BDEB88CE0FF0B6C79C3BB73ADD9190E16388D17ECC05A0F4EF7ABD",
+      "golden_match": true
+    }
+  ],
+  "line_endings": {
+    "runtime": "CRLF",
+    "repository_golden": "LF",
+    "comparison": "Python universal-newline normalization",
+    "behavior_changed": false
+  }
+}

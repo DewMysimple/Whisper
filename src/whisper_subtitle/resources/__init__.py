@@ -1,1 +1,1 @@
-"""Packaged static resources for the GUI."""
+"""Packaged static resources shared by application entry points."""

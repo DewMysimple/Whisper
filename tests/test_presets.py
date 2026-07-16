@@ -12,6 +12,7 @@ from whisper_subtitle.domain.presets import (
     DISPLAY_KEYS,
     PRESETS,
     PRESETS_BY_ID,
+    derive_preset,
     get_display_value,
     get_preset_by_id,
 )
@@ -91,3 +92,39 @@ def test_display_values_include_nested_and_derived_fields():
 def test_unknown_preset_raises_key_error():
     with pytest.raises(KeyError, match="未知 preset id"):
         get_preset_by_id("unknown")
+
+
+def test_derived_preset_freezes_valid_overrides_without_mutating_registry():
+    original = get_preset_by_id("cn2")
+
+    derived = derive_preset(
+        "cn2",
+        {
+            "beam_size": 8,
+            "temperature": 0.25,
+            "min_silence_duration_ms": 750,
+        },
+    )
+
+    assert derived.id == original.id
+    assert derived.params["beam_size"] == 8
+    assert derived.params["temperature"] == 0.25
+    assert derived.params["vad_parameters"]["min_silence_duration_ms"] == 750
+    assert original.params["beam_size"] == 5
+    assert original.params["temperature"] == 0.0
+    assert original.params["vad_parameters"]["min_silence_duration_ms"] == 500
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"unknown": 1},
+        {"beam_size": 0},
+        {"beam_size": True},
+        {"temperature": 2},
+        {"condition_on_previous_text": 1},
+    ],
+)
+def test_derived_preset_revalidates_worker_override_boundaries(overrides):
+    with pytest.raises((TypeError, ValueError)):
+        derive_preset("en_v1", overrides)

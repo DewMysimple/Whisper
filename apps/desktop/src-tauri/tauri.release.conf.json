@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["../../../assets/logo.ico"],
+    "resources": {
+      "../../../build/release/stage/worker/": "worker/",
+      "../../../build/release/stage/distribution/": "distribution/"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["SimpChinese", "English"],
+        "displayLanguageSelector": true,
+        "installerHooks": "./windows/installer-hooks.nsh"
+      }
+    }
+  }
+}

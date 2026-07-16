@@ -1,0 +1,14 @@
+.git
+.pytest_cache
+.workbuddy
+Log
+assets
+build
+models
+node_modules
+whisper_env
+apps/web/dist
+apps/web/test-results
+apps/web/playwright-report
+apps/desktop/src-tauri/target
+pnpm-lock.yaml

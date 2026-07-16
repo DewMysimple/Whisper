@@ -1,0 +1,5 @@
+{
+  "certificateThumbprint": "REPLACE_WITH_WINDOWS_CODE_SIGNING_CERTIFICATE_THUMBPRINT",
+  "digestAlgorithm": "sha256",
+  "timestampUrl": "REPLACE_WITH_YOUR_CERTIFICATE_PROVIDER_TIMESTAMP_URL"
+}

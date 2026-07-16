@@ -48,6 +48,7 @@ def test_production_python_files_use_lowercase_snake_case():
 def test_removed_compatibility_packages_are_absent():
     assert not (PACKAGE_ROOT / "core").exists()
     assert not (PACKAGE_ROOT / "gui").exists()
+    assert not (PACKAGE_ROOT / "presentation" / "gui").exists()
     assert not (PROJECT_ROOT / "tests" / "test_core_cli_paths.py").exists()
 
 
@@ -69,3 +70,11 @@ def test_presentation_does_not_reference_removed_core_dispatch():
     assert "WhisperProject" not in source
     assert "preset.module" not in source
     assert "preset.script" not in source
+
+
+def test_production_python_source_has_no_pyqt_dependency():
+    source = "\n".join(
+        path.read_text(encoding="utf-8") for path in PACKAGE_ROOT.rglob("*.py")
+    )
+    assert "PyQt5" not in source
+    assert "presentation.gui" not in source

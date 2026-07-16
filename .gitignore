@@ -38,3 +38,17 @@ Thumbs.db
 temp/
 test_error.txt
 tests/benchmark/runs/
+
+# Node / frontend
+node_modules/
+apps/web/dist/
+apps/web/coverage/
+apps/web/test-results/
+apps/web/playwright-report/
+
+# Rust / Tauri
+target/
+apps/desktop/src-tauri/gen/
+
+# Local signing material and generated release outputs
+packaging/signing.local.json

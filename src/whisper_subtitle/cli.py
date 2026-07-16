@@ -57,8 +57,15 @@ def _build_parser():
         help="本地模型目录或 Hugging Face 缓存根目录",
     )
 
-    subparsers.add_parser("gui", help="启动图形界面")
     subparsers.add_parser("check", help="运行环境自检")
+    worker = subparsers.add_parser("worker", help="启动无界面的常驻推理 Worker")
+    worker.add_argument(
+        "--model-idle-timeout",
+        type=float,
+        default=15 * 60.0,
+        metavar="SECONDS",
+        help="模型空闲释放秒数（默认: 900）",
+    )
     return parser
 
 
@@ -95,10 +102,12 @@ def _run_check():
         return int(exc.code or 0)
 
 
-def _run_gui():
-    from .presentation.gui.main_window import main as gui_main
+def _run_worker(args):
+    from .worker.stdio import main as worker_main
 
-    return gui_main()
+    if args.model_idle_timeout < 0:
+        raise SystemExit("--model-idle-timeout must be non-negative")
+    return worker_main(idle_timeout_seconds=args.model_idle_timeout)
 
 
 def main(argv=None):
@@ -107,10 +116,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == "transcribe":
         return _run_transcribe(args)
-    if args.command == "gui":
-        return _run_gui()
     if args.command == "check":
         return _run_check()
+    if args.command == "worker":
+        return _run_worker(args)
     parser.print_help()
     return 0
 

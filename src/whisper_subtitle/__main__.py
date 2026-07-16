@@ -1,4 +1,4 @@
-"""Module entry point; no arguments starts the desktop GUI."""
+"""Module entry point for the retained headless Python CLI."""
 
 import sys
 
@@ -6,5 +6,4 @@ from .cli import main
 
 
 if __name__ == "__main__":
-    arguments = sys.argv[1:] or ["gui"]
-    sys.exit(main(arguments))
+    sys.exit(main(sys.argv[1:]))

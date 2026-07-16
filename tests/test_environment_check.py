@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from whisper_subtitle.paths import AppPaths
-from whisper_subtitle.infrastructure.environment_check import check_environment
+from whisper_subtitle.infrastructure.environment_check import (
+    check_environment,
+    check_worker_environment,
+)
 
 
 def test_environment_check_reports_missing_dependencies_and_actionable_model(tmp_path):
@@ -25,13 +28,8 @@ def test_environment_check_reports_missing_dependencies_and_actionable_model(tmp
     assert not any("WhisperProject" in error or "src" in error for error in errors)
 
 
-def test_launch_uses_module_entry_and_interpreter_discovery_not_source_scripts():
-    launch = Path("launch.vbs").read_text(encoding="utf-8")
-
-    assert "WHISPER_SUBTITLE_PYTHON" in launch
-    assert "-m whisper_subtitle check" in launch
-    assert "-m whisper_subtitle gui" in launch
-    assert "src\\whisper_subtitle" not in launch
+def test_legacy_vbs_launcher_is_retired():
+    assert not Path("launch.vbs").exists()
 
 
 def test_legacy_environment_check_path_forwards_to_canonical_implementation():
@@ -40,3 +38,23 @@ def test_legacy_environment_check_path_forwards_to_canonical_implementation():
 
     assert test_env.check_environment is environment_check.check_environment
     assert test_env.main is environment_check.main
+
+
+def test_worker_environment_uses_only_headless_runtime_requirements(tmp_path):
+    model_root = tmp_path / "models"
+    snapshot = model_root / "hub" / "models--Systran--faster-whisper-large-v3-turbo" / "snapshots" / "one"
+    snapshot.mkdir(parents=True)
+    (snapshot / "config.json").write_text("{}", encoding="utf-8")
+    (snapshot / "model.bin").touch()
+    paths = AppPaths.discover(
+        explicit_model_dir=model_root,
+        portable_root=False,
+        environ={},
+    )
+
+    errors = check_worker_environment(
+        paths,
+        find_spec=lambda name: object(),
+    )
+
+    assert errors == []

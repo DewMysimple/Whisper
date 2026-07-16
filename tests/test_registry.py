@@ -20,9 +20,6 @@ from whisper_subtitle.domain.presets import (
     resolve_preset,
     validate_registry,
 )
-from whisper_subtitle.presentation.gui.settings import resolve_saved_preset_id
-
-
 EXPECTED_ALIAS_TO_ID = {
     "cn": "cn",
     "cn2": "cn2",
@@ -49,15 +46,10 @@ def test_alias_id_and_qsettings_resolution_share_one_rule(alias, preset_id):
     assert canonical_preset_id(preset_id) == preset_id
 
 
-def test_old_english_qsettings_ids_remain_canonical_and_default_is_stable():
+def test_old_english_ids_remain_canonical_and_default_is_stable():
     assert canonical_preset_id("en_v1") == "en_v1"
     assert canonical_preset_id("en_v2") == "en_v2"
     assert DEFAULT_PRESET_ID == "en_v1"
-    assert resolve_saved_preset_id("en_v1") == "en_v1"
-    assert resolve_saved_preset_id("en_v2") == "en_v2"
-    assert resolve_saved_preset_id("en") == "en_v1"
-    assert resolve_saved_preset_id("en2") == "en_v2"
-    assert resolve_saved_preset_id("removed-preset") == DEFAULT_PRESET_ID
 
 
 def test_registry_owns_display_data_without_physical_script_metadata():
