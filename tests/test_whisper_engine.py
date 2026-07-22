@@ -52,6 +52,7 @@ def test_load_preserves_model_constructor_contract():
         "args": (DEFAULT_MODEL_NAME,),
         "kwargs": {
             "device": "cpu",
+            "device_index": 0,
             "compute_type": "int8",
             "cpu_threads": 4,
             "num_workers": 1,

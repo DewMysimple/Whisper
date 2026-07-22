@@ -20,6 +20,8 @@ from ..domain.postprocess import (
 )
 from ..domain.presets import resolve_preset
 from ..domain.transcription import TranscriptionEngine
+from ..domain.subtitles import build_srt_document
+from ..domain.transcript_layout import build_transcript_document
 from ..infrastructure.hardware import HardwareDetector, HardwareInfo
 from ..infrastructure.media_files import MediaDiscoveryError, discover_media_files
 from ..infrastructure.output_store import (
@@ -140,6 +142,7 @@ class TranscriptionService:
         total: int = 1,
         preset: Preset | None = None,
         output_plan: OutputPlan | None = None,
+        subtitle_options: dict[str, object] | None = None,
     ) -> TranscriptionResult:
         """Transcribe one discovered file, propagating operational failures."""
         preset = preset or resolve_preset(request.preset_id)
@@ -160,6 +163,10 @@ class TranscriptionService:
         prepare_output_plan(output_plan)
         self._check_cancelled()
         params = preset.transcription_options()
+        if output_plan.primary_srt is not None:
+            # SRT timing needs the model's real word boundaries. Canonical
+            # TXT/Markdown presets keep their established parameter values.
+            params["word_timestamps"] = True
         segments, info = engine.transcribe(str(media_path), **params)
         self._emit(
             "language_detected",
@@ -183,20 +190,47 @@ class TranscriptionService:
             input_path=media_path,
         )
         sentences = self._merge_segments(preset, segment_list)
+        has_text_output = any(
+            path is not None
+            for path in (
+                output_plan.primary_txt,
+                output_plan.backup_txt,
+                output_plan.primary_md,
+                output_plan.backup_md,
+                output_plan.desktop_txt,
+                output_plan.desktop_md,
+            )
+        )
+        if has_text_output:
+            transcript = build_transcript_document(
+                segment_list,
+                str(preset.params["language"]),
+                preset.postprocess_strategy,
+            )
+            lines = [unit.text for unit in transcript.units]
+            source_line_count = transcript.source_unit_count
+            txt_content = transcript.txt_content
+            markdown_content = transcript.markdown_content
+            merge_message = f"📝 智能分句数: {len(lines)}"
+        else:
+            lines = apply_strategy(
+                preset.postprocess_strategy,
+                (str(sentence["text"]) for sentence in sentences),
+            )
+            source_line_count = len(sentences)
+            txt_content = ""
+            markdown_content = ""
+            merge_message = f"📝 合并后句子数: {len(sentences)}"
         self._emit(
             "sentences_merged",
-            f"📝 合并后句子数: {len(sentences)}",
+            merge_message,
             current=current,
             total=total,
             preset_id=preset.id,
             input_path=media_path,
         )
-        lines = apply_strategy(
-            preset.postprocess_strategy,
-            (str(sentence["text"]) for sentence in sentences),
-        )
         show_line_count = preset.postprocess_strategy.endswith("anti_hallucination")
-        removed_count = len(sentences) - len(lines)
+        removed_count = source_line_count - len(lines)
         if show_line_count and removed_count > 0:
             self._emit(
                 "repetitions_removed",
@@ -208,7 +242,20 @@ class TranscriptionService:
             )
 
         self._check_cancelled()
-        write_primary_outputs(output_plan, lines)
+        srt_content = None
+        if output_plan.primary_srt is not None:
+            srt_content = build_srt_document(
+                sentences,
+                preset.postprocess_strategy,
+                subtitle_options,
+                word_segments=segment_list,
+            )
+        write_primary_outputs(
+            output_plan,
+            txt_content,
+            markdown_content=markdown_content,
+            srt_content=srt_content,
+        )
         suffix = f" ({len(lines)} 句)" if show_line_count else ""
         output_message = "✅ 完成输出: " + " + ".join(
             str(path) for path in output_plan.content_paths
@@ -223,7 +270,11 @@ class TranscriptionService:
         )
 
         if request.desktop:
-            write_desktop_outputs(output_plan, lines)
+            write_desktop_outputs(
+                output_plan,
+                txt_content,
+                markdown_content=markdown_content,
+            )
             self._emit(
                 "desktop_output_written",
                 f"📁 桌面保存: {output_plan.desktop_txt} + {output_plan.desktop_md}",

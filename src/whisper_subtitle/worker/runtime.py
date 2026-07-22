@@ -50,7 +50,8 @@ DEFAULT_MODEL_IDLE_TIMEOUT_SECONDS = 15 * 60.0
 MessageEmitter = Callable[[EventMessage | ErrorMessage], None]
 EnvironmentChecker = Callable[[], list[str]]
 RuntimeConfigurer = Callable[[], ModelLocation]
-HardwareProbe = Callable[[], HardwareInfo]
+HardwareProbe = Callable[[Mapping[str, object] | None], HardwareInfo]
+HardwareCapabilityLoader = Callable[[], Mapping[str, object]]
 EngineLoader = Callable[[HardwareInfo, ModelLocation, str], Any]
 TaskIdFactory = Callable[[], str]
 PerformanceSampler = Callable[[], Mapping[str, Any]]
@@ -158,6 +159,7 @@ class ModelCache:
         *,
         runtime_configurer: RuntimeConfigurer = configure_runtime,
         hardware_detector: HardwareProbe | None = None,
+        hardware_capability_loader: HardwareCapabilityLoader | None = None,
         engine_loader: EngineLoader = _default_engine_loader,
         idle_timeout_seconds: float = DEFAULT_MODEL_IDLE_TIMEOUT_SECONDS,
         logger: logging.Logger | None = None,
@@ -225,13 +227,40 @@ class ModelCache:
         self._logger.info("released model %s (%s)", model_id, reason)
         return True
 
+    @property
+    def hardware(self) -> HardwareInfo | None:
+        with self._lock:
+            return self._hardware
+
+    def _resolve_hardware(
+        self, preference: Mapping[str, object] | None
+    ) -> HardwareInfo:
+        try:
+            return self._detect_hardware(preference)
+        except TypeError:
+            # Keep injected version-one probes used by older hosts/tests compatible.
+            return self._detect_hardware()  # type: ignore[call-arg]
+
     def _ensure_loaded_locked(
         self,
         model_id: str,
         *,
+        hardware_preference: Mapping[str, object] | None = None,
         request_id: str | None = None,
     ) -> tuple[Any, HardwareInfo, bool]:
-        if self._engine is not None and self._model_id == model_id:
+        try:
+            resolved_hardware = self._resolve_hardware(hardware_preference)
+        except Exception as exc:
+            raise WorkerCommandError(
+                ErrorCode.MODEL_LOAD_FAILED,
+                str(exc) or type(exc).__name__,
+                data={"model_id": model_id, "exception": type(exc).__name__},
+            ) from exc
+        if (
+            self._engine is not None
+            and self._model_id == model_id
+            and self._hardware == resolved_hardware
+        ):
             return self._engine, self._hardware, False
         if self._active_users:
             raise WorkerCommandError(
@@ -250,7 +279,7 @@ class ModelCache:
         )
         try:
             location = self._configure_runtime()
-            hardware = self._detect_hardware()
+            hardware = resolved_hardware
             engine = self._load_engine(hardware, location, model_id)
         except Exception as exc:
             raise WorkerCommandError(
@@ -268,6 +297,8 @@ class ModelCache:
                     "model_id": model_id,
                     "device": hardware.device,
                     "compute_type": hardware.compute_type,
+                    "device_index": hardware.device_index,
+                    "cpu_threads": hardware.cpu_threads,
                 },
                 request_id=request_id,
                 message="模型已就绪",
@@ -275,19 +306,57 @@ class ModelCache:
         )
         return engine, hardware, True
 
-    def load(self, model_id: str, *, request_id: str | None = None) -> bool:
+    def load(
+        self,
+        model_id: str,
+        *,
+        hardware_preference: Mapping[str, object] | None = None,
+        request_id: str | None = None,
+    ) -> bool:
         with self._lock:
             _engine, _hardware, loaded_new = self._ensure_loaded_locked(
-                model_id, request_id=request_id
+                model_id,
+                hardware_preference=hardware_preference,
+                request_id=request_id,
             )
             self._schedule_idle_release_locked()
             return loaded_new
 
+    def validate(
+        self,
+        model_id: str,
+        hardware_preference: Mapping[str, object] | None = None,
+    ) -> HardwareInfo:
+        """Verify a local model exists without importing CTranslate2."""
+        try:
+            resolved_hardware = self._resolve_hardware(hardware_preference)
+            if self.loaded and self.model_id == model_id and self.hardware == resolved_hardware:
+                return resolved_hardware
+            location = self._configure_runtime()
+            require_model = getattr(location, "require_model", None)
+            if require_model is not None:
+                require_model(model_id)
+        except Exception as exc:
+            raise WorkerCommandError(
+                ErrorCode.MODEL_LOAD_FAILED,
+                str(exc) or type(exc).__name__,
+                data={"model_id": model_id, "exception": type(exc).__name__},
+            ) from exc
+        return resolved_hardware
+
     @contextmanager
-    def acquire(self, model_id: str, *, request_id: str | None = None):
+    def acquire(
+        self,
+        model_id: str,
+        *,
+        hardware_preference: Mapping[str, object] | None = None,
+        request_id: str | None = None,
+    ):
         with self._lock:
             engine, hardware, _loaded_new = self._ensure_loaded_locked(
-                model_id, request_id=request_id
+                model_id,
+                hardware_preference=hardware_preference,
+                request_id=request_id,
             )
             self._cancel_timer_locked()
             self._active_users += 1
@@ -319,9 +388,13 @@ class WorkerTask:
     task_id: str
     request_id: str
     inputs: tuple[Mapping[str, Any], ...]
+    model_id: str
+    hardware_preference: Mapping[str, object]
+    hardware: HardwareInfo
     preset: Preset
     media_paths: tuple[Path, ...]
     output_plans: tuple[OutputPlan, ...]
+    subtitle_options: Mapping[str, Any] | None = None
     cancel: threading.Event = field(default_factory=threading.Event)
     state: str = "queued"
 
@@ -351,6 +424,7 @@ class WorkerRuntime:
         logger: logging.Logger | None = None,
         runtime_configurer: RuntimeConfigurer = configure_runtime,
         hardware_detector: HardwareProbe | None = None,
+        hardware_capability_loader: HardwareCapabilityLoader | None = None,
         engine_loader: EngineLoader = _default_engine_loader,
         performance_sampler: PerformanceSampler = collect_performance_sample,
     ) -> None:
@@ -361,6 +435,11 @@ class WorkerRuntime:
             lambda: f"task-{uuid.uuid4().hex}"
         )
         self._performance_sampler = performance_sampler
+        if hardware_detector is None:
+            detector = HardwareDetector()
+            hardware_detector = detector.detect
+            hardware_capability_loader = hardware_capability_loader or detector.capabilities
+        self._hardware_capability_loader = hardware_capability_loader
         self._condition = threading.Condition()
         self._queue: deque[WorkerTask] = deque()
         self._tasks: dict[str, WorkerTask] = {}
@@ -417,6 +496,7 @@ class WorkerRuntime:
                 self._active_task.task_id if self._active_task is not None else None
             )
             queued_count = len(self._queue)
+        hardware = self._model_cache.hardware
         return {
             "status": "ok",
             "worker_state": state,
@@ -424,6 +504,16 @@ class WorkerRuntime:
             "queued_count": queued_count,
             "model_loaded": self._model_cache.loaded,
             "model_id": self._model_cache.model_id,
+            "hardware": (
+                {
+                    "device": hardware.device,
+                    "device_index": hardware.device_index,
+                    "compute_type": hardware.compute_type,
+                    "cpu_threads": hardware.cpu_threads,
+                }
+                if hardware is not None
+                else None
+            ),
         }
 
     def handle_command(self, command: CommandMessage) -> bool:
@@ -433,6 +523,12 @@ class WorkerRuntime:
             return False
         if command.method is CommandMethod.SYSTEM_ENVIRONMENT:
             errors = self._check_environment()
+            hardware = None
+            if self._hardware_capability_loader is not None:
+                try:
+                    hardware = dict(self._hardware_capability_loader())
+                except Exception as exc:
+                    self._logger.warning("hardware capability detection failed: %s", exc)
             self._complete_command(
                 command,
                 {
@@ -440,6 +536,7 @@ class WorkerRuntime:
                     "errors": errors,
                     "python": platform.python_version(),
                     "platform": platform.platform(),
+                    "hardware": hardware,
                 },
             )
             return False
@@ -456,8 +553,11 @@ class WorkerRuntime:
 
         if command.method is CommandMethod.MODEL_LOAD:
             model_id = str(command.params.get("model_id") or DEFAULT_MODEL_NAME)
+            hardware_preference = command.params.get("hardware")
             loaded_new = self._model_cache.load(
-                model_id, request_id=command.request_id
+                model_id,
+                hardware_preference=hardware_preference,
+                request_id=command.request_id,
             )
             self._complete_command(
                 command,
@@ -484,6 +584,8 @@ class WorkerRuntime:
         )
 
     def _start_task(self, command: CommandMessage) -> None:
+        model_id = str(command.params.get("model_id") or DEFAULT_MODEL_NAME)
+        hardware_preference = dict(command.params.get("hardware") or {})
         profile = command.params["profile"]
         try:
             preset = derive_preset(
@@ -508,7 +610,10 @@ class WorkerRuntime:
             raise WorkerCommandError(
                 ErrorCode.OUTPUT_FAILED,
                 str(exc),
-                data={"exception": type(exc).__name__},
+                data={
+                    "exception": type(exc).__name__,
+                    "paths": [str(path) for path in exc.paths],
+                },
             ) from exc
         except (OSError, TypeError, ValueError) as exc:
             raise WorkerCommandError(
@@ -521,14 +626,33 @@ class WorkerRuntime:
         # lazy import and model initialization on the stdin command thread.
         # Loading a model for the first time from the dispatcher while this
         # thread blocks on the next stdin line can deadlock some runtimes.
-        self._model_cache.load(DEFAULT_MODEL_NAME, request_id=command.request_id)
+        with self._condition:
+            can_preload = self._active_task is None and not self._queue
+        if can_preload:
+            self._model_cache.load(
+                model_id,
+                hardware_preference=hardware_preference,
+                request_id=command.request_id,
+            )
+            hardware = self._model_cache.hardware
+            if hardware is None:
+                raise WorkerCommandError(
+                    ErrorCode.MODEL_LOAD_FAILED,
+                    "model loaded without a resolved hardware configuration",
+                )
+        else:
+            hardware = self._model_cache.validate(model_id, hardware_preference)
         task = WorkerTask(
             task_id=self._task_id_factory(),
             request_id=command.request_id,
             inputs=tuple(command.params["inputs"]),
+            model_id=model_id,
+            hardware_preference=hardware_preference,
+            hardware=hardware,
             preset=preset,
             media_paths=media_paths,
             output_plans=output_plans,
+            subtitle_options=command.params["output"].get("subtitle"),
         )
         with self._condition:
             if command.request_id in self._request_ids:
@@ -555,8 +679,15 @@ class WorkerRuntime:
                 EventMessage(
                     EventCode.TASK_QUEUED,
                     {
-                    "position": position,
-                    "input_count": len(task.media_paths),
+                        "position": position,
+                        "input_count": len(task.media_paths),
+                        "model_id": task.model_id,
+                        "hardware": {
+                            "device": task.hardware.device,
+                            "device_index": task.hardware.device_index,
+                            "compute_type": task.hardware.compute_type,
+                            "cpu_threads": task.hardware.cpu_threads,
+                        },
                         "effective_parameters": task.preset.transcription_options(),
                     },
                     request_id=task.request_id,
@@ -700,7 +831,8 @@ class WorkerRuntime:
                 message="正在准备模型",
             )
             with self._model_cache.acquire(
-                DEFAULT_MODEL_NAME,
+                task.model_id,
+                hardware_preference=task.hardware_preference,
                 request_id=task.request_id,
             ) as (engine, _hardware):
                 service = TranscriptionService(
@@ -724,6 +856,11 @@ class WorkerRuntime:
                             total=len(media_paths),
                             preset=task.preset,
                             output_plan=plan,
+                            subtitle_options=(
+                                dict(task.subtitle_options)
+                                if task.subtitle_options is not None
+                                else None
+                            ),
                         )
                     except TranscriptionCancelled:
                         raise

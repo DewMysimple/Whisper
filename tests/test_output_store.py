@@ -73,27 +73,28 @@ def test_prepare_forced_output_directory_preserves_dot_sentinel(tmp_path: Path):
     assert forced.is_dir()
 
 
-def test_primary_backup_and_desktop_outputs_keep_exact_text(tmp_path: Path):
+def test_primary_backup_and_desktop_outputs_keep_format_specific_text(tmp_path: Path):
     plan = build_output_plan(
         tmp_path / "input" / "course.wav",
         tmp_path / "forced",
         desktop=True,
         home=tmp_path / "home",
     )
-    lines = ["First line.", "第二行。"]
+    txt_content = "First line.\n第二行。\n"
+    markdown_content = "First line. 第二行。\n"
 
-    write_primary_outputs(plan, lines)
-    write_desktop_outputs(plan, lines)
+    write_primary_outputs(plan, txt_content, markdown_content=markdown_content)
+    write_desktop_outputs(plan, txt_content, markdown_content=markdown_content)
 
-    expected = "First line.\n第二行。\n"
     for path in (
         plan.primary_txt,
         plan.backup_txt,
         plan.desktop_txt,
-        plan.desktop_md,
     ):
         assert path is not None
-        assert path.read_text(encoding="utf-8") == expected
+        assert path.read_text(encoding="utf-8") == txt_content
+    assert plan.desktop_md is not None
+    assert plan.desktop_md.read_text(encoding="utf-8") == markdown_content
 
 
 def test_copy_utf8_text_preserves_content_contract(tmp_path: Path):
@@ -148,31 +149,76 @@ def test_directory_permission_error_is_propagated(tmp_path: Path, monkeypatch):
         atomic_write_text(destination, "content")
 
 
-def custom_policy(root: Path, *, conflict="fail", preserve=True):
+def custom_policy(
+    root: Path, *, conflict="fail", preserve_txt=True, preserve_markdown=True
+):
     return {
         "mode": "custom",
         "root_directory": str(root),
         "txt": {"enabled": True},
         "markdown": {"enabled": True},
-        "preserve_source_txt": preserve,
+        "preserve_source_txt": preserve_txt,
+        "preserve_source_markdown": preserve_markdown,
         "conflict_policy": conflict,
     }
 
 
-def test_custom_plan_uses_shared_root_subdirectories_and_source_backup(tmp_path):
+def test_custom_plan_writes_all_formats_directly_to_shared_root_and_source_backup(tmp_path):
     media = tmp_path / "input" / "course.wav"
 
     plan = build_configurable_output_plans(
         [media], custom_policy(tmp_path / "output")
     )[0]
 
-    assert plan.primary_txt == tmp_path / "output" / "Text" / "course.txt"
-    assert plan.primary_md == tmp_path / "output" / "Markdown" / "course.md"
+    assert plan.primary_txt == tmp_path / "output" / "course.txt"
+    assert plan.primary_md == tmp_path / "output" / "course.md"
     assert plan.backup_txt == tmp_path / "input" / "Text" / "course.txt"
+    assert plan.backup_md == tmp_path / "input" / "Markdown" / "course.md"
+
+
+def test_default_plan_writes_each_format_directly_to_media_adjacent_folder(tmp_path):
+    media = tmp_path / "input" / "course.wav"
+    policy = {
+        "mode": "compatibility",
+        "txt": {"enabled": True},
+        "markdown": {"enabled": True},
+        "preserve_source_txt": True,
+        "preserve_source_markdown": True,
+        "conflict_policy": "fail",
+    }
+
+    plan = build_configurable_output_plans([media], policy)[0]
+
+    assert plan.primary_txt == media.parent / "Text" / "course.txt"
+    assert plan.primary_md == media.parent / "Markdown" / "course.md"
+    assert plan.backup_txt is None
+    assert plan.backup_md is None
+
+
+def test_custom_markdown_copy_is_independent_from_txt_copy(tmp_path):
+    media = tmp_path / "input" / "course.wav"
+    policy = {
+        "mode": "custom",
+        "root_directory": str(tmp_path / "output"),
+        "txt": {"enabled": False},
+        "markdown": {"enabled": True},
+        "preserve_source_txt": True,
+        "preserve_source_markdown": True,
+        "conflict_policy": "fail",
+    }
+
+    plan = build_configurable_output_plans([media], policy)[0]
+
+    assert plan.primary_txt is None
+    assert plan.backup_txt is None
+    assert plan.primary_md == tmp_path / "output" / "course.md"
+    assert plan.backup_md == media.parent / "Markdown" / "course.md"
 
 
 def test_custom_target_directories_override_shared_root(tmp_path):
-    policy = custom_policy(tmp_path / "shared", preserve=False)
+    policy = custom_policy(
+        tmp_path / "shared", preserve_txt=False, preserve_markdown=False
+    )
     policy["txt"]["directory"] = str(tmp_path / "txt-only")
     policy["markdown"]["directory"] = str(tmp_path / "md-only")
 
@@ -181,32 +227,82 @@ def test_custom_target_directories_override_shared_root(tmp_path):
     assert plan.primary_txt == tmp_path / "txt-only" / "a.txt"
     assert plan.primary_md == tmp_path / "md-only" / "a.md"
     assert plan.backup_txt is None
+    assert plan.backup_md is None
 
 
 def test_fail_conflict_is_detected_before_writing_any_output(tmp_path):
-    destination = tmp_path / "output" / "Text" / "same.txt"
+    destination = tmp_path / "output" / "same.txt"
     destination.parent.mkdir(parents=True)
     destination.write_text("existing", encoding="utf-8")
 
-    with pytest.raises(OutputConflictError):
+    with pytest.raises(OutputConflictError) as captured:
         build_configurable_output_plans(
             [tmp_path / "input" / "same.wav"],
-            custom_policy(tmp_path / "output", preserve=False),
+            custom_policy(
+                tmp_path / "output", preserve_txt=False, preserve_markdown=False
+            ),
         )
 
+    assert captured.value.paths == (destination,)
     assert destination.read_text(encoding="utf-8") == "existing"
+
+
+def test_fail_conflict_reports_all_disk_and_reserved_targets(tmp_path):
+    root = tmp_path / "output"
+    txt = root / "same.txt"
+    markdown = root / "same.md"
+    txt.parent.mkdir(parents=True)
+    txt.write_text("existing", encoding="utf-8")
+
+    with pytest.raises(OutputConflictError) as captured:
+        build_configurable_output_plans(
+            [tmp_path / "same.wav"],
+            custom_policy(
+                root,
+                preserve_txt=False,
+                preserve_markdown=False,
+            ),
+            reserved_paths=[markdown],
+        )
+
+    assert captured.value.paths == (txt, markdown)
 
 
 def test_auto_rename_reserves_txt_and_markdown_with_one_suffix(tmp_path):
     root = tmp_path / "output"
-    existing = root / "Text" / "same.txt"
+    existing = root / "same.txt"
     existing.parent.mkdir(parents=True)
     existing.write_text("existing", encoding="utf-8")
 
     plan = build_configurable_output_plans(
         [tmp_path / "same.wav"],
-        custom_policy(root, conflict="auto_rename", preserve=False),
+        custom_policy(
+            root,
+            conflict="auto_rename",
+            preserve_txt=False,
+            preserve_markdown=False,
+        ),
     )[0]
 
-    assert plan.primary_txt == root / "Text" / "same (2).txt"
-    assert plan.primary_md == root / "Markdown" / "same (2).md"
+    assert plan.primary_txt == root / "same (2).txt"
+    assert plan.primary_md == root / "same (2).md"
+
+
+def test_srt_only_plan_uses_srt_directory_and_does_not_create_compatibility_txt(tmp_path):
+    media = tmp_path / "input" / "lesson.wav"
+    media.parent.mkdir()
+    media.write_bytes(b"fixture")
+    policy = {
+        "mode": "compatibility",
+        "txt": {"enabled": False},
+        "markdown": {"enabled": False},
+        "srt": {"enabled": True},
+        "preserve_source_txt": True,
+        "conflict_policy": "overwrite",
+    }
+
+    plan = output_store.build_configurable_output_plans([media], policy)[0]
+
+    assert plan.primary_srt == media.parent / "SRT" / "lesson.srt"
+    assert plan.primary_txt is None
+    assert plan.backup_txt is None

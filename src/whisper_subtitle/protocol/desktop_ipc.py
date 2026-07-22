@@ -86,11 +86,17 @@ FrozenJson: TypeAlias = (
 
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _PRESET_IDS = frozenset({"cn", "cn2", "en_v1", "en_v2"})
+_MODEL_IDS = frozenset(
+    {"tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"}
+)
 _INPUT_KINDS = frozenset({"file", "directory"})
 _INPUT_ORIGINS = frozenset({"dialog", "drop", "paste", "manual"})
 _OUTPUT_MODES = frozenset({"compatibility", "custom"})
 _CONFLICT_POLICIES = frozenset({"overwrite", "fail", "auto_rename"})
 _CANCEL_REASONS = frozenset({"user", "shutdown", "superseded"})
+_HARDWARE_MODES = frozenset({"auto", "cuda", "cpu"})
+_CUDA_COMPUTE_TYPES = frozenset({"float16", "int8_float16", "float32"})
+_CPU_COMPUTE_TYPES = frozenset({"int8", "float32"})
 
 _PARAMETER_RULES: Mapping[str, tuple[type, float, float]] = MappingProxyType(
     {
@@ -104,6 +110,17 @@ _PARAMETER_RULES: Mapping[str, tuple[type, float, float]] = MappingProxyType(
         "no_speech_threshold": (float, 0, 1),
         "condition_on_previous_text": (bool, 0, 1),
         "min_silence_duration_ms": (int, 0, 10000),
+    }
+)
+
+_SUBTITLE_PARAMETER_RULES: Mapping[str, tuple[type, float, float]] = MappingProxyType(
+    {
+        "max_characters_per_line": (int, 8, 84),
+        "max_lines_per_cue": (int, 1, 3),
+        "min_cue_duration_ms": (int, 250, 5000),
+        "max_cue_duration_ms": (int, 1000, 15000),
+        "max_characters_per_second": (float, 5, 40),
+        "cue_gap_ms": (int, 0, 1000),
     }
 )
 
@@ -308,13 +325,85 @@ def _validate_output_target(value: Any, field_name: str) -> None:
         _require_nonempty_string(target["directory"], f"{field_name}.directory")
 
 
+def _validate_subtitle_parameters(value: Any) -> None:
+    parameters = _require_object(
+        value, "params.output.subtitle", code=ErrorCode.REQUEST_INVALID
+    )
+    _require_fields(
+        parameters,
+        required=set(_SUBTITLE_PARAMETER_RULES),
+        field_name="params.output.subtitle",
+        code=ErrorCode.REQUEST_INVALID,
+    )
+    for name, (expected_type, minimum, maximum) in _SUBTITLE_PARAMETER_RULES.items():
+        item = parameters[name]
+        valid_type = (
+            type(item) is int
+            if expected_type is int
+            else type(item) in {int, float}
+        )
+        if not valid_type or not minimum <= item <= maximum:
+            raise ProtocolValidationError(
+                ErrorCode.REQUEST_INVALID,
+                f"params.output.subtitle.{name} is invalid",
+            )
+    if parameters["min_cue_duration_ms"] > parameters["max_cue_duration_ms"]:
+        raise ProtocolValidationError(
+            ErrorCode.REQUEST_INVALID,
+            "subtitle minimum duration cannot exceed maximum duration",
+        )
+
+
+def _validate_hardware_preference(value: Any, field_name: str) -> None:
+    hardware = _require_object(value, field_name, code=ErrorCode.REQUEST_INVALID)
+    _require_fields(
+        hardware,
+        required={
+            "mode",
+            "gpu_device_index",
+            "cuda_compute_type",
+            "cpu_compute_type",
+            "cpu_threads",
+        },
+        field_name=field_name,
+        code=ErrorCode.REQUEST_INVALID,
+    )
+    if hardware["mode"] not in _HARDWARE_MODES:
+        raise ProtocolValidationError(
+            ErrorCode.REQUEST_INVALID, f"{field_name}.mode is unsupported"
+        )
+    if type(hardware["gpu_device_index"]) is not int or not 0 <= hardware["gpu_device_index"] <= 31:
+        raise ProtocolValidationError(
+            ErrorCode.REQUEST_INVALID, f"{field_name}.gpu_device_index is invalid"
+        )
+    if hardware["cuda_compute_type"] not in _CUDA_COMPUTE_TYPES:
+        raise ProtocolValidationError(
+            ErrorCode.REQUEST_INVALID, f"{field_name}.cuda_compute_type is unsupported"
+        )
+    if hardware["cpu_compute_type"] not in _CPU_COMPUTE_TYPES:
+        raise ProtocolValidationError(
+            ErrorCode.REQUEST_INVALID, f"{field_name}.cpu_compute_type is unsupported"
+        )
+    if type(hardware["cpu_threads"]) is not int or not 1 <= hardware["cpu_threads"] <= 256:
+        raise ProtocolValidationError(
+            ErrorCode.REQUEST_INVALID, f"{field_name}.cpu_threads is invalid"
+        )
+
+
 def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
     _require_fields(
         params,
         required={"inputs", "profile", "output"},
+        optional={"model_id", "hardware"},
         field_name="params",
         code=ErrorCode.REQUEST_INVALID,
     )
+    if "model_id" in params and params["model_id"] not in _MODEL_IDS:
+        raise ProtocolValidationError(
+            ErrorCode.REQUEST_INVALID, "params.model_id is unsupported"
+        )
+    if "hardware" in params:
+        _validate_hardware_preference(params["hardware"], "params.hardware")
     inputs = params["inputs"]
     if not isinstance(inputs, Sequence) or isinstance(inputs, (str, bytes)) or not inputs:
         raise ProtocolValidationError(
@@ -370,7 +459,7 @@ def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
             "preserve_source_txt",
             "conflict_policy",
         },
-        optional={"root_directory"},
+        optional={"root_directory", "srt", "subtitle", "preserve_source_markdown"},
         field_name="params.output",
         code=ErrorCode.REQUEST_INVALID,
     )
@@ -380,11 +469,25 @@ def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
         )
     _validate_output_target(output["txt"], "params.output.txt")
     _validate_output_target(output["markdown"], "params.output.markdown")
-    if not output["txt"]["enabled"] and not output["markdown"]["enabled"]:
+    srt = output.get("srt", {"enabled": False})
+    _validate_output_target(srt, "params.output.srt")
+    if not output["txt"]["enabled"] and not output["markdown"]["enabled"] and not srt["enabled"]:
         raise ProtocolValidationError(
             ErrorCode.REQUEST_INVALID, "at least one output target must be enabled"
         )
+    if srt["enabled"] and "subtitle" not in output:
+        raise ProtocolValidationError(
+            ErrorCode.REQUEST_INVALID,
+            "SRT output requires subtitle parameters",
+        )
+    if "subtitle" in output:
+        _validate_subtitle_parameters(output["subtitle"])
     _require_bool(output["preserve_source_txt"], "params.output.preserve_source_txt")
+    if "preserve_source_markdown" in output:
+        _require_bool(
+            output["preserve_source_markdown"],
+            "params.output.preserve_source_markdown",
+        )
     if output["conflict_policy"] not in _CONFLICT_POLICIES:
         raise ProtocolValidationError(
             ErrorCode.REQUEST_INVALID,
@@ -394,8 +497,11 @@ def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
     if root is not None:
         _require_nonempty_string(root, "params.output.root_directory")
     if output["mode"] == "custom":
-        for target_name in ("txt", "markdown"):
-            target = output[target_name]
+        for target_name, target in (
+            ("txt", output["txt"]),
+            ("markdown", output["markdown"]),
+            ("srt", srt),
+        ):
             if target["enabled"] and root is None and target.get("directory") is None:
                 raise ProtocolValidationError(
                     ErrorCode.REQUEST_INVALID,
@@ -422,12 +528,14 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
         _require_fields(
             params,
             required=set(),
-            optional={"model_id"},
+            optional={"model_id", "hardware"},
             field_name="params",
             code=ErrorCode.REQUEST_INVALID,
         )
         if "model_id" in params:
             _require_nonempty_string(params["model_id"], "params.model_id")
+        if "hardware" in params:
+            _validate_hardware_preference(params["hardware"], "params.hardware")
     elif method is CommandMethod.TRANSCRIPTION_CANCEL:
         _require_fields(
             params,
@@ -502,18 +610,29 @@ def _validate_event_data(event: EventCode, value: Any) -> FrozenJson:
         _require_fields(
             data,
             required={"model_id", "device", "compute_type"},
+            optional={"device_index", "cpu_threads"},
             field_name="data",
         )
         for name in ("model_id", "device", "compute_type"):
             _require_nonempty_string(
                 data[name], f"data.{name}", code=ErrorCode.PROTOCOL_INVALID_MESSAGE
             )
+        if "device_index" in data:
+            _require_nonnegative_int(data["device_index"], "data.device_index")
+        if "cpu_threads" in data:
+            _require_nonnegative_int(data["cpu_threads"], "data.cpu_threads")
     elif event is EventCode.TASK_QUEUED:
         _require_fields(
             data,
             required={"position", "input_count", "effective_parameters"},
+            optional={"model_id", "hardware"},
             field_name="data",
         )
+        if "model_id" in data and data["model_id"] not in _MODEL_IDS:
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                "data.model_id is unsupported",
+            )
         _require_nonnegative_int(data["position"], "data.position")
         if type(data["input_count"]) is not int or data["input_count"] <= 0:
             raise ProtocolValidationError(
@@ -521,6 +640,25 @@ def _validate_event_data(event: EventCode, value: Any) -> FrozenJson:
                 "data.input_count must be a positive integer",
             )
         _require_object(data["effective_parameters"], "data.effective_parameters")
+        if "hardware" in data:
+            hardware = _require_object(data["hardware"], "data.hardware")
+            _require_fields(
+                hardware,
+                required={"device", "device_index", "compute_type", "cpu_threads"},
+                field_name="data.hardware",
+            )
+            if hardware["device"] not in {"cpu", "cuda"}:
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    "data.hardware.device is unsupported",
+                )
+            _require_nonnegative_int(hardware["device_index"], "data.hardware.device_index")
+            _require_nonnegative_int(hardware["cpu_threads"], "data.hardware.cpu_threads")
+            _require_nonempty_string(
+                hardware["compute_type"],
+                "data.hardware.compute_type",
+                code=ErrorCode.PROTOCOL_INVALID_MESSAGE,
+            )
     elif event is EventCode.TASK_PROGRESS:
         _require_fields(
             data,

@@ -1,11 +1,31 @@
-import { Activity, AudioLines, Layers3, Settings2, Sparkles } from 'lucide-react';
+import {
+  Activity,
+  AudioLines,
+  ChartNoAxesCombined,
+  ChevronLeft,
+  Cpu,
+  Layers3,
+  ScrollText,
+  Settings2,
+  Sparkles,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 
-import { useWorkspace } from '../state/workspace';
+import { useWorkspace, type WorkspaceViewId } from '../state/workspace';
 
-const NAVIGATION = [
-  { id: 'workspace' as const, label: '转录工作台', icon: AudioLines },
-  { id: 'tasks' as const, label: '任务记录', icon: Layers3 },
-  { id: 'settings' as const, label: '偏好设置', icon: Settings2 },
+const SIDEBAR_STORAGE_KEY = 'whisper-subtitle.sidebar-collapsed.v1';
+
+const NAVIGATION: Array<{
+  id: WorkspaceViewId;
+  label: string;
+  icon: typeof AudioLines;
+}> = [
+  { id: 'workspace', label: '转录工作台', icon: AudioLines },
+  { id: 'models', label: '模型切换', icon: Cpu },
+  { id: 'performance', label: '性能监控', icon: ChartNoAxesCombined },
+  { id: 'tasks', label: '任务记录', icon: Layers3 },
+  { id: 'logs', label: 'Worker 日志', icon: ScrollText },
+  { id: 'settings', label: '偏好设置', icon: Settings2 },
 ];
 
 export function Sidebar() {
@@ -17,28 +37,58 @@ export function Sidebar() {
   const restartWorker = useWorkspace((state) => state.restartWorker);
   const isReady = hostStatus.state === 'ready';
   const taskCount = useWorkspace((state) => state.tasks.length);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    document.body.classList.toggle('sidebar-collapsed', collapsed);
+    try {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
+    } catch {
+      // A restricted WebView may deny optional UI preference persistence.
+    }
+    return () => document.body.classList.remove('sidebar-collapsed');
+  }, [collapsed]);
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" id="app-sidebar">
       <div className="brand">
         <div className="brand-mark" aria-hidden="true">
-          <AudioLines size={23} />
+          <AudioLines size={22} />
         </div>
-        <div>
+        <div className="brand-copy">
           <strong>Whisper</strong>
-          <span>SUBTITLE STUDIO</span>
+          <span>SUBTITLE DESK</span>
         </div>
+        <button
+          aria-controls="app-sidebar"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'}
+          className="sidebar-toggle"
+          onClick={() => setCollapsed((current) => !current)}
+          title={collapsed ? '展开侧边栏' : '收起侧边栏'}
+          type="button"
+        >
+          <ChevronLeft size={17} />
+        </button>
       </div>
 
       <nav aria-label="主导航">
-        <p className="eyebrow nav-label">工作空间</p>
+        <p className="eyebrow nav-label">LOCAL DESK</p>
         {NAVIGATION.map((item) => {
           const Icon = item.icon;
           return (
             <button
+              aria-current={activeView === item.id ? 'page' : undefined}
               className={`nav-item ${activeView === item.id ? 'is-active' : ''}`}
               key={item.id}
               onClick={() => setActiveView(item.id)}
+              title={item.label}
               type="button"
             >
               <Icon size={18} />
@@ -75,7 +125,7 @@ export function Sidebar() {
           </button>
         )}
       </section>
-      <p className="build-label">CONTROLLED LOCAL IPC · BATCH 05</p>
+      <p className="build-label">DESKTOP IPC V1 · OFFLINE</p>
     </aside>
   );
 }

@@ -157,6 +157,22 @@ def test_schema_is_self_contained_and_has_no_unresolved_local_refs():
     assert output_policy["allOf"][0]["anyOf"]
     assert output_policy["allOf"][1]["if"]["properties"]["mode"]["const"] == "custom"
 
+    hardware = schema["$defs"]["HardwarePreference"]
+    assert hardware["properties"]["mode"]["enum"] == ["auto", "cuda", "cpu"]
+    assert hardware["properties"]["cuda_compute_type"]["enum"] == [
+        "float16",
+        "int8_float16",
+        "float32",
+    ]
+    assert (
+        schema["$defs"]["TranscriptionStartParams"]["properties"]["hardware"]["$ref"]
+        == "#/$defs/HardwarePreference"
+    )
+    assert (
+        schema["$defs"]["TaskQueuedData"]["properties"]["hardware"]["$ref"]
+        == "#/$defs/ResolvedHardware"
+    )
+
 
 def test_schema_parameter_boundaries_match_worker_domain_validation():
     properties = load_schema()["$defs"]["ParameterOverrides"]["properties"]
@@ -194,6 +210,149 @@ def test_transcription_start_round_trips_structured_paths_and_custom_overrides()
     assert parsed.params["output"]["markdown"]["enabled"] is False
     with pytest.raises(TypeError):
         parsed.params["profile"]["overrides"]["beam_size"] = 10
+
+
+def test_transcription_model_id_is_optional_and_restricted_to_local_catalog():
+    legacy = CommandMessage(
+        "req-legacy-model", CommandMethod.TRANSCRIPTION_START, start_params()
+    )
+    assert "model_id" not in legacy.params
+
+    params = start_params()
+    params["model_id"] = "medium"
+    selected = CommandMessage(
+        "req-medium-model", CommandMethod.TRANSCRIPTION_START, params
+    )
+    assert selected.params["model_id"] == "medium"
+
+    params["model_id"] = "unknown-model"
+    with pytest.raises(ProtocolValidationError):
+        CommandMessage("req-invalid-model", CommandMethod.TRANSCRIPTION_START, params)
+
+
+def test_task_queued_may_echo_the_frozen_model_id():
+    event = EventMessage(
+        EventCode.TASK_QUEUED,
+        {
+            "position": 0,
+            "input_count": 1,
+            "model_id": "small",
+            "effective_parameters": {"language": "en"},
+        },
+        request_id="req-model-event",
+        task_id="task-model-event",
+    )
+    assert event.data["model_id"] == "small"
+
+
+def test_hardware_preference_is_optional_and_frozen_in_task_event():
+    legacy = CommandMessage(
+        "req-legacy-hardware", CommandMethod.TRANSCRIPTION_START, start_params()
+    )
+    assert "hardware" not in legacy.params
+
+    preference = {
+        "mode": "cuda",
+        "gpu_device_index": 1,
+        "cuda_compute_type": "int8_float16",
+        "cpu_compute_type": "int8",
+        "cpu_threads": 4,
+    }
+    params = start_params()
+    params["hardware"] = preference
+    command = CommandMessage(
+        "req-hardware", CommandMethod.TRANSCRIPTION_START, params
+    )
+    assert dict(command.params["hardware"]) == preference
+
+    model_load = CommandMessage(
+        "req-model-hardware",
+        CommandMethod.MODEL_LOAD,
+        {"model_id": "large-v3-turbo", "hardware": preference},
+    )
+    assert dict(model_load.params["hardware"]) == preference
+
+    event = EventMessage(
+        EventCode.TASK_QUEUED,
+        {
+            "position": 0,
+            "input_count": 1,
+            "model_id": "large-v3-turbo",
+            "hardware": {
+                "device": "cuda",
+                "device_index": 1,
+                "compute_type": "int8_float16",
+                "cpu_threads": 0,
+            },
+            "effective_parameters": {"language": "en"},
+        },
+        request_id="req-hardware",
+        task_id="task-hardware",
+    )
+    assert event.data["hardware"]["device_index"] == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("mode", "directml"),
+        ("gpu_device_index", -1),
+        ("cuda_compute_type", "int8"),
+        ("cpu_compute_type", "float16"),
+        ("cpu_threads", 0),
+    ],
+)
+def test_invalid_hardware_preferences_are_rejected(field, value):
+    params = start_params()
+    hardware = {
+        "mode": "auto",
+        "gpu_device_index": 0,
+        "cuda_compute_type": "float16",
+        "cpu_compute_type": "int8",
+        "cpu_threads": 4,
+    }
+    hardware[field] = value
+    params["hardware"] = hardware
+
+    with pytest.raises(ProtocolValidationError):
+        CommandMessage("req-invalid-hardware", CommandMethod.TRANSCRIPTION_START, params)
+
+
+def test_srt_output_accepts_complete_user_controlled_subtitle_parameters():
+    params = start_params()
+    params["output"].update(
+        {
+            "txt": {"enabled": False},
+            "srt": {"enabled": True},
+            "preserve_source_txt": False,
+            "subtitle": {
+                "max_characters_per_line": 18,
+                "max_lines_per_cue": 2,
+                "min_cue_duration_ms": 800,
+                "max_cue_duration_ms": 7000,
+                "max_characters_per_second": 20,
+                "cue_gap_ms": 80,
+            },
+        }
+    )
+
+    message = CommandMessage("req-srt", CommandMethod.TRANSCRIPTION_START, params)
+
+    assert message.params["output"]["srt"]["enabled"] is True
+    assert message.params["output"]["subtitle"]["max_characters_per_line"] == 18
+
+
+def test_markdown_source_copy_is_an_optional_boolean_v1_extension():
+    params = start_params(mode="custom")
+    params["output"]["markdown"] = {"enabled": True}
+    params["output"]["preserve_source_markdown"] = True
+
+    message = CommandMessage("req-md-copy", CommandMethod.TRANSCRIPTION_START, params)
+
+    assert message.params["output"]["preserve_source_markdown"] is True
+    params["output"]["preserve_source_markdown"] = "yes"
+    with pytest.raises(ProtocolValidationError):
+        CommandMessage("req-md-invalid", CommandMethod.TRANSCRIPTION_START, params)
 
 
 @pytest.mark.parametrize(

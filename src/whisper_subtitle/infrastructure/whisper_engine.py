@@ -61,6 +61,7 @@ class FasterWhisperEngine:
         model = factory(
             model_reference,
             device=hardware.device,
+            device_index=hardware.device_index,
             compute_type=hardware.compute_type,
             cpu_threads=hardware.cpu_threads,
             num_workers=1,

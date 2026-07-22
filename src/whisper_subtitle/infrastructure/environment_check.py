@@ -6,7 +6,7 @@ import importlib.util
 import sys
 from collections.abc import Callable
 
-from ..paths import AppPaths, ModelNotFoundError, get_app_paths
+from ..paths import AppPaths, get_app_paths
 
 
 REQUIRED_MODULES = ("psutil", "faster_whisper", "ctranslate2")
@@ -33,10 +33,11 @@ def check_environment(
             )
     if not paths.python_executable.is_file():
         errors.append(f"当前 Python 解释器不存在: {paths.python_executable}")
-    try:
-        paths.model_location.require_model("large-v3-turbo")
-    except ModelNotFoundError as exc:
-        errors.append(str(exc))
+    if not paths.model_location.available_models():
+        errors.append(
+            "未找到受支持的本地 Whisper 模型；请安装 tiny、base、small、medium、"
+            "large-v3 或 large-v3-turbo，并检查 WHISPER_SUBTITLE_MODEL_DIR。"
+        )
     return errors
 
 
@@ -58,10 +59,11 @@ def check_worker_environment(
             errors.append(f"缺少 Worker 运行依赖 {module_name}")
     if not paths.python_executable.is_file():
         errors.append(f"当前 Python 解释器不存在: {paths.python_executable}")
-    try:
-        paths.model_location.require_model("large-v3-turbo")
-    except ModelNotFoundError as exc:
-        errors.append(str(exc))
+    if not paths.model_location.available_models():
+        errors.append(
+            "未找到受支持的本地 Whisper 模型；请安装 tiny、base、small、medium、"
+            "large-v3 或 large-v3-turbo，并检查 WHISPER_SUBTITLE_MODEL_DIR。"
+        )
     return errors
 
 

@@ -3,5 +3,12 @@
   "identifier": "main-window",
   "description": "Controlled capabilities for the batch 4 local desktop bridge.",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-request-user-attention",
+    "clipboard-manager:allow-write-text",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "notification:default"
+  ]
 }

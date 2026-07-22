@@ -126,6 +126,26 @@
         }
       }
     },
+    "SubtitleParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_characters_per_line",
+        "max_lines_per_cue",
+        "min_cue_duration_ms",
+        "max_cue_duration_ms",
+        "max_characters_per_second",
+        "cue_gap_ms"
+      ],
+      "properties": {
+        "max_characters_per_line": { "type": "integer", "minimum": 8, "maximum": 84 },
+        "max_lines_per_cue": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "min_cue_duration_ms": { "type": "integer", "minimum": 250, "maximum": 5000 },
+        "max_cue_duration_ms": { "type": "integer", "minimum": 1000, "maximum": 15000 },
+        "max_characters_per_second": { "type": "number", "minimum": 5, "maximum": 40 },
+        "cue_gap_ms": { "type": "integer", "minimum": 0, "maximum": 1000 }
+      }
+    },
     "OutputPolicy": {
       "type": "object",
       "additionalProperties": false,
@@ -146,14 +166,18 @@
         },
         "txt": { "$ref": "#/$defs/OutputTarget" },
         "markdown": { "$ref": "#/$defs/OutputTarget" },
+        "srt": { "$ref": "#/$defs/OutputTarget" },
+        "subtitle": { "$ref": "#/$defs/SubtitleParameters" },
         "preserve_source_txt": { "type": "boolean" },
+        "preserve_source_markdown": { "type": "boolean", "default": false },
         "conflict_policy": { "enum": ["overwrite", "fail", "auto_rename"] }
       },
       "allOf": [
         {
           "anyOf": [
             { "properties": { "txt": { "properties": { "enabled": { "const": true } } } } },
-            { "properties": { "markdown": { "properties": { "enabled": { "const": true } } } } }
+            { "properties": { "markdown": { "properties": { "enabled": { "const": true } } } } },
+            { "required": ["srt"], "properties": { "srt": { "properties": { "enabled": { "const": true } } } } }
           ]
         },
         {
@@ -177,19 +201,63 @@
                       { "properties": { "markdown": { "properties": { "enabled": { "const": false } } } } },
                       { "properties": { "markdown": { "required": ["directory"], "properties": { "directory": { "type": "string", "minLength": 1 } } } } }
                     ]
+                  },
+                  {
+                    "anyOf": [
+                      { "properties": { "srt": { "properties": { "enabled": { "const": false } } } } },
+                      { "properties": { "srt": { "required": ["directory"], "properties": { "directory": { "type": "string", "minLength": 1 } } } } }
+                    ]
                   }
                 ]
               }
             ]
           }
+        },
+        {
+          "if": {
+            "required": ["srt"],
+            "properties": { "srt": { "properties": { "enabled": { "const": true } } } }
+          },
+          "then": { "required": ["subtitle"] }
         }
       ]
+    },
+    "HardwarePreference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "gpu_device_index",
+        "cuda_compute_type",
+        "cpu_compute_type",
+        "cpu_threads"
+      ],
+      "properties": {
+        "mode": { "enum": ["auto", "cuda", "cpu"] },
+        "gpu_device_index": { "type": "integer", "minimum": 0, "maximum": 31 },
+        "cuda_compute_type": { "enum": ["float16", "int8_float16", "float32"] },
+        "cpu_compute_type": { "enum": ["int8", "float32"] },
+        "cpu_threads": { "type": "integer", "minimum": 1, "maximum": 256 }
+      }
+    },
+    "ResolvedHardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device", "device_index", "compute_type", "cpu_threads"],
+      "properties": {
+        "device": { "enum": ["cuda", "cpu"] },
+        "device_index": { "type": "integer", "minimum": 0 },
+        "compute_type": { "type": "string", "minLength": 1 },
+        "cpu_threads": { "type": "integer", "minimum": 0 }
+      }
     },
     "TranscriptionStartParams": {
       "type": "object",
       "additionalProperties": false,
       "required": ["inputs", "profile", "output"],
       "properties": {
+        "model_id": { "enum": ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"] },
+        "hardware": { "$ref": "#/$defs/HardwarePreference" },
         "inputs": {
           "type": "array",
           "minItems": 1,
@@ -203,7 +271,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "model_id": { "type": "string", "minLength": 1 }
+        "model_id": { "type": "string", "minLength": 1 },
+        "hardware": { "$ref": "#/$defs/HardwarePreference" }
       }
     },
     "TranscriptionCancelParams": {
@@ -285,7 +354,9 @@
       "properties": {
         "model_id": { "type": "string", "minLength": 1 },
         "device": { "type": "string", "minLength": 1 },
-        "compute_type": { "type": "string", "minLength": 1 }
+        "compute_type": { "type": "string", "minLength": 1 },
+        "device_index": { "type": "integer", "minimum": 0 },
+        "cpu_threads": { "type": "integer", "minimum": 0 }
       }
     },
     "TaskQueuedData": {
@@ -295,6 +366,8 @@
       "properties": {
         "position": { "type": "integer", "minimum": 0 },
         "input_count": { "type": "integer", "minimum": 1 },
+        "model_id": { "enum": ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"] },
+        "hardware": { "$ref": "#/$defs/ResolvedHardware" },
         "effective_parameters": { "type": "object" }
       }
     },

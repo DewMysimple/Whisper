@@ -25,7 +25,7 @@ flowchart TD
     Web["apps/web\nReact / TypeScript\nhistory / settings / metrics"] --> Tauri
     Tauri -->|"controlled stdin/stdout"| Worker
     Tauri --> Native["dialogs / drag-drop / Explorer"]
-    Tauri --> Preview["bounded TXT/Markdown preview"]
+    Tauri --> Preview["bounded TXT/Markdown/SRT preview"]
 ```
 
 Tauri Host 是 WebView 与 Worker 之间唯一的运行时边界：前端不能直接启动进程，Worker 消息必须先通过 Rust 的 Desktop IPC v1 校验。普通浏览器测试仍绑定 mock bridge，但 Tauri production 运行时绑定真实 bridge。
@@ -46,7 +46,7 @@ src/whisper_subtitle/
 │   ├── environment_check.py   # 运行环境检查
 │   ├── hardware.py            # CTranslate2/NVML 硬件探测
 │   ├── media_files.py         # 媒体发现
-│   ├── output_store.py        # 原子输出与路径规划
+│   ├── output_store.py        # TXT/Markdown/SRT 原子输出与路径规划
 │   ├── performance.py         # CPU/内存/NVML 只读性能采样
 │   └── whisper_engine.py      # faster-whisper 适配器
 ├── presentation/
@@ -78,6 +78,7 @@ apps/
 - apps/web 组件只依赖 typed `DesktopBridge`；Tauri adapter 集中封装白名单 command/event，组件不直接导入 Python或任意 shell。
 - apps/desktop 只加载本地静态 WebView 资源，CSP 的 `connect-src 'none'` 保持不变；Rust 只开放精确桌面 command，不开放通用 shell 或网络权限。
 - apps/desktop 负责 Worker 进程和 Desktop IPC v1 校验，不实现 preset、转录、后处理或输出内容规则。
+- 默认输出把 TXT、Markdown、SRT 文件直接写入各媒体旁的 `Text`、`Markdown`、`SRT` 文件夹；自定义根目录使用同名一级文件夹，并可分别选择是否额外保留媒体旁 TXT/Markdown 副本，不再把两种副本绑定为同一个开关。
 - preset 只描述业务参数和后处理策略，不绑定 Python 脚本文件。
 - 任何本地模型、虚拟环境和工作目录均通过 `AppPaths` 解析，不从源码层级反推项目根目录。
 
@@ -123,7 +124,7 @@ Desktop IPC command
 - Tauri/React 桌面应用直接加载 `apps/web/dist`，不设置 `devUrl`，不监听 localhost；Host 通过受控 stdin/stdout 监管 Worker。
 - `system.metrics` 是 Desktop IPC v1 的只读诊断 command；它使用 psutil/NVML 采样，不改变模型状态，失败不影响转录。
 - WebView 使用带版本号的 localStorage 保存设置和最多 100 条任务；这是本机桌面状态，不是浏览器 WebUI 后端或服务端数据库。
-- Rust `read_output_preview` 只允许规范化后的 `.txt`/`.md` 文件并限制为前 128 KiB，不暴露通用文件读取。
+- Rust `read_output_preview` 只允许规范化后的 `.txt`/`.md`/`.srt` 文件并限制为前 128 KiB，不暴露通用文件读取。
 - Playwright 可以在测试期间临时使用 `127.0.0.1` 提供静态构建产物；该测试基础设施不进入 production runtime。
 - 开发态 Host 可使用显式 Python 或工程 `whisper_env`；发布态 Host 从应用目录解析 `worker/whisper-subtitle-worker.exe`，并向 Worker 注入应用根目录和直接模型快照路径。
 - 正式安装介质为 NSIS current-user setup 与相邻 `models/large-v3-turbo/` 的两部分离线布局；setup 内置 WebView2 Evergreen offlineInstaller，不依赖网络安装。

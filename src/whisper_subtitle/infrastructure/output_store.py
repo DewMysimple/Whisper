@@ -17,6 +17,8 @@ class OutputPlan:
     primary_txt: Path | None
     backup_txt: Path | None = None
     primary_md: Path | None = None
+    backup_md: Path | None = None
+    primary_srt: Path | None = None
     desktop_txt: Path | None = None
     desktop_md: Path | None = None
 
@@ -24,7 +26,13 @@ class OutputPlan:
     def content_paths(self) -> tuple[Path, ...]:
         """Return unique non-desktop destinations in deterministic order."""
         paths = []
-        for path in (self.primary_txt, self.backup_txt, self.primary_md):
+        for path in (
+            self.primary_txt,
+            self.backup_txt,
+            self.primary_md,
+            self.backup_md,
+            self.primary_srt,
+        ):
             if path is not None and path not in paths:
                 paths.append(path)
         return tuple(paths)
@@ -40,6 +48,12 @@ class OutputPlan:
 
 class OutputConflictError(FileExistsError):
     """Raised when a configured output policy cannot reserve destinations."""
+
+    def __init__(self, paths: Iterable[Path | str]) -> None:
+        unique = tuple(dict.fromkeys(Path(path) for path in paths))
+        self.paths = unique
+        rendered = ", ".join(str(path) for path in unique)
+        super().__init__(f"output destination conflict: {rendered}")
 
 
 def build_output_plan(
@@ -72,12 +86,14 @@ def _policy_directory(
     target: Mapping[str, object],
     root: Path | None,
     child: str,
+    *,
+    direct_root: bool = False,
 ) -> Path | None:
     override = target.get("directory")
     if override is not None:
         return Path(str(override))
     if root is not None:
-        return root / child
+        return root if direct_root else root / child
     return None
 
 
@@ -87,18 +103,20 @@ def _configured_plan(media: Path, policy: Mapping[str, object]) -> OutputPlan:
         raise ValueError(f"unsupported output mode: {mode!r}")
     txt = policy.get("txt")
     markdown = policy.get("markdown")
-    if not isinstance(txt, Mapping) or not isinstance(markdown, Mapping):
-        raise TypeError("output txt and markdown targets must be mappings")
-    if type(txt.get("enabled")) is not bool or type(markdown.get("enabled")) is not bool:
+    srt = policy.get("srt", {"enabled": False})
+    if not isinstance(txt, Mapping) or not isinstance(markdown, Mapping) or not isinstance(srt, Mapping):
+        raise TypeError("output txt, markdown and srt targets must be mappings")
+    if any(type(target.get("enabled")) is not bool for target in (txt, markdown, srt)):
         raise TypeError("output target enabled flags must be bool")
-    if not txt["enabled"] and not markdown["enabled"]:
+    if not txt["enabled"] and not markdown["enabled"] and not srt["enabled"]:
         raise ValueError("at least one output target must be enabled")
 
     root_value = policy.get("root_directory")
     root = Path(str(root_value)) if root_value is not None else None
     source_txt = media.parent / "Text" / f"{media.stem}.txt"
+    source_md = media.parent / "Markdown" / f"{media.stem}.md"
 
-    txt_directory = _policy_directory(txt, root, "Text")
+    txt_directory = _policy_directory(txt, root, "Text", direct_root=mode == "custom")
     if mode == "compatibility" and txt.get("directory") is None and root is not None:
         # Historical forced-output semantics write TXT directly into the selected
         # directory. Custom mode uses the accepted root/Text layout instead.
@@ -109,7 +127,9 @@ def _configured_plan(media: Path, policy: Mapping[str, object]) -> OutputPlan:
     else:
         primary_txt = None
 
-    markdown_directory = _policy_directory(markdown, root, "Markdown")
+    markdown_directory = _policy_directory(
+        markdown, root, "Markdown", direct_root=mode == "custom"
+    )
     if markdown["enabled"]:
         if markdown_directory is None:
             if mode == "custom":
@@ -119,18 +139,40 @@ def _configured_plan(media: Path, policy: Mapping[str, object]) -> OutputPlan:
     else:
         primary_md = None
 
-    preserve_source = policy.get("preserve_source_txt")
-    if type(preserve_source) is not bool:
+    srt_directory = _policy_directory(srt, root, "SRT", direct_root=mode == "custom")
+    if srt["enabled"]:
+        if srt_directory is None:
+            srt_directory = media.parent / "SRT"
+        primary_srt = srt_directory / f"{media.stem}.srt"
+    else:
+        primary_srt = None
+
+    preserve_source_txt = policy.get("preserve_source_txt")
+    preserve_source_markdown = policy.get("preserve_source_markdown", False)
+    if type(preserve_source_txt) is not bool:
         raise TypeError("preserve_source_txt must be bool")
+    if type(preserve_source_markdown) is not bool:
+        raise TypeError("preserve_source_markdown must be bool")
     backup_txt = (
         source_txt
-        if preserve_source and primary_txt != source_txt
+        if preserve_source_txt
+        and primary_txt is not None
+        and primary_txt != source_txt
+        else None
+    )
+    backup_md = (
+        source_md
+        if preserve_source_markdown
+        and primary_md is not None
+        and primary_md != source_md
         else None
     )
     return OutputPlan(
         primary_txt=primary_txt,
         backup_txt=backup_txt,
         primary_md=primary_md,
+        backup_md=backup_md,
+        primary_srt=primary_srt,
     )
 
 
@@ -146,6 +188,8 @@ def _suffixed_plan(plan: OutputPlan, index: int) -> OutputPlan:
         primary_txt=_suffixed_path(plan.primary_txt, index),
         backup_txt=_suffixed_path(plan.backup_txt, index),
         primary_md=_suffixed_path(plan.primary_md, index),
+        backup_md=_suffixed_path(plan.backup_md, index),
+        primary_srt=_suffixed_path(plan.primary_srt, index),
     )
 
 
@@ -164,19 +208,26 @@ def build_configurable_output_plans(
         str(Path(path).resolve(strict=False)).casefold() for path in reserved_paths
     }
     plans = []
+    conflicts: list[Path] = []
     for value in media_paths:
         base = _configured_plan(Path(value), policy)
         candidate = base
         index = 1
         while True:
             keys = {str(path.resolve(strict=False)).casefold() for path in candidate.content_paths}
+            conflicting_paths = tuple(
+                path
+                for path in candidate.content_paths
+                if path.exists()
+                or str(path.resolve(strict=False)).casefold() in reserved
+            )
             existing = any(path.exists() for path in candidate.content_paths)
             duplicate = bool(keys & reserved)
             if conflict_policy == "overwrite" or (not existing and not duplicate):
                 break
             if conflict_policy == "fail":
-                paths = ", ".join(str(path) for path in candidate.content_paths)
-                raise OutputConflictError(f"output destination conflict: {paths}")
+                conflicts.extend(conflicting_paths)
+                break
             index += 1
             candidate = _suffixed_plan(base, index)
         reserved.update(
@@ -184,6 +235,8 @@ def build_configurable_output_plans(
             for path in candidate.content_paths
         )
         plans.append(candidate)
+    if conflicts:
+        raise OutputConflictError(conflicts)
     return tuple(plans)
 
 
@@ -229,15 +282,31 @@ def atomic_write_text(path: Path | str, content: str) -> Path:
             temporary_path.unlink(missing_ok=True)
 
 
-def _lines_to_text(lines: Iterable[str]) -> str:
-    return "".join(f"{line}\n" for line in lines)
-
-
-def write_primary_outputs(plan: OutputPlan, lines: Iterable[str]) -> None:
-    """Write every configured TXT/Markdown artifact with identical content."""
-    content = _lines_to_text(lines)
-    for path in plan.content_paths:
-        atomic_write_text(path, content)
+def write_primary_outputs(
+    plan: OutputPlan,
+    txt_content: str,
+    *,
+    markdown_content: str | None = None,
+    srt_content: str | None = None,
+) -> None:
+    """Write configured transcript artifacts and an optional SRT artifact."""
+    if not isinstance(txt_content, str):
+        raise TypeError("txt_content must be str")
+    resolved_markdown = txt_content if markdown_content is None else markdown_content
+    if not isinstance(resolved_markdown, str):
+        raise TypeError("markdown_content must be str")
+    for path in (plan.primary_txt, plan.backup_txt):
+        if path is None:
+            continue
+        atomic_write_text(path, txt_content)
+    for path in (plan.primary_md, plan.backup_md):
+        if path is None:
+            continue
+        atomic_write_text(path, resolved_markdown)
+    if plan.primary_srt is not None:
+        if srt_content is None:
+            raise ValueError("SRT output requires timestamped subtitle content")
+        atomic_write_text(plan.primary_srt, srt_content)
 
 
 def copy_utf8_text(source: Path | str, destination: Path | str) -> Path:
@@ -247,9 +316,12 @@ def copy_utf8_text(source: Path | str, destination: Path | str) -> Path:
     return atomic_write_text(destination, content)
 
 
-def write_desktop_outputs(plan: OutputPlan, lines: Iterable[str]) -> None:
-    """Write optional desktop TXT and its content-identical Markdown copy."""
+def write_desktop_outputs(
+    plan: OutputPlan, txt_content: str, *, markdown_content: str | None = None
+) -> None:
+    """Write optional desktop TXT and independently laid out Markdown."""
     if plan.desktop_txt is None or plan.desktop_md is None:
         return
-    atomic_write_text(plan.desktop_txt, _lines_to_text(lines))
-    copy_utf8_text(plan.desktop_txt, plan.desktop_md)
+    resolved_markdown = txt_content if markdown_content is None else markdown_content
+    atomic_write_text(plan.desktop_txt, txt_content)
+    atomic_write_text(plan.desktop_md, resolved_markdown)

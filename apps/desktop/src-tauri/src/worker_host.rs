@@ -9,6 +9,7 @@ use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -19,11 +20,48 @@ pub const HOST_STATUS_EVENT: &str = "desktop://host-status";
 pub const WORKER_LOG_EVENT: &str = "desktop://worker-log";
 
 const START_TIMEOUT: Duration = Duration::from_secs(180);
+const MODEL_LOAD_TIMEOUT: Duration = Duration::from_secs(180);
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(15);
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const LOG_LIMIT: usize = 200;
+pub const DEFAULT_MODEL_ID: &str = "large-v3-turbo";
+pub const SUPPORTED_MODEL_IDS: &[&str] = &[
+    "tiny",
+    "base",
+    "small",
+    "medium",
+    "large-v3",
+    "large-v3-turbo",
+];
+const MODEL_CATALOG: &[(&str, &str, &[&str])] = &[
+    ("tiny", "Tiny", &["models--Systran--faster-whisper-tiny"]),
+    ("base", "Base", &["models--Systran--faster-whisper-base"]),
+    ("small", "Small", &["models--Systran--faster-whisper-small"]),
+    (
+        "medium",
+        "Medium",
+        &["models--Systran--faster-whisper-medium"],
+    ),
+    (
+        "large-v3",
+        "Large V3",
+        &["models--Systran--faster-whisper-large-v3"],
+    ),
+    (
+        "large-v3-turbo",
+        "Large V3 Turbo",
+        &[
+            "models--mobiuslabsgmbh--faster-whisper-large-v3-turbo",
+            "models--Systran--faster-whisper-large-v3-turbo",
+        ],
+    ),
+];
+const SUPPORTED_MEDIA_EXTENSIONS: &[&str] = &[
+    "aac", "avi", "flv", "m4a", "m4v", "mkv", "mov", "mp3", "mp4", "mpeg", "mpg", "ogg", "wav",
+    "webm", "wmv",
+];
 
 pub type EventSink = Arc<dyn Fn(&str, Value) + Send + Sync + 'static>;
 type PendingResult = Result<Value, HostError>;
@@ -52,6 +90,8 @@ impl HostStatus {
 pub struct HostError {
     pub code: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
 }
 
 impl HostError {
@@ -59,7 +99,13 @@ impl HostError {
         Self {
             code: code.into(),
             message: message.into(),
+            data: None,
         }
+    }
+
+    pub fn with_data(mut self, data: Option<Value>) -> Self {
+        self.data = data;
+        self
     }
 }
 
@@ -86,18 +132,51 @@ pub struct BridgeOutputPolicy {
     pub root_directory: Option<String>,
     pub txt_enabled: bool,
     pub markdown_enabled: bool,
+    pub srt_enabled: bool,
     pub preserve_source_txt: bool,
+    #[serde(default)]
+    pub preserve_source_markdown: bool,
     pub conflict_policy: String,
+    pub subtitle: BridgeSubtitleParameters,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BridgeHardwarePreference {
+    pub mode: String,
+    pub gpu_device_index: i64,
+    pub cuda_compute_type: String,
+    pub cpu_compute_type: String,
+    pub cpu_threads: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BridgeSubtitleParameters {
+    pub max_characters_per_line: i64,
+    pub max_lines_per_cue: i64,
+    pub min_cue_duration_ms: i64,
+    pub max_cue_duration_ms: i64,
+    pub max_characters_per_second: f64,
+    pub cue_gap_ms: i64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StartDraft {
     pub request_id: String,
+    #[serde(default = "default_model_id")]
+    pub model_id: String,
     pub inputs: Vec<BridgeInputSource>,
     pub base_preset_id: String,
     pub overrides: Map<String, Value>,
+    #[serde(default)]
+    pub hardware: Option<BridgeHardwarePreference>,
     pub output: BridgeOutputPolicy,
+}
+
+fn default_model_id() -> String {
+    DEFAULT_MODEL_ID.to_owned()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -114,7 +193,19 @@ pub struct InspectedInput {
     pub kind: String,
     pub origin: String,
     pub valid: bool,
+    pub media_count: Option<usize>,
     pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalModelDescriptor {
+    pub id: String,
+    pub label: String,
+    pub installed: bool,
+    pub path: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub detail: String,
 }
 
 #[derive(Debug, Clone)]
@@ -174,6 +265,21 @@ impl WorkerManager {
             .lock()
             .map(|logs| logs.iter().cloned().collect())
             .unwrap_or_default()
+    }
+
+    fn push_log(&self, body: impl AsRef<str>) {
+        let line = format!(
+            "[{}] {}",
+            Local::now().format("%Y-%m-%d %H:%M:%S"),
+            body.as_ref()
+        );
+        if let Ok(mut logs) = self.logs.lock() {
+            logs.push_back(line.clone());
+            while logs.len() > LOG_LIMIT {
+                logs.pop_front();
+            }
+        }
+        (self.sink)(WORKER_LOG_EVENT, json!({"line": line}));
     }
 
     pub fn start(self: &Arc<Self>) -> Result<HostStatus, HostError> {
@@ -276,6 +382,41 @@ impl WorkerManager {
 
     pub fn metrics(&self) -> Result<Value, HostError> {
         self.send_generated_command("system.metrics", json!({}), COMMAND_TIMEOUT)
+    }
+
+    pub fn load_model(
+        &self,
+        model_id: &str,
+        hardware: Option<BridgeHardwarePreference>,
+    ) -> Result<Value, HostError> {
+        if !SUPPORTED_MODEL_IDS.contains(&model_id) {
+            return Err(HostError::new("request.invalid", "model_id is unsupported"));
+        }
+        if let Some(value) = hardware.as_ref() {
+            validate_hardware_preference(value)?;
+        }
+        let mut params = json!({"model_id": model_id});
+        if let Some(value) = hardware {
+            params["hardware"] = hardware_to_protocol(value);
+        }
+        self.send_generated_command("model.load", params, MODEL_LOAD_TIMEOUT)
+    }
+
+    pub fn model_root(&self) -> PathBuf {
+        if let Ok(current_exe) = env::current_exe()
+            && let Some(directory) = current_exe.parent()
+            && directory
+                .join("worker")
+                .join("whisper-subtitle-worker.exe")
+                .is_file()
+        {
+            return directory.join("models");
+        }
+        self.repository_root.join("models").join("huggingface")
+    }
+
+    pub fn local_models(&self) -> Vec<LocalModelDescriptor> {
+        inspect_local_models(&self.model_root())
     }
 
     pub fn start_transcription(&self, draft: StartDraft) -> Result<StartResult, HostError> {
@@ -489,6 +630,7 @@ impl WorkerManager {
     }
 
     fn python_launch(&self, program: PathBuf, kind: &str) -> WorkerLaunch {
+        let model_root = self.repository_root.join("models").join("huggingface");
         WorkerLaunch {
             program,
             arguments: vec![
@@ -497,7 +639,10 @@ impl WorkerManager {
                 "worker".to_owned(),
             ],
             working_directory: self.repository_root.clone(),
-            environment: Vec::new(),
+            environment: vec![(
+                OsString::from("WHISPER_SUBTITLE_MODEL_DIR"),
+                model_root.into_os_string(),
+            )],
             kind: kind.to_owned(),
         }
     }
@@ -580,19 +725,10 @@ impl WorkerManager {
             }
             match line {
                 Ok(value) => {
-                    if let Ok(mut logs) = self.logs.lock() {
-                        logs.push_back(value.clone());
-                        while logs.len() > LOG_LIMIT {
-                            logs.pop_front();
-                        }
-                    }
-                    (self.sink)(WORKER_LOG_EVENT, json!({"line": value}));
+                    self.push_log(format!("[STDERR] {value}"));
                 }
                 Err(error) => {
-                    (self.sink)(
-                        WORKER_LOG_EVENT,
-                        json!({"line": format!("stderr read error: {error}")}),
-                    );
+                    self.push_log(format!("[STDERR] read error: {error}"));
                     return;
                 }
             }
@@ -645,6 +781,9 @@ impl WorkerManager {
         if completion || is_error {
             self.resolve_pending(&message, is_error);
         }
+        if let Some(summary) = worker_log_summary(&message) {
+            self.push_log(summary);
+        }
         (self.sink)(WORKER_MESSAGE_EVENT, message);
     }
 
@@ -668,7 +807,8 @@ impl WorkerManager {
                         .get("message")
                         .and_then(Value::as_str)
                         .unwrap_or("Python Worker rejected the command"),
-                ))
+                )
+                .with_data(message.get("data").cloned()))
             } else {
                 Ok(message.clone())
             };
@@ -746,18 +886,220 @@ impl WorkerManager {
 }
 
 fn packaged_worker_environment(directory: &Path) -> Vec<(OsString, OsString)> {
-    let mut environment = vec![(
-        OsString::from("WHISPER_SUBTITLE_HOME"),
-        directory.as_os_str().to_owned(),
-    )];
-    let model = directory.join("models").join("large-v3-turbo");
-    if model.join("config.json").is_file() && model.join("model.bin").is_file() {
-        environment.push((
+    vec![
+        (
+            OsString::from("WHISPER_SUBTITLE_HOME"),
+            directory.as_os_str().to_owned(),
+        ),
+        (
             OsString::from("WHISPER_SUBTITLE_MODEL_DIR"),
-            model.into_os_string(),
-        ));
+            directory.join("models").into_os_string(),
+        ),
+    ]
+}
+
+fn complete_model_directory(path: &Path) -> bool {
+    path.join("config.json").is_file() && path.join("model.bin").is_file()
+}
+
+fn find_local_model(root: &Path, model_id: &str, repositories: &[&str]) -> Option<PathBuf> {
+    let managed = root.join(model_id);
+    if complete_model_directory(&managed) {
+        return Some(managed);
     }
-    environment
+    repositories.iter().find_map(|repository| {
+        let snapshots = root.join("hub").join(repository).join("snapshots");
+        let mut candidates: Vec<_> = std::fs::read_dir(snapshots)
+            .ok()?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| complete_model_directory(path))
+            .collect();
+        candidates.sort();
+        candidates.pop()
+    })
+}
+
+fn directory_size(path: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .filter_map(Result::ok)
+        .map(|entry| {
+            let path = entry.path();
+            match entry.metadata() {
+                Ok(metadata) if metadata.is_file() => metadata.len(),
+                Ok(metadata) if metadata.is_dir() => directory_size(&path),
+                _ => 0,
+            }
+        })
+        .sum()
+}
+
+pub fn inspect_local_models(root: &Path) -> Vec<LocalModelDescriptor> {
+    MODEL_CATALOG
+        .iter()
+        .map(|(id, label, repositories)| {
+            let path = find_local_model(root, id, repositories);
+            LocalModelDescriptor {
+                id: (*id).to_owned(),
+                label: (*label).to_owned(),
+                installed: path.is_some(),
+                size_bytes: path.as_deref().map(directory_size),
+                path: path
+                    .as_ref()
+                    .map(|value| value.to_string_lossy().into_owned()),
+                detail: path
+                    .is_some()
+                    .then_some("本地模型完整，可离线加载".to_owned())
+                    .unwrap_or_else(|| format!("请放入 models\\{id}")),
+            }
+        })
+        .collect()
+}
+
+fn worker_log_summary(message: &Value) -> Option<String> {
+    if message.get("type").and_then(Value::as_str) == Some("error") {
+        let code = message
+            .get("code")
+            .and_then(Value::as_str)
+            .unwrap_or("worker.error");
+        let detail = message
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("Worker command failed");
+        return Some(format!("[ERROR] {code} · {detail}"));
+    }
+
+    let event = event_code(message)?;
+    let data = message.get("data")?;
+    let task = message
+        .get("task_id")
+        .and_then(Value::as_str)
+        .map(short_task_id);
+    let envelope_message = message.get("message").and_then(Value::as_str);
+    match event {
+        "worker.ready" => Some(format!(
+            "[WORKER] ready · PID {}",
+            data.get("pid").and_then(Value::as_u64).unwrap_or_default()
+        )),
+        "model.loading" => Some(format!(
+            "[MODEL] loading · {}",
+            data.get("model_id")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+        )),
+        "model.ready" => Some(format!(
+            "[MODEL] ready · {} · {} / {}",
+            data.get("model_id")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown"),
+            data.get("device")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown"),
+            data.get("compute_type")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+        )),
+        "task.queued" => Some(format!(
+            "[TASK {}] queued · {} 个媒体 · {}",
+            task.unwrap_or("unknown"),
+            data.get("input_count")
+                .and_then(Value::as_u64)
+                .unwrap_or_default(),
+            data.get("model_id")
+                .and_then(Value::as_str)
+                .unwrap_or(DEFAULT_MODEL_ID)
+        )),
+        "task.progress" => {
+            let stage = data
+                .get("stage")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            let current = data
+                .get("current")
+                .and_then(Value::as_u64)
+                .unwrap_or_default();
+            let total = data
+                .get("total")
+                .and_then(Value::as_u64)
+                .unwrap_or_default();
+            let input = data
+                .get("input_path")
+                .and_then(Value::as_str)
+                .and_then(|value| Path::new(value).file_name())
+                .and_then(|value| value.to_str())
+                .map(|value| format!(" · {value}"))
+                .unwrap_or_default();
+            let detail = envelope_message
+                .map(|value| format!(" · {value}"))
+                .unwrap_or_default();
+            Some(format!(
+                "[TASK {}] progress · {stage} · {current}/{total}{input}{detail}",
+                task.unwrap_or("unknown")
+            ))
+        }
+        "task.completed" => Some(format!(
+            "[TASK {}] completed · 成功 {} / 失败 {} · {} 个输出",
+            task.unwrap_or("unknown"),
+            data.get("success_count")
+                .and_then(Value::as_u64)
+                .unwrap_or_default(),
+            data.get("failure_count")
+                .and_then(Value::as_u64)
+                .unwrap_or_default(),
+            data.get("outputs")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len)
+        )),
+        "task.failed" => Some(format!(
+            "[TASK {}] failed · {} · {}",
+            task.unwrap_or("unknown"),
+            data.get("error_code")
+                .and_then(Value::as_str)
+                .unwrap_or("transcription.failed"),
+            envelope_message.unwrap_or("Worker task failed")
+        )),
+        "task.cancelled" => Some(format!(
+            "[TASK {}] cancelled · {}",
+            task.unwrap_or("unknown"),
+            data.get("reason")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+        )),
+        "command.completed" => None,
+        _ => None,
+    }
+}
+
+fn short_task_id(value: &str) -> &str {
+    value.get(value.len().saturating_sub(8)..).unwrap_or(value)
+}
+
+fn is_supported_media(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| {
+            SUPPORTED_MEDIA_EXTENSIONS.contains(&value.to_ascii_lowercase().as_str())
+        })
+}
+
+fn count_supported_media(path: &Path) -> Result<usize, std::io::Error> {
+    if path.is_file() {
+        return Ok(usize::from(is_supported_media(path)));
+    }
+    let mut count = 0;
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            count += count_supported_media(&entry.path())?;
+        } else if file_type.is_file() && is_supported_media(&entry.path()) {
+            count += 1;
+        }
+    }
+    Ok(count)
 }
 
 pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedInput> {
@@ -771,23 +1113,54 @@ pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedI
         .map(|raw| {
             let path = strip_one_pair_of_quotes(raw.trim());
             match std::fs::metadata(path) {
-                Ok(metadata) => InspectedInput {
-                    path: path.to_owned(),
-                    kind: if metadata.is_dir() {
+                Ok(metadata) if metadata.is_dir() || metadata.is_file() => {
+                    let kind = if metadata.is_dir() {
                         "directory"
                     } else {
                         "file"
+                    };
+                    match count_supported_media(Path::new(path)) {
+                        Ok(media_count) if media_count > 0 => InspectedInput {
+                            path: path.to_owned(),
+                            kind: kind.to_owned(),
+                            origin: normalized_origin.clone(),
+                            valid: true,
+                            media_count: Some(media_count),
+                            detail: (kind == "directory")
+                                .then(|| format!("递归发现 {media_count} 个媒体文件")),
+                        },
+                        Ok(_) => InspectedInput {
+                            path: path.to_owned(),
+                            kind: kind.to_owned(),
+                            origin: normalized_origin.clone(),
+                            valid: false,
+                            media_count: Some(0),
+                            detail: Some("未发现支持的媒体文件".to_owned()),
+                        },
+                        Err(error) => InspectedInput {
+                            path: path.to_owned(),
+                            kind: kind.to_owned(),
+                            origin: normalized_origin.clone(),
+                            valid: false,
+                            media_count: None,
+                            detail: Some(format!("无法读取媒体目录: {error}")),
+                        },
                     }
-                    .to_owned(),
+                }
+                Ok(_) => InspectedInput {
+                    path: path.to_owned(),
+                    kind: "file".to_owned(),
                     origin: normalized_origin.clone(),
-                    valid: metadata.is_dir() || metadata.is_file(),
-                    detail: None,
+                    valid: false,
+                    media_count: None,
+                    detail: Some("输入不是文件或目录".to_owned()),
                 },
                 Err(error) => InspectedInput {
                     path: path.to_owned(),
                     kind: "file".to_owned(),
                     origin: normalized_origin.clone(),
                     valid: false,
+                    media_count: None,
                     detail: Some(error.to_string()),
                 },
             }
@@ -812,6 +1185,9 @@ fn validate_start_draft(draft: &StartDraft) -> Result<(), HostError> {
             "at least one input is required",
         ));
     }
+    if !SUPPORTED_MODEL_IDS.contains(&draft.model_id.as_str()) {
+        return Err(HostError::new("request.invalid", "model_id is unsupported"));
+    }
     for input in &draft.inputs {
         if input.path.trim().is_empty()
             || !matches!(input.kind.as_str(), "file" | "directory")
@@ -830,14 +1206,35 @@ fn validate_start_draft(draft: &StartDraft) -> Result<(), HostError> {
         return Err(HostError::new("request.invalid", "base preset is invalid"));
     }
     validate_overrides(&draft.overrides)?;
+    if let Some(hardware) = draft.hardware.as_ref() {
+        validate_hardware_preference(hardware)?;
+    }
     let output = &draft.output;
     if !matches!(output.mode.as_str(), "compatibility" | "custom")
-        || !matches!(output.conflict_policy.as_str(), "fail" | "auto_rename")
-        || (!output.txt_enabled && !output.markdown_enabled)
+        || !matches!(
+            output.conflict_policy.as_str(),
+            "fail" | "overwrite" | "auto_rename"
+        )
+        || (!output.txt_enabled && !output.markdown_enabled && !output.srt_enabled)
     {
         return Err(HostError::new(
             "request.invalid",
             "output policy is invalid",
+        ));
+    }
+    let subtitle = &output.subtitle;
+    if !(8..=84).contains(&subtitle.max_characters_per_line)
+        || !(1..=3).contains(&subtitle.max_lines_per_cue)
+        || !(250..=5000).contains(&subtitle.min_cue_duration_ms)
+        || !(1000..=15000).contains(&subtitle.max_cue_duration_ms)
+        || subtitle.min_cue_duration_ms > subtitle.max_cue_duration_ms
+        || !subtitle.max_characters_per_second.is_finite()
+        || !(5.0..=40.0).contains(&subtitle.max_characters_per_second)
+        || !(0..=1000).contains(&subtitle.cue_gap_ms)
+    {
+        return Err(HostError::new(
+            "request.invalid",
+            "subtitle parameters are invalid",
         ));
     }
     if output.mode == "custom"
@@ -885,8 +1282,38 @@ fn number_in_range(value: &Value, minimum: f64, maximum: f64) -> bool {
         .is_some_and(|item| item.is_finite() && (minimum..=maximum).contains(&item))
 }
 
-fn draft_to_protocol_params(draft: StartDraft) -> Value {
+fn validate_hardware_preference(hardware: &BridgeHardwarePreference) -> Result<(), HostError> {
+    if !matches!(hardware.mode.as_str(), "auto" | "cuda" | "cpu")
+        || !(0..=31).contains(&hardware.gpu_device_index)
+        || !matches!(
+            hardware.cuda_compute_type.as_str(),
+            "float16" | "int8_float16" | "float32"
+        )
+        || !matches!(hardware.cpu_compute_type.as_str(), "int8" | "float32")
+        || !(1..=256).contains(&hardware.cpu_threads)
+    {
+        return Err(HostError::new(
+            "request.invalid",
+            "hardware preference is invalid",
+        ));
+    }
+    Ok(())
+}
+
+fn hardware_to_protocol(hardware: BridgeHardwarePreference) -> Value {
     json!({
+        "mode": hardware.mode,
+        "gpu_device_index": hardware.gpu_device_index,
+        "cuda_compute_type": hardware.cuda_compute_type,
+        "cpu_compute_type": hardware.cpu_compute_type,
+        "cpu_threads": hardware.cpu_threads,
+    })
+}
+
+fn draft_to_protocol_params(draft: StartDraft) -> Value {
+    let hardware = draft.hardware;
+    let mut params = json!({
+        "model_id": draft.model_id,
         "inputs": draft.inputs,
         "profile": {
             "base_preset_id": draft.base_preset_id,
@@ -897,30 +1324,58 @@ fn draft_to_protocol_params(draft: StartDraft) -> Value {
             "root_directory": draft.output.root_directory,
             "txt": {"enabled": draft.output.txt_enabled, "directory": null},
             "markdown": {"enabled": draft.output.markdown_enabled, "directory": null},
+            "srt": {"enabled": draft.output.srt_enabled, "directory": null},
+            "subtitle": {
+                "max_characters_per_line": draft.output.subtitle.max_characters_per_line,
+                "max_lines_per_cue": draft.output.subtitle.max_lines_per_cue,
+                "min_cue_duration_ms": draft.output.subtitle.min_cue_duration_ms,
+                "max_cue_duration_ms": draft.output.subtitle.max_cue_duration_ms,
+                "max_characters_per_second": draft.output.subtitle.max_characters_per_second,
+                "cue_gap_ms": draft.output.subtitle.cue_gap_ms,
+            },
             "preserve_source_txt": draft.output.preserve_source_txt,
+            "preserve_source_markdown": draft.output.preserve_source_markdown,
             "conflict_policy": draft.output.conflict_policy,
         }
-    })
+    });
+    if let Some(value) = hardware {
+        params["hardware"] = hardware_to_protocol(value);
+    }
+    params
 }
 
 #[cfg(test)]
 mod tests {
     use std::env;
+    use std::fs;
     use std::path::PathBuf;
     use std::sync::{Arc, mpsc};
-    use std::time::{Duration, Instant};
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
     use serde_json::{Map, Value, json};
 
     use super::{
-        BridgeInputSource, BridgeOutputPolicy, StartDraft, WORKER_MESSAGE_EVENT, WorkerManager,
-        draft_to_protocol_params, inspect_input_paths, strip_one_pair_of_quotes,
-        validate_start_draft,
+        BridgeHardwarePreference, BridgeInputSource, BridgeOutputPolicy, BridgeSubtitleParameters,
+        StartDraft, WORKER_MESSAGE_EVENT, WorkerManager, draft_to_protocol_params,
+        inspect_input_paths, inspect_local_models, strip_one_pair_of_quotes, validate_start_draft,
+        worker_log_summary,
     };
+
+    fn subtitle_parameters() -> BridgeSubtitleParameters {
+        BridgeSubtitleParameters {
+            max_characters_per_line: 42,
+            max_lines_per_cue: 2,
+            min_cue_duration_ms: 800,
+            max_cue_duration_ms: 7000,
+            max_characters_per_second: 20.0,
+            cue_gap_ms: 80,
+        }
+    }
 
     fn valid_draft() -> StartDraft {
         StartDraft {
             request_id: "desktop-1".to_owned(),
+            model_id: "large-v3-turbo".to_owned(),
             inputs: vec![BridgeInputSource {
                 path: r"C:\Media\lesson.mp4".to_owned(),
                 kind: "file".to_owned(),
@@ -928,13 +1383,17 @@ mod tests {
             }],
             base_preset_id: "en_v1".to_owned(),
             overrides: Map::new(),
+            hardware: None,
             output: BridgeOutputPolicy {
                 mode: "compatibility".to_owned(),
                 root_directory: None,
                 txt_enabled: true,
                 markdown_enabled: false,
+                srt_enabled: false,
                 preserve_source_txt: true,
+                preserve_source_markdown: false,
                 conflict_policy: "fail".to_owned(),
+                subtitle: subtitle_parameters(),
             },
         }
     }
@@ -943,9 +1402,68 @@ mod tests {
     fn converts_bridge_draft_to_exact_worker_shape() {
         let params = draft_to_protocol_params(valid_draft());
         assert_eq!(params["profile"]["base_preset_id"], json!("en_v1"));
+        assert_eq!(params["model_id"], json!("large-v3-turbo"));
         assert_eq!(params["output"]["txt"]["enabled"], json!(true));
         assert_eq!(params["output"]["root_directory"], Value::Null);
+        assert_eq!(params["output"]["preserve_source_markdown"], json!(false));
         assert!(params.get("effectiveParameters").is_none());
+    }
+
+    #[test]
+    fn freezes_validated_hardware_and_overwrite_policy_in_worker_request() {
+        let mut draft = valid_draft();
+        draft.hardware = Some(BridgeHardwarePreference {
+            mode: "cuda".to_owned(),
+            gpu_device_index: 1,
+            cuda_compute_type: "int8_float16".to_owned(),
+            cpu_compute_type: "int8".to_owned(),
+            cpu_threads: 4,
+        });
+        draft.output.conflict_policy = "overwrite".to_owned();
+
+        validate_start_draft(&draft).expect("valid hardware draft");
+        let params = draft_to_protocol_params(draft);
+
+        assert_eq!(params["hardware"]["mode"], json!("cuda"));
+        assert_eq!(params["hardware"]["gpu_device_index"], json!(1));
+        assert_eq!(
+            params["hardware"]["cuda_compute_type"],
+            json!("int8_float16")
+        );
+        assert_eq!(params["output"]["conflict_policy"], json!("overwrite"));
+    }
+
+    #[test]
+    fn rejects_hardware_values_outside_the_host_whitelist() {
+        let mut draft = valid_draft();
+        draft.hardware = Some(BridgeHardwarePreference {
+            mode: "cuda".to_owned(),
+            gpu_device_index: 0,
+            cuda_compute_type: "int8".to_owned(),
+            cpu_compute_type: "int8".to_owned(),
+            cpu_threads: 4,
+        });
+
+        assert!(validate_start_draft(&draft).is_err());
+    }
+
+    #[test]
+    fn deserializes_subtitle_bridge_fields_only_in_camel_case() {
+        let camel_case = serde_json::to_value(valid_draft()).expect("serialize valid bridge draft");
+        let subtitle = &camel_case["output"]["subtitle"];
+        assert_eq!(subtitle["maxCharactersPerLine"], json!(42));
+        assert_eq!(subtitle["cueGapMs"], json!(80));
+        assert!(subtitle.get("max_characters_per_line").is_none());
+        assert!(subtitle.get("cue_gap_ms").is_none());
+        serde_json::from_value::<StartDraft>(camel_case).expect("deserialize camelCase draft");
+
+        let mut snake_case = serde_json::to_value(valid_draft()).expect("serialize bridge draft");
+        let subtitle = snake_case["output"]["subtitle"]
+            .as_object_mut()
+            .expect("subtitle object");
+        let cue_gap = subtitle.remove("cueGapMs").expect("camelCase cue gap");
+        subtitle.insert("cue_gap_ms".to_owned(), cue_gap);
+        assert!(serde_json::from_value::<StartDraft>(snake_case).is_err());
     }
 
     #[test]
@@ -978,6 +1496,134 @@ mod tests {
         assert_eq!(inspected.len(), 1);
         assert!(!inspected[0].valid);
         assert_eq!(inspected[0].origin, "drop");
+    }
+
+    #[test]
+    fn recursively_counts_only_supported_media() {
+        let root = env::temp_dir().join(format!(
+            "whisper-subtitle-inspect-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock")
+                .as_nanos()
+        ));
+        let nested = root.join("nested");
+        fs::create_dir_all(&nested).expect("nested fixture directory");
+        fs::write(root.join("one.mp4"), b"fixture").expect("media fixture");
+        fs::write(nested.join("two.WAV"), b"fixture").expect("nested media fixture");
+        fs::write(nested.join("ignore.txt"), b"fixture").expect("non-media fixture");
+
+        let inspected = inspect_input_paths(
+            vec![root.to_string_lossy().into_owned()],
+            "dialog".to_owned(),
+        );
+        assert!(inspected[0].valid);
+        assert_eq!(inspected[0].kind, "directory");
+        assert_eq!(inspected[0].media_count, Some(2));
+        assert_eq!(
+            inspected[0].detail.as_deref(),
+            Some("递归发现 2 个媒体文件")
+        );
+
+        fs::remove_dir_all(root).expect("remove temporary fixture");
+    }
+
+    #[test]
+    fn discovers_exact_managed_and_hugging_face_models() {
+        let root = env::temp_dir().join(format!(
+            "whisper-subtitle-models-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock")
+                .as_nanos()
+        ));
+        let turbo = root.join("large-v3-turbo");
+        let medium = root
+            .join("hub")
+            .join("models--Systran--faster-whisper-medium")
+            .join("snapshots")
+            .join("revision");
+        let legacy_turbo = root
+            .join("hub")
+            .join("models--Systran--faster-whisper-large-v3-turbo")
+            .join("snapshots")
+            .join("legacy-revision");
+        fs::create_dir_all(&turbo).expect("turbo model directory");
+        fs::create_dir_all(&medium).expect("medium snapshot directory");
+        fs::create_dir_all(&legacy_turbo).expect("legacy turbo snapshot directory");
+        for directory in [&turbo, &medium, &legacy_turbo] {
+            fs::write(directory.join("config.json"), b"{}").expect("model config");
+            fs::write(directory.join("model.bin"), b"model").expect("model binary");
+        }
+
+        let models = inspect_local_models(&root);
+        assert_eq!(models.len(), 6);
+        assert!(
+            models
+                .iter()
+                .find(|item| item.id == "medium")
+                .unwrap()
+                .installed
+        );
+        fs::remove_dir_all(&turbo).expect("remove managed turbo model");
+        let models = inspect_local_models(&root);
+        assert!(
+            models
+                .iter()
+                .find(|item| item.id == "large-v3-turbo")
+                .unwrap()
+                .path
+                .as_deref()
+                .is_some_and(|path| path.contains("models--Systran--faster-whisper-large-v3-turbo"))
+        );
+        assert!(
+            models
+                .iter()
+                .find(|item| item.id == "large-v3-turbo")
+                .unwrap()
+                .installed
+        );
+        assert!(
+            !models
+                .iter()
+                .find(|item| item.id == "large-v3")
+                .unwrap()
+                .installed
+        );
+
+        fs::remove_dir_all(root).expect("remove model fixture");
+    }
+
+    #[test]
+    fn formats_task_lifecycle_but_ignores_command_completions() {
+        let progress = json!({
+            "schema_version": 1,
+            "type": "event",
+            "event": "task.progress",
+            "task_id": "task-12345678",
+            "message": "正在转录",
+            "data": {
+                "stage": "transcription.running",
+                "current": 2,
+                "total": 8,
+                "input_path": r"C:\Media\lesson.mp4"
+            }
+        });
+        let summary = worker_log_summary(&progress).expect("task progress log");
+        assert!(summary.contains("[TASK 12345678] progress"));
+        assert!(summary.contains("2/8"));
+        assert!(summary.contains("lesson.mp4"));
+
+        let completion = json!({
+            "schema_version": 1,
+            "type": "event",
+            "event": "command.completed",
+            "request_id": "desktop-1",
+            "data": {"method": "system.metrics", "result": {}}
+        });
+        assert_eq!(worker_log_summary(&completion), None);
     }
 
     #[test]
@@ -1024,9 +1670,17 @@ mod tests {
         assert!(result["memory_percent"].is_number());
         assert!(result["gpu_percent"].is_number());
         assert!(result["vram_total_gib"].is_number());
+        assert!(result["cpu_name"].is_string());
+        assert!(result["cpu_logical_cores"].is_number());
+        assert!(result["memory_available_gib"].is_number());
+        assert!(result["worker_rss_gib"].is_number());
+        assert!(result["gpu_temperature_c"].is_number());
+        assert!(result["gpu_power_watts"].is_number());
+        assert!(result["gpu_driver_version"].is_string());
 
         let draft = StartDraft {
             request_id: "batch4-real-gpu".to_owned(),
+            model_id: "large-v3-turbo".to_owned(),
             inputs: vec![BridgeInputSource {
                 path: fixture.to_string_lossy().into_owned(),
                 kind: "file".to_owned(),
@@ -1034,13 +1688,17 @@ mod tests {
             }],
             base_preset_id: preset_id,
             overrides: Map::new(),
+            hardware: None,
             output: BridgeOutputPolicy {
                 mode: "custom".to_owned(),
                 root_directory: Some(output_root.to_string_lossy().into_owned()),
                 txt_enabled: true,
                 markdown_enabled: true,
+                srt_enabled: false,
                 preserve_source_txt: false,
+                preserve_source_markdown: false,
                 conflict_policy: "auto_rename".to_owned(),
+                subtitle: subtitle_parameters(),
             },
         };
         let started = manager

@@ -1,23 +1,31 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { desktopDir, join } from '@tauri-apps/api/path';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { open } from '@tauri-apps/plugin-dialog';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { open, save } from '@tauri-apps/plugin-dialog';
 
 import type {
   DesktopBridge,
   DesktopEvent,
   EditableParameters,
   HostStatus,
+  HardwarePreference,
   InputOrigin,
   InputSource,
+  LocalModelDescriptor,
+  ModelId,
   ModelStatus,
   OutputPolicy,
+  OutputPathStatus,
   OutputPreview,
   TaskSnapshot,
   TranscriptionDraft,
   Unlisten,
   WorkerEnvironment,
 } from '../contracts/desktop';
+import { MODEL_IDS } from '../contracts/desktop';
+import { PERFORMANCE_POLL_INTERVAL_MS } from '../state/performanceWindow';
 
 const MEDIA_EXTENSIONS = [
   'mp4',
@@ -36,12 +44,14 @@ const MEDIA_EXTENSIONS = [
   'aac',
   'ogg',
 ];
+const MODEL_HEALTH_POLL_INTERVAL_MS = 5000;
 
 interface InspectedInput {
   path: string;
   kind: 'file' | 'directory';
   origin: InputOrigin;
   valid: boolean;
+  mediaCount: number | null;
   detail: string | null;
 }
 
@@ -103,9 +113,18 @@ export class TauriDesktopBridge implements DesktopBridge {
   private readonly taskStartedAt = new Map<string, number>();
   private nativeSetup: Promise<void> | undefined;
   private performanceTimer: ReturnType<typeof setInterval> | undefined;
+  private modelHealthTimer: ReturnType<typeof setInterval> | undefined;
   private performancePolling = false;
   private inputSequence = 1;
   private lastReadyPid: number | null = null;
+  private lastModelStatus: ModelStatus = {
+    state: 'unloaded',
+    modelId: null,
+    device: null,
+    computeType: null,
+    deviceIndex: null,
+    cpuThreads: null,
+  };
 
   async selectFiles(): Promise<InputSource[]> {
     await this.ensureNativeListeners();
@@ -143,9 +162,15 @@ export class TauriDesktopBridge implements DesktopBridge {
     const inspected = await invoke<InspectedInput[]>('inspect_inputs', { paths, origin });
     return inspected.map((item) => ({
       ...item,
+      mediaCount: item.mediaCount ?? undefined,
       detail: item.detail ?? undefined,
       id: `native-source-${this.inputSequence++}`,
     }));
+  }
+
+  async inspectOutputPaths(paths: string[]): Promise<OutputPathStatus[]> {
+    if (paths.length === 0) return [];
+    return invoke<OutputPathStatus[]>('inspect_output_paths', { paths });
   }
 
   async revealOutput(path: string): Promise<void> {
@@ -154,6 +179,31 @@ export class TauriDesktopBridge implements DesktopBridge {
 
   async readOutputPreview(path: string): Promise<OutputPreview> {
     return invoke<OutputPreview>('read_output_preview', { path });
+  }
+
+  async copyWorkerLogs(content: string): Promise<void> {
+    await writeText(content);
+  }
+
+  async exportWorkerLogs(content: string): Promise<string | null> {
+    const now = new Date();
+    const stamp = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+      '-',
+      String(now.getHours()).padStart(2, '0'),
+      String(now.getMinutes()).padStart(2, '0'),
+      String(now.getSeconds()).padStart(2, '0'),
+    ].join('');
+    const defaultPath = await join(await desktopDir(), `WhisperSubtitle-WorkerLog-${stamp}.txt`);
+    const selected = await save({
+      title: '导出 Worker 日志',
+      defaultPath,
+      filters: [{ name: 'UTF-8 文本文档', extensions: ['txt'] }],
+    });
+    if (selected === null) return null;
+    return invoke<string>('write_worker_log_export', { path: selected, content });
   }
 
   async getHostStatus(): Promise<HostStatus> {
@@ -168,7 +218,25 @@ export class TauriDesktopBridge implements DesktopBridge {
     return status;
   }
 
-  async startTranscription(draft: TranscriptionDraft): Promise<{ taskId: string }> {
+  async listLocalModels(): Promise<LocalModelDescriptor[]> {
+    await this.ensureNativeListeners();
+    return invoke<LocalModelDescriptor[]>('list_local_models');
+  }
+
+  async openModelDirectory(): Promise<string> {
+    await this.ensureNativeListeners();
+    return invoke<string>('open_model_directory');
+  }
+
+  async loadModel(modelId: ModelId, hardware?: HardwarePreference): Promise<void> {
+    await this.ensureNativeListeners();
+    await invoke('load_model', { modelId, hardware: toHostHardware(hardware) });
+  }
+
+  async startTranscription(
+    draft: TranscriptionDraft,
+    options: { allowOverwrite?: boolean } = {},
+  ): Promise<{ taskId: string }> {
     await this.ensureNativeListeners();
     const requestId = createRequestId();
     this.pendingTasks.set(requestId, createTaskMetadata(draft));
@@ -176,16 +244,30 @@ export class TauriDesktopBridge implements DesktopBridge {
       const result = await invoke<HostStartResult>('start_transcription', {
         draft: {
           requestId,
+          modelId: draft.modelId,
           inputs: draft.inputs.map(({ path, kind, origin }) => ({ path, kind, origin })),
           basePresetId: draft.basePresetId,
           overrides: draft.overrides,
-          output: toHostOutput(draft.output),
+          hardware: toHostHardware(draft.hardware),
+          output: toHostOutput(
+            draft.output,
+            draft.subtitleParameters,
+            options.allowOverwrite === true,
+          ),
         },
       });
       return { taskId: result.taskId };
     } catch (error) {
       this.pendingTasks.delete(requestId);
-      throw normalizeInvokeError(error);
+      const normalized = normalizeInvokeError(error);
+      const paths = outputConflictPaths(normalized.data);
+      if (normalized.code === 'output.failed' && paths !== null) {
+        throw Object.assign(new Error('检测到同名输出文件。'), {
+          code: 'output.conflict',
+          paths,
+        });
+      }
+      throw normalized;
     }
   }
 
@@ -209,7 +291,9 @@ export class TauriDesktopBridge implements DesktopBridge {
     this.pendingTasks.clear();
     this.taskStartedAt.clear();
     if (this.performanceTimer !== undefined) clearInterval(this.performanceTimer);
+    if (this.modelHealthTimer !== undefined) clearInterval(this.modelHealthTimer);
     this.performanceTimer = undefined;
+    this.modelHealthTimer = undefined;
     this.nativeSetup = undefined;
   }
 
@@ -246,8 +330,20 @@ export class TauriDesktopBridge implements DesktopBridge {
     );
     const status = await invoke<HostStatus>('get_host_status');
     this.handleHostStatus(status);
+    const existingLogs = await invoke<string[]>('get_worker_logs');
+    if (Array.isArray(existingLogs)) {
+      existingLogs.forEach((line) => this.emit({ type: 'worker.log', line }));
+    }
     await this.refreshPerformance();
-    this.performanceTimer = setInterval(() => void this.refreshPerformance(), 2000);
+    await this.refreshModelHealth();
+    this.performanceTimer = setInterval(
+      () => void this.refreshPerformance(),
+      PERFORMANCE_POLL_INTERVAL_MS,
+    );
+    this.modelHealthTimer = setInterval(
+      () => void this.refreshModelHealth(),
+      MODEL_HEALTH_POLL_INTERVAL_MS,
+    );
   }
 
   private handleHostStatus(status: HostStatus): void {
@@ -257,6 +353,16 @@ export class TauriDesktopBridge implements DesktopBridge {
       void this.refreshEnvironment();
     }
     if (status.state !== 'ready') this.lastReadyPid = null;
+    if (status.state !== 'ready' && this.lastModelStatus.state !== 'unloaded') {
+      this.emitModelStatus({
+        state: 'unloaded',
+        modelId: null,
+        device: null,
+        computeType: null,
+        deviceIndex: null,
+        cpuThreads: null,
+      });
+    }
   }
 
   private async refreshEnvironment(): Promise<void> {
@@ -264,7 +370,13 @@ export class TauriDesktopBridge implements DesktopBridge {
       const envelope = await invoke<WorkerEnvelope>('worker_environment');
       const result = envelope.data.result;
       if (isWorkerEnvironment(result)) {
-        this.emit({ type: 'worker.environment', environment: result });
+        this.emit({
+          type: 'worker.environment',
+          environment: {
+            ...result,
+            hardware: readHardwareCapabilities(result.hardware),
+          },
+        });
       }
     } catch (error) {
       const normalized = normalizeInvokeError(error);
@@ -291,7 +403,28 @@ export class TauriDesktopBridge implements DesktopBridge {
             speed: null,
             memoryUsed: result.memory_used_gib,
             memoryTotal: result.memory_total_gib,
+            memoryAvailable: result.memory_available_gib ?? null,
+            swapUsed: result.swap_used_gib ?? null,
+            swapTotal: result.swap_total_gib ?? null,
+            workerRss: result.worker_rss_gib ?? null,
+            workerThreadCount: result.worker_thread_count ?? null,
+            workerHandleCount: result.worker_handle_count ?? null,
+            cpuName: result.cpu_name ?? null,
+            cpuFrequencyMhz: result.cpu_frequency_mhz ?? null,
+            cpuPhysicalCores: result.cpu_physical_cores ?? null,
+            cpuLogicalCores: result.cpu_logical_cores ?? null,
+            systemProcessCount: result.system_process_count ?? null,
+            systemUptimeSeconds: result.system_uptime_seconds ?? null,
             gpuName: result.gpu_name,
+            gpuMemoryController: result.gpu_memory_controller_percent ?? null,
+            gpuTemperature: result.gpu_temperature_c ?? null,
+            gpuClockMhz: result.gpu_clock_mhz ?? null,
+            gpuMemoryClockMhz: result.gpu_memory_clock_mhz ?? null,
+            gpuPowerWatts: result.gpu_power_watts ?? null,
+            gpuPowerLimitWatts: result.gpu_power_limit_watts ?? null,
+            gpuFanPercent: result.gpu_fan_percent ?? null,
+            gpuDriverVersion: result.gpu_driver_version ?? null,
+            gpuPerformanceState: result.gpu_performance_state ?? null,
             timestamp: result.timestamp_ms,
           },
         });
@@ -304,9 +437,64 @@ export class TauriDesktopBridge implements DesktopBridge {
     }
   }
 
+  private async refreshModelHealth(): Promise<void> {
+    if (this.lastReadyPid === null) return;
+    try {
+      const envelope = await invoke<WorkerEnvelope>('worker_health');
+      const result = envelope.data.result;
+      if (!isRecord(result)) return;
+      if (result.model_loaded === false) {
+        if (this.lastModelStatus.state !== 'unloaded') {
+          this.emitModelStatus({
+            state: 'unloaded',
+            modelId: null,
+            device: null,
+            computeType: null,
+            deviceIndex: null,
+            cpuThreads: null,
+          });
+        }
+        return;
+      }
+      if (result.model_loaded === true && isModelId(result.model_id)) {
+        const sameModel = this.lastModelStatus.modelId === result.model_id;
+        const hardware = readResolvedHardware(result.hardware);
+        const sameHardware =
+          hardware === undefined ||
+          (this.lastModelStatus.device === hardware.device &&
+            this.lastModelStatus.computeType === hardware.computeType &&
+            this.lastModelStatus.deviceIndex === hardware.deviceIndex &&
+            this.lastModelStatus.cpuThreads === hardware.cpuThreads);
+        if (!sameModel || !sameHardware || this.lastModelStatus.state !== 'ready') {
+          this.emitModelStatus({
+            state: 'ready',
+            modelId: result.model_id,
+            device: hardware?.device ?? (sameModel ? this.lastModelStatus.device : null),
+            computeType:
+              hardware?.computeType ?? (sameModel ? this.lastModelStatus.computeType : null),
+            deviceIndex:
+              hardware?.deviceIndex ?? (sameModel ? this.lastModelStatus.deviceIndex : null),
+            cpuThreads:
+              hardware?.cpuThreads ?? (sameModel ? this.lastModelStatus.cpuThreads : null),
+          });
+        }
+      }
+    } catch {
+      // Health correction is best-effort; lifecycle events remain authoritative.
+    }
+  }
+
   private handleWorkerMessage(message: WorkerEnvelope): void {
     if (message.type === 'error') {
       const code = message.code ?? 'worker.error';
+      if (
+        code === 'output.failed' &&
+        message.request_id !== undefined &&
+        this.pendingTasks.has(message.request_id) &&
+        outputConflictPaths(message.data) !== null
+      ) {
+        return;
+      }
       this.emit({
         type: 'worker.error',
         code,
@@ -317,25 +505,25 @@ export class TauriDesktopBridge implements DesktopBridge {
     }
     switch (message.event) {
       case 'model.loading':
-        this.emit({
-          type: 'model.status',
-          model: {
-            state: 'loading',
-            modelId: readString(message.data.model_id),
-            device: null,
-            computeType: null,
-          },
+        if (!isModelId(message.data.model_id)) break;
+        this.emitModelStatus({
+          state: 'loading',
+          modelId: message.data.model_id,
+          device: null,
+          computeType: null,
+          deviceIndex: null,
+          cpuThreads: null,
         });
         break;
       case 'model.ready':
-        this.emit({
-          type: 'model.status',
-          model: {
-            state: 'ready',
-            modelId: readString(message.data.model_id),
-            device: readString(message.data.device),
-            computeType: readString(message.data.compute_type),
-          },
+        if (!isModelId(message.data.model_id)) break;
+        this.emitModelStatus({
+          state: 'ready',
+          modelId: message.data.model_id,
+          device: readString(message.data.device),
+          computeType: readString(message.data.compute_type),
+          deviceIndex: readNumber(message.data.device_index),
+          cpuThreads: readNumber(message.data.cpu_threads),
         });
         break;
       case 'task.queued':
@@ -367,13 +555,17 @@ export class TauriDesktopBridge implements DesktopBridge {
       title: metadata?.title ?? `本地任务 ${message.task_id.slice(-8)}`,
       sourceCount: readNumber(message.data.input_count) ?? metadata?.sourceCount ?? 1,
       presetId: metadata?.presetId ?? 'en_v1',
+      modelId: isModelId(message.data.model_id)
+        ? message.data.model_id
+        : (metadata?.draft.modelId ?? 'large-v3-turbo'),
       isCustom: metadata?.isCustom ?? false,
       status: 'queued',
       progress: 0,
       stage: '已进入本地队列',
       elapsed: '00:00',
-      createdAt: metadata?.createdAt ?? currentClock(),
+      createdAt: metadata?.createdAt ?? currentTimestamp(),
       draft: metadata?.draft,
+      hardware: readResolvedHardware(message.data.hardware),
     };
     if (message.request_id) this.pendingTasks.delete(message.request_id);
     this.taskStartedAt.set(message.task_id, Date.now());
@@ -431,6 +623,11 @@ export class TauriDesktopBridge implements DesktopBridge {
   private emit(event: DesktopEvent): void {
     this.listeners.forEach((listener) => listener(event));
   }
+
+  private emitModelStatus(model: ModelStatus): void {
+    this.lastModelStatus = model;
+    this.emit({ type: 'model.status', model });
+  }
 }
 
 function normalizeDialogPaths(value: string | string[] | null): string[] {
@@ -443,6 +640,14 @@ function createRequestId(): string {
   return `desktop-${random}`;
 }
 
+function isModelId(value: unknown): value is ModelId {
+  return typeof value === 'string' && MODEL_IDS.includes(value as ModelId);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function createTaskMetadata(draft: TranscriptionDraft): PendingTaskMetadata {
   const title =
     draft.inputs.length === 1
@@ -453,19 +658,49 @@ function createTaskMetadata(draft: TranscriptionDraft): PendingTaskMetadata {
     sourceCount: draft.inputs.length,
     presetId: draft.basePresetId,
     isCustom: Object.keys(draft.overrides).length > 0,
-    createdAt: currentClock(),
+    createdAt: currentTimestamp(),
     draft: structuredClone(draft),
   };
 }
 
-function toHostOutput(output: OutputPolicy) {
+function toHostHardware(hardware: HardwarePreference | undefined) {
+  if (hardware === undefined) return undefined;
+  return {
+    mode: hardware.mode,
+    gpuDeviceIndex: hardware.gpuDeviceIndex,
+    cudaComputeType: hardware.cudaComputeType,
+    cpuComputeType: hardware.cpuComputeType,
+    cpuThreads: hardware.cpuThreads,
+  };
+}
+
+function toHostOutput(
+  output: OutputPolicy,
+  subtitle: TranscriptionDraft['subtitleParameters'],
+  allowOverwrite = false,
+) {
   return {
     mode: output.mode,
     rootDirectory: output.mode === 'custom' ? output.rootDirectory : null,
     txtEnabled: output.txtEnabled,
     markdownEnabled: output.markdownEnabled,
+    srtEnabled: output.srtEnabled,
     preserveSourceTxt: output.preserveSourceTxt,
-    conflictPolicy: output.conflictPolicy,
+    preserveSourceMarkdown: output.preserveSourceMarkdown,
+    conflictPolicy:
+      output.conflictPolicy === 'auto_rename'
+        ? 'auto_rename'
+        : allowOverwrite
+          ? 'overwrite'
+          : 'fail',
+    subtitle: {
+      maxCharactersPerLine: subtitle.max_characters_per_line,
+      maxLinesPerCue: subtitle.max_lines_per_cue,
+      minCueDurationMs: subtitle.min_cue_duration_ms,
+      maxCueDurationMs: subtitle.max_cue_duration_ms,
+      maxCharactersPerSecond: subtitle.max_characters_per_second,
+      cueGapMs: subtitle.cue_gap_ms,
+    },
   };
 }
 
@@ -484,8 +719,8 @@ function progressForStage(stage: string, current: number, total: number): number
   return Math.round(start + (end - start) * ratio);
 }
 
-function currentClock(): string {
-  return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+function currentTimestamp(): string {
+  return new Date().toISOString();
 }
 
 function readString(value: unknown): string | null {
@@ -496,6 +731,23 @@ function readNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function readResolvedHardware(value: unknown): TaskSnapshot['hardware'] {
+  if (!isRecord(value)) return undefined;
+  const device = value.device;
+  const deviceIndex = readNumber(value.device_index);
+  const computeType = readString(value.compute_type);
+  const cpuThreads = readNumber(value.cpu_threads);
+  if (
+    (device !== 'cuda' && device !== 'cpu') ||
+    deviceIndex === null ||
+    computeType === null ||
+    cpuThreads === null
+  ) {
+    return undefined;
+  }
+  return { device, deviceIndex, computeType, cpuThreads };
+}
+
 function isWorkerEnvironment(value: unknown): value is WorkerEnvironment {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Record<string, unknown>;
@@ -504,8 +756,47 @@ function isWorkerEnvironment(value: unknown): value is WorkerEnvironment {
     Array.isArray(candidate.errors) &&
     candidate.errors.every((item) => typeof item === 'string') &&
     typeof candidate.python === 'string' &&
-    typeof candidate.platform === 'string'
+    typeof candidate.platform === 'string' &&
+    (candidate.hardware === undefined ||
+      candidate.hardware === null ||
+      readHardwareCapabilities(candidate.hardware) !== undefined)
   );
+}
+
+function readHardwareCapabilities(value: unknown): WorkerEnvironment['hardware'] {
+  if (!isRecord(value)) return undefined;
+  if (
+    (value.cpu_name !== null && typeof value.cpu_name !== 'string') ||
+    typeof value.cpu_physical_cores !== 'number' ||
+    typeof value.cpu_logical_cores !== 'number' ||
+    !Array.isArray(value.cpu_compute_types) ||
+    !Array.isArray(value.gpus)
+  ) {
+    return undefined;
+  }
+  if (!(
+    value.cpu_compute_types.every((item) => typeof item === 'string') &&
+    value.gpus.every(
+      (item) =>
+        isRecord(item) &&
+        typeof item.index === 'number' &&
+        typeof item.name === 'string' &&
+        Array.isArray(item.compute_types) &&
+        item.compute_types.every((type) => typeof type === 'string'),
+    )
+  ))
+    return undefined;
+  return {
+    cpuName: value.cpu_name as string | null,
+    cpuPhysicalCores: value.cpu_physical_cores as number,
+    cpuLogicalCores: value.cpu_logical_cores as number,
+    cpuComputeTypes: value.cpu_compute_types as string[],
+    gpus: (value.gpus as Array<Record<string, unknown>>).map((item) => ({
+      index: item.index as number,
+      name: item.name as string,
+      computeTypes: item.compute_types as string[],
+    })),
+  };
 }
 
 interface PerformanceResult {
@@ -518,6 +809,27 @@ interface PerformanceResult {
   vram_used_gib: number | null;
   vram_total_gib: number | null;
   gpu_name: string | null;
+  memory_available_gib?: number | null;
+  swap_used_gib?: number | null;
+  swap_total_gib?: number | null;
+  worker_rss_gib?: number | null;
+  worker_thread_count?: number | null;
+  worker_handle_count?: number | null;
+  cpu_name?: string | null;
+  cpu_frequency_mhz?: number | null;
+  cpu_physical_cores?: number | null;
+  cpu_logical_cores?: number | null;
+  system_process_count?: number | null;
+  system_uptime_seconds?: number | null;
+  gpu_memory_controller_percent?: number | null;
+  gpu_temperature_c?: number | null;
+  gpu_clock_mhz?: number | null;
+  gpu_memory_clock_mhz?: number | null;
+  gpu_power_watts?: number | null;
+  gpu_power_limit_watts?: number | null;
+  gpu_fan_percent?: number | null;
+  gpu_driver_version?: string | null;
+  gpu_performance_state?: string | null;
 }
 
 function isNullableNumber(value: unknown): value is number | null {
@@ -527,6 +839,27 @@ function isNullableNumber(value: unknown): value is number | null {
 function isPerformanceResult(value: unknown): value is PerformanceResult {
   if (typeof value !== 'object' || value === null) return false;
   const item = value as Record<string, unknown>;
+  const optionalNumbers = [
+    'memory_available_gib',
+    'swap_used_gib',
+    'swap_total_gib',
+    'worker_rss_gib',
+    'worker_thread_count',
+    'worker_handle_count',
+    'cpu_frequency_mhz',
+    'cpu_physical_cores',
+    'cpu_logical_cores',
+    'system_process_count',
+    'system_uptime_seconds',
+    'gpu_memory_controller_percent',
+    'gpu_temperature_c',
+    'gpu_clock_mhz',
+    'gpu_memory_clock_mhz',
+    'gpu_power_watts',
+    'gpu_power_limit_watts',
+    'gpu_fan_percent',
+  ];
+  const optionalStrings = ['cpu_name', 'gpu_driver_version', 'gpu_performance_state'];
   return (
     typeof item.timestamp_ms === 'number' &&
     typeof item.cpu_percent === 'number' &&
@@ -536,11 +869,23 @@ function isPerformanceResult(value: unknown): value is PerformanceResult {
     isNullableNumber(item.gpu_percent) &&
     isNullableNumber(item.vram_used_gib) &&
     isNullableNumber(item.vram_total_gib) &&
-    (item.gpu_name === null || typeof item.gpu_name === 'string')
+    (item.gpu_name === null || typeof item.gpu_name === 'string') &&
+    optionalNumbers.every((key) => item[key] === undefined || isNullableNumber(item[key])) &&
+    optionalStrings.every(
+      (key) => item[key] === undefined || item[key] === null || typeof item[key] === 'string',
+    )
   );
 }
 
-function normalizeInvokeError(error: unknown): Error & { code: string } {
+function outputConflictPaths(data: unknown): string[] | null {
+  if (!isRecord(data) || data.exception !== 'OutputConflictError' || !Array.isArray(data.paths)) {
+    return null;
+  }
+  const paths = data.paths.filter((item): item is string => typeof item === 'string');
+  return paths.length > 0 ? paths : null;
+}
+
+function normalizeInvokeError(error: unknown): Error & { code: string; data?: unknown } {
   if (typeof error === 'object' && error !== null) {
     const candidate = error as Record<string, unknown>;
     const code = typeof candidate.code === 'string' ? candidate.code : 'host.command_failed';
@@ -548,7 +893,7 @@ function normalizeInvokeError(error: unknown): Error & { code: string } {
       typeof candidate.message === 'string'
         ? candidate.message
         : (ERROR_LABELS[code] ?? '桌面命令执行失败');
-    return Object.assign(new Error(message), { code });
+    return Object.assign(new Error(message), { code, data: candidate.data });
   }
   return Object.assign(new Error(String(error)), { code: 'host.command_failed' });
 }

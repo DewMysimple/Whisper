@@ -133,6 +133,31 @@ def test_direct_model_directory_is_supported(tmp_path):
     assert paths.model_location.require_model("large-v3-turbo") == direct
 
 
+def test_managed_models_and_exact_hub_repositories_do_not_collide(tmp_path):
+    root = tmp_path / "models"
+    managed = root / "small"
+    managed.mkdir(parents=True)
+    (managed / "config.json").write_text("{}", encoding="utf-8")
+    (managed / "model.bin").write_bytes(b"small")
+    for repository in (
+        "models--Systran--faster-whisper-large-v3",
+        "models--mobiuslabsgmbh--faster-whisper-large-v3-turbo",
+    ):
+        snapshot = root / "hub" / repository / "snapshots" / "revision"
+        snapshot.mkdir(parents=True)
+        (snapshot / "config.json").write_text("{}", encoding="utf-8")
+        (snapshot / "model.bin").write_bytes(repository.encode())
+
+    location = ModelLocation(root, root / "hub", source="test")
+
+    assert location.require_model("small") == managed
+    assert "faster-whisper-large-v3\\snapshots" in str(
+        location.require_model("large-v3")
+    )
+    assert "large-v3-turbo" in str(location.require_model("large-v3-turbo"))
+    assert location.available_models() == ("small", "large-v3", "large-v3-turbo")
+
+
 def test_packaged_logo_is_available_through_importlib_resources():
     data = AppPaths.discover().read_resource("logo.png")
 

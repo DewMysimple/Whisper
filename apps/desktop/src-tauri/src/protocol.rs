@@ -137,12 +137,18 @@ fn validate_event(message: &Map<String, Value>) -> Result<(), ProtocolError> {
             exact_fields(
                 data,
                 &["model_id", "device", "compute_type"],
-                &[],
+                &["device_index", "cpu_threads"],
                 "model.ready data",
             )?;
             require_nonempty_string(data, "model_id")?;
             require_nonempty_string(data, "device")?;
             require_nonempty_string(data, "compute_type")?;
+            if data.contains_key("device_index") {
+                require_nonnegative_integer(data, "device_index")?;
+            }
+            if data.contains_key("cpu_threads") {
+                require_nonnegative_integer(data, "cpu_threads")?;
+            }
         }
         "task.queued" => {
             require_identifier_field(message, "request_id")?;
@@ -150,9 +156,12 @@ fn validate_event(message: &Map<String, Value>) -> Result<(), ProtocolError> {
             exact_fields(
                 data,
                 &["position", "input_count", "effective_parameters"],
-                &[],
+                &["model_id", "hardware"],
                 "task.queued data",
             )?;
+            if data.contains_key("model_id") {
+                require_nonempty_string(data, "model_id")?;
+            }
             require_nonnegative_integer(data, "position")?;
             require_positive_integer(data, "input_count")?;
             require_object(
@@ -160,6 +169,19 @@ fn validate_event(message: &Map<String, Value>) -> Result<(), ProtocolError> {
                     .ok_or_else(|| invalid("effective_parameters are required"))?,
                 "effective_parameters",
             )?;
+            if let Some(hardware) = data.get("hardware") {
+                let hardware = require_object(hardware, "task.queued hardware")?;
+                exact_fields(
+                    hardware,
+                    &["device", "device_index", "compute_type", "cpu_threads"],
+                    &[],
+                    "task.queued hardware",
+                )?;
+                require_allowed_string(hardware, "device", &["cpu", "cuda"])?;
+                require_nonnegative_integer(hardware, "device_index")?;
+                require_nonempty_string(hardware, "compute_type")?;
+                require_nonnegative_integer(hardware, "cpu_threads")?;
+            }
         }
         "task.progress" => {
             require_identifier_field(message, "task_id")?;

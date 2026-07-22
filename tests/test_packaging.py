@@ -61,7 +61,11 @@ def test_worker_bundle_is_onedir_and_release_has_no_legacy_gui_dependency():
     build_requirements = (ROOT / "packaging/requirements-build.txt").read_text(encoding="utf-8")
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "COLLECT(" in spec
-    assert 'excludes=["tkinter", "pytest"]' in spec
+    assert (
+        'excludes=["tkinter", "pytest", "torch", "torchvision", "torchaudio"]'
+        in spec
+    )
+    assert 'hiddenimports = ["pynvml"]' in spec
     assert "PyQt5" not in spec
     assert "Copy-Item -LiteralPath $WorkerSource" in build_script
     assert "Copy-Item -LiteralPath $BuildEnv" not in build_script

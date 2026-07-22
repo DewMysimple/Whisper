@@ -14,6 +14,25 @@ from typing import Mapping
 MODEL_DIR_ENV = "WHISPER_SUBTITLE_MODEL_DIR"
 APP_HOME_ENV = "WHISPER_SUBTITLE_HOME"
 MODEL_REQUIRED_FILES = ("config.json", "model.bin")
+SUPPORTED_MODEL_IDS = (
+    "tiny",
+    "base",
+    "small",
+    "medium",
+    "large-v3",
+    "large-v3-turbo",
+)
+MODEL_REPOSITORIES = {
+    "tiny": ("Systran/faster-whisper-tiny",),
+    "base": ("Systran/faster-whisper-base",),
+    "small": ("Systran/faster-whisper-small",),
+    "medium": ("Systran/faster-whisper-medium",),
+    "large-v3": ("Systran/faster-whisper-large-v3",),
+    "large-v3-turbo": (
+        "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+        "Systran/faster-whisper-large-v3-turbo",
+    ),
+}
 
 
 class ModelNotFoundError(FileNotFoundError):
@@ -41,16 +60,23 @@ class ModelLocation:
 
     def find_model(self, model_name: str) -> Path | None:
         """Find a complete direct directory or cached Hugging Face snapshot."""
+        normalized = model_name.lower().replace("_", "-")
         if self.direct_model is not None and _is_model_directory(self.direct_model):
-            return self.direct_model
+            direct_name = self.direct_model.name.lower().replace("_", "-")
+            if direct_name == normalized or normalized == "large-v3-turbo":
+                return self.direct_model
+        managed = self.hf_home / normalized
+        if _is_model_directory(managed):
+            return managed
         if not self.hub.is_dir():
             return None
-        normalized = model_name.lower().replace("_", "-")
-        repositories = sorted(
-            path
-            for path in self.hub.glob("models--*--*")
-            if normalized in path.name.lower()
-        )
+        repository_ids = MODEL_REPOSITORIES.get(normalized)
+        if repository_ids is None:
+            return None
+        repositories = [
+            self.hub / ("models--" + repository_id.replace("/", "--"))
+            for repository_id in repository_ids
+        ]
         for repository in repositories:
             snapshots = repository / "snapshots"
             if not snapshots.is_dir():
@@ -59,6 +85,14 @@ class ModelLocation:
                 if _is_model_directory(snapshot):
                     return snapshot
         return None
+
+    def available_models(self) -> tuple[str, ...]:
+        """Return supported local models without triggering network access."""
+        return tuple(
+            model_id
+            for model_id in SUPPORTED_MODEL_IDS
+            if self.find_model(model_id) is not None
+        )
 
     def require_model(self, model_name: str) -> Path:
         """Return a local model or raise a diagnostic with concrete remedies."""
