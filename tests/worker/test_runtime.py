@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,6 +17,7 @@ from whisper_subtitle.protocol import (
     ErrorCode,
     EventCode,
     EventMessage,
+    TaskStage,
     validate_task_event_sequence,
 )
 from whisper_subtitle.worker.runtime import (
@@ -46,6 +48,7 @@ def start_command(
     policy=None,
     model_id=None,
     hardware_preference=None,
+    preset_id="en_v1",
 ):
     params = {
         "inputs": [
@@ -53,7 +56,7 @@ def start_command(
             for path in paths
         ],
         "profile": {
-            "base_preset_id": "en_v1",
+            "base_preset_id": preset_id,
             "overrides": overrides or {},
         },
         "output": policy or output_policy(),
@@ -129,6 +132,7 @@ def make_runtime(events, engine, load_calls, task_ids):
         runtime_configurer=lambda: SimpleNamespace(),
         hardware_detector=hardware,
         engine_loader=load,
+        media_duration_probe=lambda _path: (True, 12.5, None),
         idle_timeout_seconds=60,
         task_id_factory=lambda: next(ids),
     )
@@ -142,6 +146,29 @@ def task_events(events, task_id):
         and event.task_id == task_id
         and event.event.value.startswith("task.")
     ]
+
+
+def test_progress_boundary_normalizes_third_party_numeric_scalars():
+    events = []
+    runtime = WorkerRuntime(events.append, environment_checker=lambda: [])
+    task = SimpleNamespace(task_id="task-scalars", started_at_monotonic=None)
+    try:
+        runtime._emit_progress(
+            task,
+            TaskStage.TRANSCRIPTION_RUNNING,
+            1,
+            1,
+            media_progress_percent=Decimal("42.125"),
+            media_elapsed_seconds=Decimal("3.4567"),
+        )
+    finally:
+        assert runtime.close(timeout=3)
+
+    event = next(item for item in events if isinstance(item, EventMessage))
+    assert type(event.data["media_progress_percent"]) is float
+    assert event.data["media_progress_percent"] == 42.12
+    assert type(event.data["media_elapsed_seconds"]) is float
+    assert event.data["media_elapsed_seconds"] == 3.457
 
 
 def test_consecutive_tasks_reuse_one_model_and_keep_valid_lifecycles(tmp_path):
@@ -167,7 +194,59 @@ def test_consecutive_tasks_reuse_one_model_and_keep_valid_lifecycles(tmp_path):
     )
     assert (tmp_path / "Text" / "second.txt").is_file()
     for task_id in ("task-1", "task-2"):
-        validate_task_event_sequence(task_events(events, task_id))
+        sequence = task_events(events, task_id)
+        validate_task_event_sequence(sequence)
+        output_progress = next(
+            event
+            for event in sequence
+            if event.event is EventCode.TASK_PROGRESS
+            and event.data.get("media_status") == "completed"
+        )
+        expected_name = "first.txt" if task_id == "task-1" else "second.txt"
+        assert output_progress.data["output_paths"] == (
+            str(tmp_path / "Text" / expected_name),
+        )
+
+
+@pytest.mark.parametrize("preset_id", ["cn2", "en_v2"])
+def test_anti_hallucination_preset_identity_survives_queue_and_output(
+    tmp_path, preset_id
+):
+    media = make_media(tmp_path, f"{preset_id}.wav")
+    events = []
+    source = "don't couldn't doesn't can't won't it's I'm I'll you're we're John's."
+    engine = FakeEngine(texts=(source,))
+    runtime = make_runtime(events, engine, [], [f"task-{preset_id}"])
+    try:
+        runtime.handle_command(
+            start_command(f"req-{preset_id}", media, preset_id=preset_id)
+        )
+        assert runtime.wait_until_idle()
+    finally:
+        assert runtime.close(timeout=3)
+
+    assert engine.calls[0][1]["language"] is None
+    assert engine.calls[0][1]["multilingual"] is False
+    assert engine.calls[0][1]["language_detection_segments"] == 5
+    assert len(engine.calls[0][1]["temperature"]) > 1
+    output = (tmp_path / "Text" / f"{preset_id}.txt").read_text(encoding="utf-8")
+    assert ",\n        \"'\": " not in output
+    folded = output.casefold()
+    contractions = (
+        "don't",
+        "couldn't",
+        "doesn't",
+        "can't",
+        "won't",
+        "it's",
+        "I'm",
+        "I'll",
+        "you're",
+        "we're",
+        "John's",
+    )
+    assert all(token.casefold() in folded for token in contractions)
+    validate_task_event_sequence(task_events(events, f"task-{preset_id}"))
 
 
 def test_mixed_model_queue_freezes_each_task_without_interrupting_active_work(tmp_path):
@@ -247,6 +326,7 @@ def test_mixed_hardware_queue_freezes_and_switches_at_task_boundaries(tmp_path):
         runtime_configurer=lambda: SimpleNamespace(),
         hardware_detector=detect,
         engine_loader=load,
+        media_duration_probe=lambda _path: (True, 12.5, None),
         idle_timeout_seconds=60,
         task_id_factory=iter(["task-cuda", "task-cpu"]).__next__,
     )
@@ -341,6 +421,45 @@ def test_system_metrics_returns_read_only_machine_snapshot():
     assert completed.data["result"]["memory_available_gib"] == 20.0
 
 
+def test_media_inspect_uses_metadata_cache_and_returns_unknown_duration(tmp_path):
+    media = make_media(tmp_path, "duration.mp4")
+    events = []
+    calls = []
+
+    def probe(path):
+        calls.append(path)
+        return True, None, None
+
+    runtime = WorkerRuntime(
+        events.append,
+        environment_checker=lambda: [],
+        media_duration_probe=probe,
+    )
+    try:
+        for request_id in ("req-inspect-1", "req-inspect-2"):
+            runtime.handle_command(
+                CommandMessage(
+                    request_id,
+                    CommandMethod.MEDIA_INSPECT,
+                    {"paths": [str(media)]},
+                )
+            )
+    finally:
+        assert runtime.close(timeout=3)
+
+    completed = [
+        event
+        for event in events
+        if isinstance(event, EventMessage)
+        and event.event is EventCode.COMMAND_COMPLETED
+        and event.data["method"] == CommandMethod.MEDIA_INSPECT.value
+    ]
+    assert len(completed) == 2
+    assert calls == [media.resolve()]
+    assert completed[0].data["result"]["items"][0]["readable"] is True
+    assert completed[0].data["result"]["items"][0]["duration_seconds"] is None
+
+
 def test_active_task_can_be_cancelled_and_model_unload_is_busy(tmp_path):
     media = make_media(tmp_path, "blocked.wav")
     started = threading.Event()
@@ -407,6 +526,11 @@ def test_one_failed_inference_does_not_crash_dispatcher_or_reload_model(tmp_path
     good_terminal = task_events(events, "task-good")[-1]
     assert bad_terminal.event is EventCode.TASK_COMPLETED
     assert bad_terminal.data["failure_count"] == 1
+    assert any(
+        event.event is EventCode.TASK_PROGRESS
+        and event.data.get("media_status") == "failed"
+        for event in task_events(events, "task-bad")
+    )
     assert good_terminal.data["success_count"] == 1
     assert any(
         event.event is EventCode.COMMAND_COMPLETED
@@ -545,7 +669,14 @@ def test_worker_writes_timestamped_srt_from_existing_model_segments(tmp_path):
     assert srt.read_text(encoding="utf-8") == (
         "1\n00:00:00,000 --> 00:00:01,000\nWorker transcript.\n"
     )
-    assert not (root / "Text" / "subtitle.txt").exists()
+    timestamped_txt = root / "subtitle.txt"
+    assert timestamped_txt.read_bytes() == srt.read_bytes()
+    completed = next(
+        event
+        for event in events
+        if isinstance(event, EventMessage) and event.event is EventCode.TASK_COMPLETED
+    )
+    assert set(completed.data["outputs"]) == {str(srt), str(timestamped_txt)}
 
 
 def test_output_conflict_fails_before_model_loading(tmp_path):
@@ -577,6 +708,13 @@ def test_output_conflict_fails_before_model_loading(tmp_path):
     assert captured.value.data == {
         "exception": "OutputConflictError",
         "paths": [str(destination)],
+        "media_paths": [str(media)],
+        "conflicts": [
+            {
+                "input_path": str(media),
+                "paths": [str(destination)],
+            }
+        ],
     }
     assert load_calls == []
     assert destination.read_text(encoding="utf-8") == "existing"
@@ -613,3 +751,61 @@ def test_fail_policy_detects_an_active_task_reserved_output(tmp_path):
         str(root / "reserved.txt"),
         str(media.parent / "Text" / "reserved.txt"),
     ]
+
+
+def test_skip_policy_queues_only_clean_media_and_reports_skipped_group(tmp_path):
+    root = tmp_path / "outputs"
+    conflict = make_media(tmp_path / "input", "conflict.wav")
+    clean = make_media(tmp_path / "input", "clean.wav")
+    destination = root / "conflict.txt"
+    destination.parent.mkdir(parents=True)
+    destination.write_text("existing", encoding="utf-8")
+    policy = output_policy(mode="custom", root=root, conflict="skip")
+    events = []
+    engine = FakeEngine()
+    runtime = make_runtime(events, engine, [], ["task-skip"])
+    try:
+        runtime.handle_command(
+            start_command("req-skip", conflict, clean, policy=policy)
+        )
+        assert runtime.wait_until_idle()
+    finally:
+        assert runtime.close(timeout=3)
+
+    queued = next(event for event in events if event.event is EventCode.TASK_QUEUED)
+    completed = next(
+        event for event in events if event.event is EventCode.TASK_COMPLETED
+    )
+    assert queued.data["input_count"] == 2
+    assert tuple(queued.data["media_paths"]) == (str(clean),)
+    queued_skip = queued.data["skipped_media"][0]
+    completed_skip = completed.data["skipped_media"][0]
+    assert queued_skip["input_path"] == str(conflict)
+    assert tuple(queued_skip["paths"]) == (str(destination),)
+    assert completed_skip["input_path"] == str(conflict)
+    assert tuple(completed_skip["paths"]) == (str(destination),)
+    assert len(engine.calls) == 1
+    assert engine.calls[0][0] == clean
+
+
+def test_skip_policy_with_only_conflicts_does_not_create_a_task(tmp_path):
+    root = tmp_path / "outputs"
+    media = make_media(tmp_path / "input", "same.wav")
+    destination = root / "same.txt"
+    destination.parent.mkdir(parents=True)
+    destination.write_text("existing", encoding="utf-8")
+    runtime = make_runtime([], FakeEngine(), [], ["unused-task-id"])
+    try:
+        with pytest.raises(WorkerCommandError) as captured:
+            runtime.handle_command(
+                start_command(
+                    "req-all-skipped",
+                    media,
+                    policy=output_policy(mode="custom", root=root, conflict="skip"),
+                )
+            )
+    finally:
+        assert runtime.close(timeout=3)
+
+    assert captured.value.code is ErrorCode.OUTPUT_FAILED
+    assert captured.value.data["exception"] == "AllOutputsSkipped"

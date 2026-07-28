@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { ChevronDown, FileAudio, FolderOpen, Plus, Trash2 } from 'lucide-react';
+import { ClipboardPaste, FileAudio, FolderOpen, LoaderCircle } from 'lucide-react';
 
 import { useWorkspace } from '../state/workspace';
 import { HelpTip } from './HelpTip';
@@ -9,20 +9,18 @@ export function SourcePanel() {
   const inputs = useWorkspace((state) => state.inputs);
   const addFiles = useWorkspace((state) => state.addFiles);
   const addDirectory = useWorkspace((state) => state.addDirectory);
-  const addPastedPaths = useWorkspace((state) => state.addPastedPaths);
-  const clearInputs = useWorkspace((state) => state.clearInputs);
-  const [pastedPaths, setPastedPaths] = useState('');
-  const [pathEntryOpen, setPathEntryOpen] = useState(false);
+  const addClipboardPaths = useWorkspace((state) => state.addClipboardPaths);
+  const [clipboardBusy, setClipboardBusy] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
-  const submitPastedPaths = async () => {
-    const paths = pastedPaths
-      .split(/\r?\n/)
-      .map((path) => path.trim())
-      .filter(Boolean);
-    if (paths.length === 0) return;
-    await addPastedPaths(paths);
-    setPastedPaths('');
+  const pasteClipboardPaths = async () => {
+    if (clipboardBusy) return;
+    setClipboardBusy(true);
+    try {
+      await addClipboardPaths();
+    } finally {
+      setClipboardBusy(false);
+    }
   };
 
   return (
@@ -32,11 +30,6 @@ export function SourcePanel() {
           <p className="step-label">01 / MEDIA INPUT</p>
           <h2 id="source-title">输入来源</h2>
         </div>
-        {inputs.length > 0 && (
-          <button className="quiet-button" onClick={clearInputs} type="button">
-            <Trash2 size={15} /> 清空
-          </button>
-        )}
       </div>
 
       <div
@@ -85,41 +78,27 @@ export function SourcePanel() {
         </div>
       </div>
 
-      <div className={`path-entry ${pathEntryOpen ? 'is-open' : ''}`}>
-        <button
-          aria-expanded={pathEntryOpen}
-          className="path-entry-toggle"
-          onClick={() => setPathEntryOpen((open) => !open)}
-          type="button"
-        >
-          <Plus size={15} />
-          粘贴 Windows 路径
-          <ChevronDown aria-hidden="true" className="path-entry-chevron" size={15} />
-        </button>
-        {pathEntryOpen && (
-          <div className="path-paste-row">
-            <div className="directory-path-input">
-              <textarea
-                aria-label="粘贴 Windows 路径"
-                autoFocus
-                onChange={(event) => setPastedPaths(event.target.value)}
-                rows={2}
-                value={pastedPaths}
-              />
-              {pastedPaths.length === 0 && <span aria-hidden="true">Directory Path</span>}
-              <small>多个完整路径请每行一个，例如 D:\媒体素材\访谈 01.mp4</small>
-            </div>
-            <button
-              className="secondary-button"
-              disabled={pastedPaths.trim().length === 0}
-              onClick={() => void submitPastedPaths()}
-              type="button"
-            >
-              <Plus size={17} /> 添加路径
-            </button>
-          </div>
-        )}
-      </div>
+      <button
+        aria-busy={clipboardBusy}
+        aria-label="粘贴 Windows 路径"
+        className="path-entry clipboard-intake"
+        disabled={clipboardBusy}
+        onClick={() => void pasteClipboardPaths()}
+        type="button"
+      >
+        <span className="path-entry-toggle">
+          {clipboardBusy ? (
+            <LoaderCircle className="spin" size={15} />
+          ) : (
+            <ClipboardPaste size={15} />
+          )}
+          {clipboardBusy ? '正在读取 Windows 剪贴板' : '粘贴 Windows 路径'}
+        </span>
+        <span className="path-entry-idle-copy">
+          <strong>{clipboardBusy ? '正在检查路径' : '点击读取文件或文件夹路径'}</strong>
+          <span>自动读取当前剪贴板，检查后直接加入媒体队列。</span>
+        </span>
+      </button>
 
       <div className="input-hint">
         <HelpTip id="path-processing-help" label="查看路径处理说明">

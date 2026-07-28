@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Callable
 
+from ..domain.mixed_language import LanguageDetectionRegion
 from .hardware import HardwareInfo
 from ..paths import AppPaths, ModelLocation
 
@@ -74,3 +75,54 @@ class FasterWhisperEngine:
         **options: Any,
     ) -> tuple[Iterable[Any], Any]:
         return self._model.transcribe(media_path, **options)
+
+    def detect_language_regions(
+        self,
+        media_path: str,
+        *,
+        max_speech_duration_s: float,
+        min_silence_duration_ms: int,
+        speech_pad_ms: int = 200,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> list[LanguageDetectionRegion]:
+        """Detect language probabilities on real VAD speech regions."""
+        audio_module = importlib.import_module("faster_whisper.audio")
+        vad_module = importlib.import_module("faster_whisper.vad")
+        sampling_rate = self._model.feature_extractor.sampling_rate
+        audio = audio_module.decode_audio(media_path, sampling_rate=sampling_rate)
+        chunks = vad_module.get_speech_timestamps(
+            audio,
+            vad_module.VadOptions(
+                min_speech_duration_ms=250,
+                max_speech_duration_s=max_speech_duration_s,
+                min_silence_duration_ms=min_silence_duration_ms,
+                speech_pad_ms=speech_pad_ms,
+            ),
+            sampling_rate=sampling_rate,
+        )
+        regions: list[LanguageDetectionRegion] = []
+        for chunk in chunks:
+            if cancelled is not None and cancelled():
+                break
+            start_sample = int(chunk["start"])
+            end_sample = int(chunk["end"])
+            if end_sample <= start_sample:
+                continue
+            language, probability, all_probabilities = self._model.detect_language(
+                audio=audio[start_sample:end_sample],
+                vad_filter=False,
+                language_detection_segments=1,
+                language_detection_threshold=1.0,
+            )
+            probability_map = dict(all_probabilities)
+            regions.append(
+                LanguageDetectionRegion(
+                    start=start_sample / sampling_rate,
+                    end=end_sample / sampling_rate,
+                    top_language=language,
+                    top_probability=float(probability),
+                    english_probability=float(probability_map.get("en", 0.0)),
+                    chinese_probability=float(probability_map.get("zh", 0.0)),
+                )
+            )
+        return regions

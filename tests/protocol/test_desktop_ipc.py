@@ -73,6 +73,21 @@ def start_params(*, overrides=None, mode="compatibility") -> dict:
     }
 
 
+def test_media_inspect_accepts_nonempty_local_paths():
+    message = CommandMessage(
+        "req-media-inspect",
+        CommandMethod.MEDIA_INSPECT,
+        {"paths": ["C:/Media/one.mp4", "D:/Batch/two.wav"]},
+    )
+
+    assert message.params["paths"] == ("C:/Media/one.mp4", "D:/Batch/two.wav")
+
+
+def test_media_inspect_rejects_empty_path_list():
+    with pytest.raises(ProtocolValidationError):
+        CommandMessage("req-media-inspect", CommandMethod.MEDIA_INSPECT, {"paths": []})
+
+
 def queued(task_id="task-1") -> EventMessage:
     return EventMessage(
         EventCode.TASK_QUEUED,
@@ -95,6 +110,12 @@ def progress(task_id="task-1", current=1, total=2) -> EventMessage:
             "current": current,
             "total": total,
             "input_path": "C:/Media/input.wav",
+            "media_index": current,
+            "media_progress_percent": 42.5,
+            "media_elapsed_seconds": 12.25,
+            "task_elapsed_seconds": 14.0,
+            "media_status": "running",
+            "output_paths": ["C:/Media/Text/input.txt"],
         },
         task_id=task_id,
         message="正在转录",
@@ -177,13 +198,20 @@ def test_schema_is_self_contained_and_has_no_unresolved_local_refs():
 def test_schema_parameter_boundaries_match_worker_domain_validation():
     properties = load_schema()["$defs"]["ParameterOverrides"]["properties"]
 
-    assert set(properties) == set(EDITABLE_PARAMETER_RULES)
+    assert set(properties) == set(EDITABLE_PARAMETER_RULES) | {
+        "task",
+        "initial_prompt",
+        "hotwords",
+    }
     for name, (expected_type, minimum, maximum) in EDITABLE_PARAMETER_RULES.items():
         if expected_type is bool:
             assert properties[name]["type"] == "boolean"
             continue
         assert properties[name]["minimum"] == minimum
         assert properties[name]["maximum"] == maximum
+    assert properties["task"]["enum"] == ["transcribe", "translate"]
+    assert properties["initial_prompt"]["maxLength"] == 4000
+    assert properties["hotwords"]["maxLength"] == 4000
 
 
 def test_transcription_start_round_trips_structured_paths_and_custom_overrides():
@@ -210,6 +238,51 @@ def test_transcription_start_round_trips_structured_paths_and_custom_overrides()
     assert parsed.params["output"]["markdown"]["enabled"] is False
     with pytest.raises(TypeError):
         parsed.params["profile"]["overrides"]["beam_size"] = 10
+
+
+def test_transcription_start_accepts_english_translation_and_guidance_overrides():
+    params = start_params(
+        overrides={
+            "task": "translate",
+            "initial_prompt": "CTranslate2\nWebView2",
+            "hotwords": "WhisperSubtitle Large V3",
+            "repetition_penalty": 1.1,
+            "no_repeat_ngram_size": 3,
+            "prompt_reset_on_temperature": 0.7,
+            "temperature": 0.0,
+        }
+    )
+    params["profile"]["base_preset_id"] = "en_v2"
+    params["model_id"] = "large-v3"
+    parsed = CommandMessage(
+        "req-advanced-parameters",
+        CommandMethod.TRANSCRIPTION_START,
+        params,
+    )
+
+    assert parsed.params["profile"]["overrides"]["task"] == "translate"
+    assert parsed.params["profile"]["overrides"]["temperature"] == 0.0
+
+
+def test_transcription_start_rejects_translation_for_chinese_preset():
+    with pytest.raises(ProtocolValidationError):
+        CommandMessage(
+            "req-invalid-translation",
+            CommandMethod.TRANSCRIPTION_START,
+            start_params(overrides={"task": "translate"}),
+        )
+
+
+def test_transcription_start_rejects_translation_for_turbo_model():
+    params = start_params(overrides={"task": "translate"})
+    params["profile"]["base_preset_id"] = "en_v2"
+    params["model_id"] = "large-v3-turbo"
+    with pytest.raises(ProtocolValidationError):
+        CommandMessage(
+            "req-invalid-turbo-translation",
+            CommandMethod.TRANSCRIPTION_START,
+            params,
+        )
 
 
 def test_transcription_model_id_is_optional_and_restricted_to_local_catalog():
@@ -243,6 +316,55 @@ def test_task_queued_may_echo_the_frozen_model_id():
         task_id="task-model-event",
     )
     assert event.data["model_id"] == "small"
+
+def test_mixed_recognition_strategy_is_frozen_and_limited_to_v3_chinese_presets():
+    params = start_params()
+    params["model_id"] = "large-v3"
+    params["profile"]["base_preset_id"] = "cn2"
+    params["recognition_strategy"] = "mixed_zh_en"
+    command = CommandMessage(
+        "req-mixed-strategy", CommandMethod.TRANSCRIPTION_START, params
+    )
+    assert command.params["recognition_strategy"] == "mixed_zh_en"
+
+    queued = EventMessage(
+        EventCode.TASK_QUEUED,
+        {
+            "position": 0,
+            "input_count": 1,
+            "recognition_strategy": "mixed_zh_en",
+            "effective_parameters": {"language": "zh"},
+        },
+        request_id="req-mixed-strategy",
+        task_id="task-mixed-strategy",
+    )
+    assert queued.data["recognition_strategy"] == "mixed_zh_en"
+
+    english = start_params()
+    english["profile"]["base_preset_id"] = "en_v2"
+    english["recognition_strategy"] = "mixed_zh_en"
+    with pytest.raises(ProtocolValidationError):
+        CommandMessage(
+            "req-mixed-english", CommandMethod.TRANSCRIPTION_START, english
+        )
+
+    hidden_model = start_params()
+    hidden_model["model_id"] = "small"
+    hidden_model["profile"]["base_preset_id"] = "cn2"
+    hidden_model["recognition_strategy"] = "mixed_zh_en"
+    with pytest.raises(ProtocolValidationError):
+        CommandMessage(
+            "req-mixed-small", CommandMethod.TRANSCRIPTION_START, hidden_model
+        )
+
+    detail = start_params()
+    detail["model_id"] = "large-v3-turbo"
+    detail["profile"]["base_preset_id"] = "cn"
+    detail["recognition_strategy"] = "zh_detail_review"
+    command = CommandMessage(
+        "req-detail-strategy", CommandMethod.TRANSCRIPTION_START, detail
+    )
+    assert command.params["recognition_strategy"] == "zh_detail_review"
 
 
 def test_hardware_preference_is_optional_and_frozen_in_task_event():
@@ -565,6 +687,117 @@ def test_task_events_require_task_id_and_queued_also_requires_request_id():
         EventMessage(
             EventCode.TASK_QUEUED,
             {"position": 0, "input_count": 1, "effective_parameters": {}},
+            task_id="task-1",
+        )
+
+
+def test_task_progress_accepts_optional_output_paths_and_rejects_invalid_values():
+    event = progress()
+    assert event.data["output_paths"] == ("C:/Media/Text/input.txt",)
+
+    with pytest.raises(
+        ProtocolValidationError, match="output_paths must be an array"
+    ):
+        EventMessage(
+            EventCode.TASK_PROGRESS,
+            {
+                "stage": TaskStage.OUTPUT_WRITING.value,
+                "current": 1,
+                "total": 1,
+                "output_paths": "C:/Media/Text/input.txt",
+            },
+            task_id="task-1",
+        )
+
+
+def test_task_progress_accepts_structured_quality_diagnostics():
+    diagnostics = {
+        "detected_language": "zh",
+        "language_probability": 0.92,
+        "segment_count": 2,
+        "fallback_segment_count": 1,
+        "max_temperature": 0.4,
+        "low_confidence_count": 1,
+        "recognition_strategy": "mixed_zh_en",
+        "secondary_pass_count": 1,
+        "replaced_region_count": 1,
+        "review_region_count": 0,
+        "rejected_region_count": 0,
+        "detail_candidates": [
+            {
+                "start": 35.0,
+                "end": 40.0,
+                "chinese_probability": 0.94,
+                "primary_text": "拟太环境",
+                "candidate_text": "拟态环境",
+                "decision": "replaced",
+                "reason": "hotword_recovered",
+                "primary_word_probability": 0.62,
+                "candidate_word_probability": 0.91,
+                "primary_log_probability": -0.85,
+                "candidate_log_probability": -0.62,
+                "recovered_hotwords": ["拟态"],
+            }
+        ],
+        "language_regions": [
+            {
+                "start": 25.0,
+                "end": 31.5,
+                "top_language": "en",
+                "top_probability": 0.91,
+                "english_probability": 0.91,
+                "chinese_probability": 0.04,
+                "primary_text": "第一遍文本",
+                "candidate_text": "This is an English candidate.",
+                "decision": "replaced",
+                "reason": None,
+            }
+        ],
+        "hotword_audit": {
+            "term_count": 2,
+            "matched_count": 1,
+            "missing_count": 1,
+            "matched_terms": ["Walter Lippmann"],
+            "missing_terms": ["simulacra-self"],
+            "omitted_term_count": 0,
+        },
+        "segments": [
+            {
+                "index": 1,
+                "start": 3.0,
+                "end": 5.0,
+                "text": "需要复核",
+                "temperature": 0.4,
+                "avg_logprob": -1.2,
+                "compression_ratio": 2.5,
+                "no_speech_prob": 0.1,
+                "reasons": ["fallback_temperature", "low_log_probability"],
+            }
+        ],
+    }
+    event = EventMessage(
+        EventCode.TASK_PROGRESS,
+        {
+            "stage": TaskStage.TRANSCRIPTION_RUNNING.value,
+            "current": 1,
+            "total": 1,
+            "quality_diagnostics": diagnostics,
+        },
+        task_id="task-1",
+    )
+
+    assert event.to_payload()["data"]["quality_diagnostics"] == diagnostics
+
+    invalid = {**diagnostics, "low_confidence_count": 2}
+    with pytest.raises(ProtocolValidationError, match="must match segments"):
+        EventMessage(
+            EventCode.TASK_PROGRESS,
+            {
+                "stage": TaskStage.TRANSCRIPTION_RUNNING.value,
+                "current": 1,
+                "total": 1,
+                "quality_diagnostics": invalid,
+            },
             task_id="task-1",
         )
 

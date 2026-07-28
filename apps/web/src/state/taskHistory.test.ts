@@ -44,11 +44,9 @@ describe('task history dates', () => {
     expect(availableTaskDates(tasks)).toEqual(['2026-07-20', '2026-07-22']);
     const range = normalizeTaskDateRange('2026-07-22', '2026-07-20');
     expect(range).toEqual({ start: '2026-07-20', end: '2026-07-22' });
-    expect(tasks.filter((item) => taskMatchesDateRange(item, range)).map((item) => item.id)).toEqual([
-      'later',
-      'earlier',
-      'same-day',
-    ]);
+    expect(
+      tasks.filter((item) => taskMatchesDateRange(item, range)).map((item) => item.id),
+    ).toEqual(['later', 'earlier', 'same-day']);
     expect(taskMatchesDateRange(tasks[0]!, null)).toBe(true);
   });
 });

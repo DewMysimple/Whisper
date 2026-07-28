@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { desktopDir, join } from '@tauri-apps/api/path';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { open, save } from '@tauri-apps/plugin-dialog';
 
 import type {
@@ -19,6 +19,9 @@ import type {
   OutputPolicy,
   OutputPathStatus,
   OutputPreview,
+  PowerActionStatus,
+  PowerCapabilities,
+  StartTranscriptionOptions,
   TaskSnapshot,
   TranscriptionDraft,
   Unlisten,
@@ -26,6 +29,7 @@ import type {
 } from '../contracts/desktop';
 import { MODEL_IDS } from '../contracts/desktop';
 import { PERFORMANCE_POLL_INTERVAL_MS } from '../state/performanceWindow';
+import { TaskProgressTracker } from './taskProgress';
 
 const MEDIA_EXTENSIONS = [
   'mp4',
@@ -52,6 +56,8 @@ interface InspectedInput {
   origin: InputOrigin;
   valid: boolean;
   mediaCount: number | null;
+  durationSeconds: number | null;
+  unknownDurationCount: number | null;
   detail: string | null;
 }
 
@@ -111,6 +117,7 @@ export class TauriDesktopBridge implements DesktopBridge {
   private readonly nativeUnlisteners: UnlistenFn[] = [];
   private readonly pendingTasks = new Map<string, PendingTaskMetadata>();
   private readonly taskStartedAt = new Map<string, number>();
+  private readonly taskProgress = new TaskProgressTracker();
   private nativeSetup: Promise<void> | undefined;
   private performanceTimer: ReturnType<typeof setInterval> | undefined;
   private modelHealthTimer: ReturnType<typeof setInterval> | undefined;
@@ -157,12 +164,19 @@ export class TauriDesktopBridge implements DesktopBridge {
     return typeof selected === 'string' ? selected : null;
   }
 
+  async readClipboardText(): Promise<string> {
+    await this.ensureNativeListeners();
+    return readText();
+  }
+
   async inspectPaths(paths: string[], origin: InputOrigin): Promise<InputSource[]> {
     if (paths.length === 0) return [];
     const inspected = await invoke<InspectedInput[]>('inspect_inputs', { paths, origin });
     return inspected.map((item) => ({
       ...item,
       mediaCount: item.mediaCount ?? undefined,
+      durationSeconds: item.durationSeconds ?? undefined,
+      unknownDurationCount: item.unknownDurationCount ?? undefined,
       detail: item.detail ?? undefined,
       id: `native-source-${this.inputSequence++}`,
     }));
@@ -175,6 +189,10 @@ export class TauriDesktopBridge implements DesktopBridge {
 
   async revealOutput(path: string): Promise<void> {
     await invoke('reveal_output', { path });
+  }
+
+  async openOutputDirectory(path: string): Promise<void> {
+    await invoke('open_output_directory', { path });
   }
 
   async readOutputPreview(path: string): Promise<OutputPreview> {
@@ -206,6 +224,10 @@ export class TauriDesktopBridge implements DesktopBridge {
     return invoke<string>('write_worker_log_export', { path: selected, content });
   }
 
+  async clearWorkerLogs(): Promise<void> {
+    await invoke('clear_worker_logs');
+  }
+
   async getHostStatus(): Promise<HostStatus> {
     await this.ensureNativeListeners();
     return invoke<HostStatus>('get_host_status');
@@ -233,9 +255,24 @@ export class TauriDesktopBridge implements DesktopBridge {
     await invoke('load_model', { modelId, hardware: toHostHardware(hardware) });
   }
 
+  async getPowerCapabilities(): Promise<PowerCapabilities> {
+    await this.ensureNativeListeners();
+    return invoke<PowerCapabilities>('get_power_capabilities');
+  }
+
+  async getPowerActionStatus(): Promise<PowerActionStatus> {
+    await this.ensureNativeListeners();
+    return invoke<PowerActionStatus>('get_power_action_status');
+  }
+
+  async cancelPowerAction(): Promise<PowerActionStatus> {
+    await this.ensureNativeListeners();
+    return invoke<PowerActionStatus>('cancel_power_action');
+  }
+
   async startTranscription(
     draft: TranscriptionDraft,
-    options: { allowOverwrite?: boolean } = {},
+    options: StartTranscriptionOptions = {},
   ): Promise<{ taskId: string }> {
     await this.ensureNativeListeners();
     const requestId = createRequestId();
@@ -245,6 +282,11 @@ export class TauriDesktopBridge implements DesktopBridge {
         draft: {
           requestId,
           modelId: draft.modelId,
+          recognitionStrategy: draft.recognitionStrategy ?? 'stable_primary',
+          finishAction:
+            options.finishAction === undefined || options.finishAction === 'none'
+              ? undefined
+              : options.finishAction,
           inputs: draft.inputs.map(({ path, kind, origin }) => ({ path, kind, origin })),
           basePresetId: draft.basePresetId,
           overrides: draft.overrides,
@@ -253,6 +295,7 @@ export class TauriDesktopBridge implements DesktopBridge {
             draft.output,
             draft.subtitleParameters,
             options.allowOverwrite === true,
+            options.skipConflicts === true,
           ),
         },
       });
@@ -260,11 +303,20 @@ export class TauriDesktopBridge implements DesktopBridge {
     } catch (error) {
       this.pendingTasks.delete(requestId);
       const normalized = normalizeInvokeError(error);
-      const paths = outputConflictPaths(normalized.data);
-      if (normalized.code === 'output.failed' && paths !== null) {
+      const conflict = outputConflictDetails(normalized.data);
+      if (normalized.code === 'output.failed' && conflict !== null) {
         throw Object.assign(new Error('检测到同名输出文件。'), {
           code: 'output.conflict',
-          paths,
+          ...conflict,
+        });
+      }
+      if (
+        normalized.code === 'output.failed' &&
+        isRecord(normalized.data) &&
+        normalized.data.exception === 'AllOutputsSkipped'
+      ) {
+        throw Object.assign(new Error('所有媒体均已有同名输出，本次没有创建任务。'), {
+          code: 'output.all_skipped',
         });
       }
       throw normalized;
@@ -290,6 +342,7 @@ export class TauriDesktopBridge implements DesktopBridge {
     this.listeners.clear();
     this.pendingTasks.clear();
     this.taskStartedAt.clear();
+    this.taskProgress.clear();
     if (this.performanceTimer !== undefined) clearInterval(this.performanceTimer);
     if (this.modelHealthTimer !== undefined) clearInterval(this.modelHealthTimer);
     this.performanceTimer = undefined;
@@ -312,6 +365,12 @@ export class TauriDesktopBridge implements DesktopBridge {
       ),
       await listen<{ line: string }>('desktop://worker-log', ({ payload }) =>
         this.emit({ type: 'worker.log', line: payload.line }),
+      ),
+      await listen('desktop://worker-logs-cleared', () =>
+        this.emit({ type: 'worker.logs_cleared' }),
+      ),
+      await listen<PowerActionStatus>('desktop://power-action', ({ payload }) =>
+        this.emit({ type: 'power.action', status: payload }),
       ),
       await getCurrentWebviewWindow().onDragDropEvent((event) => {
         if (event.payload.type === 'drop') {
@@ -491,7 +550,7 @@ export class TauriDesktopBridge implements DesktopBridge {
         code === 'output.failed' &&
         message.request_id !== undefined &&
         this.pendingTasks.has(message.request_id) &&
-        outputConflictPaths(message.data) !== null
+        outputConflictDetails(message.data) !== null
       ) {
         return;
       }
@@ -542,6 +601,7 @@ export class TauriDesktopBridge implements DesktopBridge {
         if (message.task_id) {
           this.emit({ type: 'task.cancelled', taskId: message.task_id });
           this.taskStartedAt.delete(message.task_id);
+          this.taskProgress.finish(message.task_id);
         }
         break;
     }
@@ -550,6 +610,9 @@ export class TauriDesktopBridge implements DesktopBridge {
   private handleTaskQueued(message: WorkerEnvelope): void {
     if (!message.task_id) return;
     const metadata = message.request_id ? this.pendingTasks.get(message.request_id) : undefined;
+    const mediaPaths = readStringArray(message.data.media_paths);
+    const mediaDurations = readNullableNumberArray(message.data.media_durations_seconds);
+    const skippedMedia = readConflictGroups(message.data.skipped_media);
     const task: TaskSnapshot = {
       id: message.task_id,
       title: metadata?.title ?? `本地任务 ${message.task_id.slice(-8)}`,
@@ -558,6 +621,9 @@ export class TauriDesktopBridge implements DesktopBridge {
       modelId: isModelId(message.data.model_id)
         ? message.data.model_id
         : (metadata?.draft.modelId ?? 'large-v3-turbo'),
+      recognitionStrategy: isRecognitionStrategy(message.data.recognition_strategy)
+        ? message.data.recognition_strategy
+        : (metadata?.draft.recognitionStrategy ?? 'stable_primary'),
       isCustom: metadata?.isCustom ?? false,
       status: 'queued',
       progress: 0,
@@ -566,9 +632,42 @@ export class TauriDesktopBridge implements DesktopBridge {
       createdAt: metadata?.createdAt ?? currentTimestamp(),
       draft: metadata?.draft,
       hardware: readResolvedHardware(message.data.hardware),
+      mediaPaths,
+      skippedMedia,
+      processingCount:
+        mediaPaths.length > 0 ? mediaPaths.length : (readNumber(message.data.input_count) ?? 1),
+      ...(mediaDurations.length === mediaPaths.length && mediaPaths.length > 0
+        ? {
+            totalMediaDurationSeconds: mediaDurations
+              .filter((value): value is number => value !== null)
+              .reduce((total, value) => total + value, 0),
+            unknownMediaDurationCount: mediaDurations.filter((value) => value === null).length,
+          }
+        : {}),
+      mediaStates: [
+        ...mediaPaths.map((path, index) => ({
+          path,
+          status: 'pending' as const,
+          progress: 0,
+          stage: '等待处理',
+          elapsedSeconds: 0,
+          ...(mediaDurations.length === mediaPaths.length
+            ? { durationSeconds: mediaDurations[index] }
+            : {}),
+        })),
+        ...skippedMedia.map((item) => ({
+          path: item.inputPath,
+          status: 'skipped' as const,
+          progress: null,
+          stage: '已跳过同名输出',
+          elapsedSeconds: 0,
+          outputPaths: item.paths,
+        })),
+      ],
     };
     if (message.request_id) this.pendingTasks.delete(message.request_id);
     this.taskStartedAt.set(message.task_id, Date.now());
+    this.taskProgress.start(message.task_id, task.processingCount);
     this.emit({ type: 'task.queued', task });
   }
 
@@ -577,13 +676,29 @@ export class TauriDesktopBridge implements DesktopBridge {
     const stage = readString(message.data.stage) ?? 'transcription.running';
     const current = readNumber(message.data.current) ?? 0;
     const total = readNumber(message.data.total) ?? 0;
+    const mediaProgress = readNumber(message.data.media_progress_percent) ?? undefined;
+    const mediaStatus = readTaskMediaStatus(message.data.media_status);
     this.emit({
       type: 'task.progress',
       taskId: message.task_id,
-      progress: progressForStage(stage, current, total),
+      progress: this.taskProgress.update(message.task_id, {
+        stage,
+        current,
+        total,
+        mediaProgress,
+        mediaStatus,
+      }),
       stage: STAGE_LABELS[stage] ?? stage,
       elapsed: this.elapsedFor(message.task_id),
       inputPath: readString(message.data.input_path) ?? undefined,
+      mediaIndex: readNumber(message.data.media_index) ?? undefined,
+      mediaTotal: total > 0 ? total : undefined,
+      mediaProgress,
+      mediaElapsedSeconds: readNumber(message.data.media_elapsed_seconds) ?? undefined,
+      taskElapsedSeconds: readNumber(message.data.task_elapsed_seconds) ?? undefined,
+      mediaStatus,
+      outputPaths: readStringArray(message.data.output_paths),
+      qualityDiagnostics: readRecognitionQualityDiagnostics(message.data.quality_diagnostics),
     });
   }
 
@@ -592,13 +707,18 @@ export class TauriDesktopBridge implements DesktopBridge {
     const outputs = Array.isArray(message.data.outputs)
       ? message.data.outputs.filter((item): item is string => typeof item === 'string')
       : [];
+    const skippedMedia = readConflictGroups(message.data.skipped_media);
     this.emit({
       type: 'task.completed',
       taskId: message.task_id,
       elapsed: this.elapsedFor(message.task_id),
       outputs,
+      skippedMedia,
+      successCount: readNumber(message.data.success_count) ?? undefined,
+      failureCount: readNumber(message.data.failure_count) ?? undefined,
     });
     this.taskStartedAt.delete(message.task_id);
+    this.taskProgress.finish(message.task_id);
   }
 
   private handleTaskFailed(message: WorkerEnvelope): void {
@@ -611,6 +731,7 @@ export class TauriDesktopBridge implements DesktopBridge {
       message: ERROR_LABELS[code] ?? '本地转录任务失败',
     });
     this.taskStartedAt.delete(message.task_id);
+    this.taskProgress.finish(message.task_id);
   }
 
   private elapsedFor(taskId: string): string {
@@ -678,6 +799,7 @@ function toHostOutput(
   output: OutputPolicy,
   subtitle: TranscriptionDraft['subtitleParameters'],
   allowOverwrite = false,
+  skipConflicts = false,
 ) {
   return {
     mode: output.mode,
@@ -690,9 +812,11 @@ function toHostOutput(
     conflictPolicy:
       output.conflictPolicy === 'auto_rename'
         ? 'auto_rename'
-        : allowOverwrite
-          ? 'overwrite'
-          : 'fail',
+        : skipConflicts
+          ? 'skip'
+          : allowOverwrite
+            ? 'overwrite'
+            : 'fail',
     subtitle: {
       maxCharactersPerLine: subtitle.max_characters_per_line,
       maxLinesPerCue: subtitle.max_lines_per_cue,
@@ -704,27 +828,41 @@ function toHostOutput(
   };
 }
 
-function progressForStage(stage: string, current: number, total: number): number {
-  const ratio = total > 0 ? Math.min(1, current / total) : 0;
-  const ranges: Record<string, [number, number]> = {
-    'input.validating': [2, 5],
-    'input.discovering': [6, 10],
-    'model.loading': [11, 18],
-    'transcription.running': [19, 78],
-    'postprocess.running': [79, 88],
-    'output.writing': [89, 96],
-    'task.finalizing': [97, 99],
-  };
-  const [start, end] = ranges[stage] ?? [1, 99];
-  return Math.round(start + (end - start) * ratio);
-}
-
 function currentTimestamp(): string {
   return new Date().toISOString();
 }
 
 function readString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+    : [];
+}
+
+function readNullableNumberArray(value: unknown): Array<number | null> {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) =>
+    item === null || (typeof item === 'number' && Number.isFinite(item) && item >= 0) ? item : null,
+  );
+}
+
+function readConflictGroups(value: unknown): Array<{ inputPath: string; paths: string[] }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item) || typeof item.input_path !== 'string') return [];
+    return [{ inputPath: item.input_path, paths: readStringArray(item.paths) }];
+  });
+}
+
+function readTaskMediaStatus(
+  value: unknown,
+): 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | undefined {
+  return ['pending', 'running', 'completed', 'failed', 'skipped'].includes(String(value))
+    ? (value as 'pending' | 'running' | 'completed' | 'failed' | 'skipped')
+    : undefined;
 }
 
 function readNumber(value: unknown): number | null {
@@ -836,6 +974,235 @@ function isNullableNumber(value: unknown): value is number | null {
   return value === null || (typeof value === 'number' && Number.isFinite(value));
 }
 
+function readRecognitionQualityDiagnostics(
+  value: unknown,
+): import('../contracts/desktop').RecognitionQualityDiagnostics | undefined {
+  if (!isRecord(value) || !Array.isArray(value.segments)) return undefined;
+  const detectedLanguage =
+    value.detected_language === null
+      ? null
+      : typeof value.detected_language === 'string'
+        ? value.detected_language
+        : undefined;
+  const languageProbability = isNullableNumber(value.language_probability)
+    ? value.language_probability
+    : undefined;
+  const segmentCount = readNumber(value.segment_count);
+  const fallbackSegmentCount = readNumber(value.fallback_segment_count);
+  const maxTemperature = readNumber(value.max_temperature);
+  const lowConfidenceCount = readNumber(value.low_confidence_count);
+  if (
+    detectedLanguage === undefined ||
+    languageProbability === undefined ||
+    segmentCount === null ||
+    fallbackSegmentCount === null ||
+    maxTemperature === null ||
+    lowConfidenceCount === null
+  ) {
+    return undefined;
+  }
+  const allowedReasons = new Set([
+    'fallback_temperature',
+    'low_log_probability',
+    'high_compression_ratio',
+    'silence_conflict',
+  ]);
+  const segments = value.segments.flatMap((item) => {
+    if (!isRecord(item) || !Array.isArray(item.reasons) || typeof item.text !== 'string') return [];
+    const index = readNumber(item.index);
+    if (
+      index === null ||
+      !isNullableNumber(item.start) ||
+      !isNullableNumber(item.end) ||
+      !isNullableNumber(item.temperature) ||
+      !isNullableNumber(item.avg_logprob) ||
+      !isNullableNumber(item.compression_ratio) ||
+      !isNullableNumber(item.no_speech_prob) ||
+      !item.reasons.every(
+        (reason): reason is import('../contracts/desktop').QualityDiagnosticReason =>
+          typeof reason === 'string' && allowedReasons.has(reason),
+      )
+    ) {
+      return [];
+    }
+    return [
+      {
+        index,
+        start: item.start,
+        end: item.end,
+        text: item.text,
+        temperature: item.temperature,
+        avgLogProbability: item.avg_logprob,
+        compressionRatio: item.compression_ratio,
+        noSpeechProbability: item.no_speech_prob,
+        reasons: item.reasons,
+      },
+    ];
+  });
+  if (segments.length !== lowConfidenceCount) return undefined;
+  const recognitionStrategy = isRecognitionStrategy(value.recognition_strategy)
+    ? value.recognition_strategy
+    : undefined;
+  const languageRegions = readLanguageRegions(value.language_regions);
+  const detailCandidates = readDetailCandidates(value.detail_candidates);
+  const hotwordAudit = readHotwordAudit(value.hotword_audit);
+  return {
+    detectedLanguage,
+    languageProbability,
+    segmentCount,
+    fallbackSegmentCount,
+    maxTemperature,
+    lowConfidenceCount,
+    segments,
+    ...(recognitionStrategy ? { recognitionStrategy } : {}),
+    ...(languageRegions ? { languageRegions } : {}),
+    ...(detailCandidates ? { detailCandidates } : {}),
+    ...(readNumber(value.secondary_pass_count) !== null
+      ? { secondaryPassCount: readNumber(value.secondary_pass_count)! }
+      : {}),
+    ...(readNumber(value.replaced_region_count) !== null
+      ? { replacedRegionCount: readNumber(value.replaced_region_count)! }
+      : {}),
+    ...(readNumber(value.review_region_count) !== null
+      ? { reviewRegionCount: readNumber(value.review_region_count)! }
+      : {}),
+    ...(readNumber(value.rejected_region_count) !== null
+      ? { rejectedRegionCount: readNumber(value.rejected_region_count)! }
+      : {}),
+    ...(hotwordAudit ? { hotwordAudit } : {}),
+  };
+}
+
+function readDetailCandidates(
+  value: unknown,
+): import('../contracts/desktop').DetailCandidateDiagnostic[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return undefined;
+  const candidates = value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const start = readNumber(item.start);
+    const end = readNumber(item.end);
+    const chineseProbability = readNumber(item.chinese_probability);
+    const validDecision = ['unchanged', 'replaced', 'review', 'rejected'].includes(
+      String(item.decision),
+    );
+    if (
+      start === null ||
+      end === null ||
+      end <= start ||
+      chineseProbability === null ||
+      chineseProbability < 0 ||
+      chineseProbability > 1 ||
+      typeof item.primary_text !== 'string' ||
+      typeof item.candidate_text !== 'string' ||
+      !validDecision ||
+      (item.reason !== null && typeof item.reason !== 'string') ||
+      !isNullableNumber(item.primary_word_probability) ||
+      !isNullableNumber(item.candidate_word_probability) ||
+      !isNullableNumber(item.primary_log_probability) ||
+      !isNullableNumber(item.candidate_log_probability) ||
+      !Array.isArray(item.recovered_hotwords) ||
+      !item.recovered_hotwords.every((term) => typeof term === 'string' && term.length > 0)
+    ) {
+      return [];
+    }
+    return [
+      {
+        start,
+        end,
+        chineseProbability,
+        primaryText: item.primary_text,
+        candidateText: item.candidate_text,
+        decision: item.decision as 'unchanged' | 'replaced' | 'review' | 'rejected',
+        reason: item.reason,
+        primaryWordProbability: item.primary_word_probability,
+        candidateWordProbability: item.candidate_word_probability,
+        primaryLogProbability: item.primary_log_probability,
+        candidateLogProbability: item.candidate_log_probability,
+        recoveredHotwords: item.recovered_hotwords,
+      },
+    ];
+  });
+  return candidates.length === value.length ? candidates : undefined;
+}
+
+function readLanguageRegions(
+  value: unknown,
+): import('../contracts/desktop').LanguageRegionDiagnostic[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return undefined;
+  const regions = value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const start = readNumber(item.start);
+    const end = readNumber(item.end);
+    const topProbability = readNumber(item.top_probability);
+    const englishProbability = readNumber(item.english_probability);
+    const chineseProbability = readNumber(item.chinese_probability);
+    if (
+      start === null ||
+      end === null ||
+      topProbability === null ||
+      englishProbability === null ||
+      chineseProbability === null ||
+      typeof item.top_language !== 'string' ||
+      typeof item.primary_text !== 'string' ||
+      typeof item.candidate_text !== 'string' ||
+      !['primary', 'replaced', 'review', 'rejected'].includes(String(item.decision)) ||
+      (item.reason !== null && typeof item.reason !== 'string')
+    ) {
+      return [];
+    }
+    return [
+      {
+        start,
+        end,
+        topLanguage: item.top_language,
+        topProbability,
+        englishProbability,
+        chineseProbability,
+        primaryText: item.primary_text,
+        candidateText: item.candidate_text,
+        decision: item.decision as 'primary' | 'replaced' | 'review' | 'rejected',
+        reason: item.reason,
+      },
+    ];
+  });
+  return regions.length === value.length ? regions : undefined;
+}
+
+function readHotwordAudit(value: unknown): import('../contracts/desktop').HotwordAudit | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return undefined;
+  const termCount = readNumber(value.term_count);
+  const matchedCount = readNumber(value.matched_count);
+  const missingCount = readNumber(value.missing_count);
+  const omittedTermCount = readNumber(value.omitted_term_count);
+  const matchedTerms = readStringArray(value.matched_terms);
+  const missingTerms = readStringArray(value.missing_terms);
+  if (
+    termCount === null ||
+    matchedCount === null ||
+    missingCount === null ||
+    omittedTermCount === null
+  ) {
+    return undefined;
+  }
+  return {
+    termCount,
+    matchedCount,
+    missingCount,
+    omittedTermCount,
+    matchedTerms,
+    missingTerms,
+  };
+}
+
+function isRecognitionStrategy(
+  value: unknown,
+): value is import('../contracts/desktop').RecognitionStrategy {
+  return value === 'stable_primary' || value === 'mixed_zh_en' || value === 'zh_detail_review';
+}
+
 function isPerformanceResult(value: unknown): value is PerformanceResult {
   if (typeof value !== 'object' || value === null) return false;
   const item = value as Record<string, unknown>;
@@ -877,12 +1244,33 @@ function isPerformanceResult(value: unknown): value is PerformanceResult {
   );
 }
 
-function outputConflictPaths(data: unknown): string[] | null {
+function outputConflictDetails(data: unknown): {
+  paths: string[];
+  conflicts: Array<{ inputPath: string; paths: string[] }>;
+  mediaPaths: string[];
+} | null {
   if (!isRecord(data) || data.exception !== 'OutputConflictError' || !Array.isArray(data.paths)) {
     return null;
   }
   const paths = data.paths.filter((item): item is string => typeof item === 'string');
-  return paths.length > 0 ? paths : null;
+  if (paths.length === 0) return null;
+  const conflicts = Array.isArray(data.conflicts)
+    ? data.conflicts.flatMap((item) => {
+        if (!isRecord(item) || typeof item.input_path !== 'string' || !Array.isArray(item.paths)) {
+          return [];
+        }
+        return [
+          {
+            inputPath: item.input_path,
+            paths: item.paths.filter((path): path is string => typeof path === 'string'),
+          },
+        ];
+      })
+    : [];
+  const mediaPaths = Array.isArray(data.media_paths)
+    ? data.media_paths.filter((item): item is string => typeof item === 'string')
+    : [];
+  return { paths, conflicts, mediaPaths };
 }
 
 function normalizeInvokeError(error: unknown): Error & { code: string; data?: unknown } {

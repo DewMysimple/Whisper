@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 
 import { desktopBridge } from '../bridge';
-import { notifyTaskFinished } from '../notifications';
+import { notifyPowerCountdown, notifyTaskFinished } from '../notifications';
 import type {
   DesktopEvent,
   EditableParameters,
+  FinishAction,
   HardwarePreference,
   HostStatus,
   InputSource,
@@ -12,10 +13,14 @@ import type {
   ModelId,
   ModelStatus,
   OutputPreview,
+  OutputConflictGroup,
   OutputPolicy,
   PerformanceSample,
+  PowerActionStatus,
+  PowerCapabilities,
   ProfileMode,
   PresetId,
+  RecognitionStrategy,
   SubtitleParameters,
   TaskSnapshot,
   TaskStatus,
@@ -38,12 +43,24 @@ import {
   type UiFontFamily,
   type WorkspacePreferences,
 } from './persistence';
+import {
+  normalizePromptText,
+  profileOverrides,
+  profileParameters,
+  profileRecognitionStrategy,
+  translationTaskSupported,
+  withProfileOverrides,
+  withRecognitionStrategy,
+  type ParameterProfiles,
+  type RecognitionStrategyProfiles,
+} from './parameterProfiles';
 import { appendPerformanceSample } from './performanceWindow';
 import {
   DEFAULT_HARDWARE_PREFERENCE,
   hardwarePreferenceSupported,
   recommendedHardwarePreference,
 } from './hardware';
+import { parseWindowsClipboardPaths } from './clipboardPaths';
 import type { TaskDateRange } from './taskHistory';
 
 const INITIAL_PERFORMANCE: PerformanceSample = {
@@ -85,7 +102,7 @@ const INITIAL_TASKS: TaskSnapshot[] = [
   {
     id: 'mock-task-1',
     title: '设计评审会议.m4a',
-    sourceCount: 1,
+    sourceCount: 2,
     presetId: 'cn2',
     modelId: 'large-v3-turbo',
     isCustom: false,
@@ -94,6 +111,43 @@ const INITIAL_TASKS: TaskSnapshot[] = [
     stage: 'GPU 转录中',
     elapsed: '03:18',
     createdAt: '2026-07-22T21:42:00+08:00',
+    draft: {
+      inputs: [
+        {
+          id: 'mock-active-source-1',
+          path: 'D:\\会议素材\\设计评审会议.m4a',
+          kind: 'file',
+          origin: 'dialog',
+          valid: true,
+          mediaCount: 1,
+        },
+        {
+          id: 'mock-active-source-2',
+          path: 'D:\\会议素材\\设计评审补充.wav',
+          kind: 'file',
+          origin: 'dialog',
+          valid: true,
+          mediaCount: 1,
+        },
+      ],
+      modelId: 'large-v3-turbo',
+      basePresetId: 'cn2',
+      profileMode: 'transcript',
+      overrides: {},
+      effectiveParameters: { ...getPreset('cn2').parameters },
+      subtitleParameters: { ...getSubtitlePreset('cn2').subtitleParameters },
+      output: {
+        mode: 'compatibility',
+        rootDirectory: null,
+        txtEnabled: true,
+        markdownEnabled: true,
+        srtEnabled: false,
+        preserveSourceTxt: false,
+        preserveSourceMarkdown: false,
+        conflictPolicy: 'confirm_overwrite',
+      },
+      hardware: { ...DEFAULT_HARDWARE_PREFERENCE },
+    },
   },
   {
     id: 'mock-task-2',
@@ -141,13 +195,22 @@ const INITIAL_TASKS: TaskSnapshot[] = [
 ];
 
 export type TaskFilter = 'all' | TaskStatus;
+export type TaskWorkspaceMode = 'monitor' | 'history';
 export type WorkspaceViewId =
-  'workspace' | 'models' | 'performance' | 'tasks' | 'logs' | 'settings';
+  'workspace' | 'models' | 'hardware' | 'performance' | 'tasks' | 'logs' | 'settings';
 
 export interface PendingOverwrite {
   draft: TranscriptionDraft;
   paths: string[];
-  source: 'workspace' | 'retry';
+  conflicts: OutputConflictGroup[];
+  mediaPaths: string[];
+  mode: 'overwrite' | 'skip';
+  finishAction: FinishAction;
+  source: 'workspace' | 'resume';
+}
+
+export interface PendingShutdownStart {
+  draft: TranscriptionDraft;
 }
 
 interface WorkspaceState {
@@ -158,6 +221,9 @@ interface WorkspaceState {
   profileMode: ProfileMode;
   parameters: EditableParameters;
   overrides: Partial<EditableParameters>;
+  parameterProfiles: ParameterProfiles;
+  recognitionStrategy: RecognitionStrategy;
+  recognitionStrategyProfiles: RecognitionStrategyProfiles;
   subtitleParameters: SubtitleParameters;
   subtitleOverrides: Partial<SubtitleParameters>;
   output: OutputPolicy;
@@ -173,6 +239,11 @@ interface WorkspaceState {
   pendingModelId: ModelId | null;
   pendingHardware: boolean;
   pendingOverwrite: PendingOverwrite | null;
+  pendingShutdownStart: PendingShutdownStart | null;
+  finishAction: FinishAction;
+  powerCapabilities: PowerCapabilities;
+  powerActionStatus: PowerActionStatus;
+  shutdownArmed: boolean;
   logs: string[];
   lastError: string | null;
   startingTask: boolean;
@@ -191,6 +262,8 @@ interface WorkspaceState {
   taskFilter: TaskFilter;
   taskSearch: string;
   taskDateRange: TaskDateRange | null;
+  taskWorkspaceMode: TaskWorkspaceMode;
+  monitoredTaskId: string | null;
   configText: string;
   initialized: boolean;
   setActiveView(view: WorkspaceState['activeView']): void;
@@ -201,6 +274,10 @@ interface WorkspaceState {
   restoreHardwareDefaults(): Promise<void>;
   confirmOverwrite(): Promise<void>;
   cancelOverwrite(): void;
+  confirmShutdownStart(): Promise<void>;
+  cancelShutdownStart(): void;
+  setFinishAction(action: FinishAction): void;
+  cancelPowerAction(): Promise<void>;
   setTheme(theme: ThemePreference): void;
   setAccentPreset(preset: AccentPreset): void;
   setCustomAccentColor(color: string): void;
@@ -212,15 +289,18 @@ interface WorkspaceState {
   setTaskFilter(filter: TaskFilter): void;
   setTaskSearch(search: string): void;
   setTaskDateRange(range: TaskDateRange | null): void;
+  setTaskWorkspaceMode(mode: TaskWorkspaceMode): void;
   addFiles(): Promise<void>;
   addDirectory(): Promise<void>;
-  addPastedPaths(paths: string[]): Promise<void>;
+  addClipboardPaths(): Promise<void>;
   chooseOutputDirectory(): Promise<void>;
   restoreDefaultOutputDirectory(): void;
   removeInput(id: string): void;
   clearInputs(): void;
   selectProfile(mode: ProfileMode, id: PresetId): void;
   setParameter<K extends keyof EditableParameters>(key: K, value: EditableParameters[K]): void;
+  setTemperatureMode(mode: 'model' | 'fixed'): void;
+  setRecognitionStrategy(strategy: RecognitionStrategy): void;
   setSubtitleParameter<K extends keyof SubtitleParameters>(
     key: K,
     value: SubtitleParameters[K],
@@ -230,9 +310,11 @@ interface WorkspaceState {
   startTask(): Promise<void>;
   cancelTask(taskId: string): Promise<void>;
   revealTaskOutput(taskId: string): Promise<void>;
+  openTaskOutputDirectory(taskId: string): Promise<void>;
   auditTaskOutputs(): Promise<void>;
   selectTask(taskId: string | null): Promise<void>;
   retryTask(taskId: string): Promise<void>;
+  resumeTask(taskId: string): Promise<void>;
   clearCompletedHistory(): void;
   clearAbnormalHistory(): void;
   deleteTaskHistory(taskId: string): void;
@@ -266,6 +348,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   profileMode: 'transcript',
   parameters: { ...getPreset('en_v1').parameters },
   overrides: {},
+  parameterProfiles: {},
+  recognitionStrategy: 'stable_primary',
+  recognitionStrategyProfiles: {},
   subtitleParameters: { ...getSubtitlePreset('en_v1').subtitleParameters },
   subtitleOverrides: {},
   output: {
@@ -302,6 +387,16 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   pendingModelId: null,
   pendingHardware: false,
   pendingOverwrite: null,
+  pendingShutdownStart: null,
+  finishAction: 'none',
+  powerCapabilities: { shutdown: false },
+  powerActionStatus: {
+    state: 'idle',
+    action: null,
+    executeAtEpochMs: null,
+    error: null,
+  },
+  shutdownArmed: false,
   logs: [],
   lastError: null,
   startingTask: false,
@@ -314,10 +409,32 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   taskFilter: 'all',
   taskSearch: '',
   taskDateRange: null,
+  taskWorkspaceMode: 'history',
+  monitoredTaskId: desktopBridge.mode === 'mock' ? 'mock-task-1' : null,
   configText: '',
   initialized: false,
 
-  setActiveView: (activeView) => set({ activeView }),
+  setActiveView: (activeView) =>
+    set((state) => ({
+      activeView,
+      taskWorkspaceMode:
+        activeView === 'tasks'
+          ? state.tasks.some((task) => task.status === 'queued' || task.status === 'running')
+            ? 'monitor'
+            : state.monitoredTaskId !== null
+              ? state.taskWorkspaceMode
+              : 'history'
+          : state.taskWorkspaceMode,
+    })),
+  setFinishAction: (finishAction) => set({ finishAction }),
+  cancelPowerAction: async () => {
+    try {
+      const powerActionStatus = await desktopBridge.cancelPowerAction();
+      set({ powerActionStatus, shutdownArmed: false, lastError: null });
+    } catch (error) {
+      set({ lastError: errorMessage(error) });
+    }
+  },
   refreshModels: async () => {
     set({ modelsLoading: true });
     try {
@@ -346,15 +463,40 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
     const previous = state.selectedModelId;
     const busy = state.tasks.some((task) => task.status === 'queued' || task.status === 'running');
-    set({ selectedModelId: modelId, pendingModelId: busy ? modelId : null, lastError: null });
+    if (busy) {
+      set({ lastError: '任务执行或排队期间不能切换模型。', activeView: 'models' });
+      return;
+    }
+    set({
+      selectedModelId: modelId,
+      parameters: profileParameters(state.parameterProfiles, modelId, state.selectedPresetId),
+      overrides: profileOverrides(state.parameterProfiles, modelId, state.selectedPresetId),
+      recognitionStrategy: profileRecognitionStrategy(
+        state.recognitionStrategyProfiles,
+        modelId,
+        state.selectedPresetId,
+      ),
+      pendingModelId: null,
+      lastError: null,
+    });
     persistLater(get);
-    if (busy) return;
     set({ modelSwitching: true });
     try {
       await desktopBridge.loadModel(modelId, state.hardwarePreference);
       set({ pendingModelId: null });
     } catch (error) {
-      set({ selectedModelId: previous, pendingModelId: null, lastError: errorMessage(error) });
+      set({
+        selectedModelId: previous,
+        parameters: profileParameters(state.parameterProfiles, previous, state.selectedPresetId),
+        overrides: profileOverrides(state.parameterProfiles, previous, state.selectedPresetId),
+        recognitionStrategy: profileRecognitionStrategy(
+          state.recognitionStrategyProfiles,
+          previous,
+          state.selectedPresetId,
+        ),
+        pendingModelId: null,
+        lastError: errorMessage(error),
+      });
       persistLater(get);
       if (
         previous !== modelId &&
@@ -383,14 +525,17 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const state = get();
     const capabilities = state.environment?.hardware;
     if (!hardwarePreferenceSupported(hardwarePreference, capabilities)) {
-      set({ lastError: '当前本机不支持所选硬件配置。', activeView: 'models' });
+      set({ lastError: '当前本机不支持所选硬件配置。', activeView: 'hardware' });
       return;
     }
     const previous = state.hardwarePreference;
     const busy = state.tasks.some((task) => task.status === 'queued' || task.status === 'running');
-    set({ hardwarePreference, pendingHardware: busy, lastError: null });
+    if (busy) {
+      set({ lastError: '任务执行或排队期间不能更改硬件配置。', activeView: 'hardware' });
+      return;
+    }
+    set({ hardwarePreference, pendingHardware: false, lastError: null });
     persistLater(get);
-    if (busy) return;
     set({ modelSwitching: true, pendingHardware: true });
     try {
       await desktopBridge.loadModel(state.selectedModelId, hardwarePreference);
@@ -477,6 +622,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   setTaskFilter: (taskFilter) => set({ taskFilter }),
   setTaskSearch: (taskSearch) => set({ taskSearch }),
   setTaskDateRange: (taskDateRange) => set({ taskDateRange }),
+  setTaskWorkspaceMode: (taskWorkspaceMode) => set({ taskWorkspaceMode }),
   addFiles: async () => {
     try {
       const sources = await desktopBridge.selectFiles();
@@ -493,8 +639,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ lastError: errorMessage(error) });
     }
   },
-  addPastedPaths: async (paths) => {
+  addClipboardPaths: async () => {
     try {
+      const content = await desktopBridge.readClipboardText();
+      const paths = parseWindowsClipboardPaths(content);
+      if (paths.length === 0) {
+        throw new Error('剪贴板中没有可识别的 Windows 文件或文件夹路径。');
+      }
       const sources = await desktopBridge.inspectPaths(paths, 'paste');
       set((state) => ({ inputs: mergeUniqueInputs(state.inputs, sources), lastError: null }));
     } catch (error) {
@@ -540,11 +691,18 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   clearInputs: () => set({ inputs: [] }),
   selectProfile: (profileMode, id) => {
     const subtitleParameters = getSubtitlePreset(id).subtitleParameters;
+    const parameterProfiles = get().parameterProfiles;
+    const modelId = get().selectedModelId;
     set({
       profileMode,
       selectedPresetId: id,
-      parameters: { ...getPreset(id).parameters },
-      overrides: {},
+      parameters: profileParameters(parameterProfiles, modelId, id),
+      overrides: profileOverrides(parameterProfiles, modelId, id),
+      recognitionStrategy: profileRecognitionStrategy(
+        get().recognitionStrategyProfiles,
+        modelId,
+        id,
+      ),
       subtitleParameters: { ...subtitleParameters },
       subtitleOverrides: {},
       output:
@@ -572,16 +730,88 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
   setParameter: (key, value) =>
     set((state) => {
-      const parameters = { ...state.parameters, [key]: value };
-      const base = getPreset(state.selectedPresetId).parameters;
+      if (
+        key === 'task' &&
+        value === 'translate' &&
+        !translationTaskSupported(state.selectedModelId, state.selectedPresetId)
+      ) {
+        return {
+          lastError:
+            state.selectedModelId === 'large-v3-turbo'
+              ? 'Large V3 Turbo 未针对翻译任务训练；请切换到 Large V3 后再选择翻译为英语。'
+              : '翻译为英语仅在英文转录与英文防幻觉模式中开放。',
+        };
+      }
+      const normalizedValue =
+        (key === 'initial_prompt' || key === 'hotwords') && typeof value === 'string'
+          ? normalizePromptText(value)
+          : value;
+      const parameters = { ...state.parameters, [key]: normalizedValue };
+      const base = getPreset(state.selectedPresetId, state.selectedModelId).parameters;
       const overrides = Object.fromEntries(
         Object.entries(parameters).filter(([name, current]) => {
           const parameterName = name as keyof EditableParameters;
+          if (
+            parameterName === 'temperature' &&
+            Object.prototype.hasOwnProperty.call(state.overrides, 'temperature')
+          ) {
+            return true;
+          }
           return current !== base[parameterName];
         }),
       ) as Partial<EditableParameters>;
+      const parameterProfiles = withProfileOverrides(
+        state.parameterProfiles,
+        state.selectedModelId,
+        state.selectedPresetId,
+        overrides,
+      );
       queueMicrotask(() => persistLater(get));
-      return { parameters, overrides };
+      return { parameters, overrides, parameterProfiles, lastError: null };
+    }),
+  setTemperatureMode: (mode) =>
+    set((state) => {
+      const base = getPreset(state.selectedPresetId, state.selectedModelId).parameters;
+      const overrides = { ...state.overrides };
+      const parameters = { ...state.parameters };
+      if (mode === 'model') {
+        delete overrides.temperature;
+        parameters.temperature = base.temperature;
+      } else {
+        overrides.temperature = parameters.temperature;
+      }
+      const parameterProfiles = withProfileOverrides(
+        state.parameterProfiles,
+        state.selectedModelId,
+        state.selectedPresetId,
+        overrides,
+      );
+      queueMicrotask(() => persistLater(get));
+      return { parameters, overrides, parameterProfiles };
+    }),
+  setRecognitionStrategy: (recognitionStrategy) =>
+    set((state) => {
+      const supported =
+        ['large-v3', 'large-v3-turbo'].includes(state.selectedModelId) &&
+        ['cn', 'cn2'].includes(state.selectedPresetId);
+      if (!supported && recognitionStrategy !== 'stable_primary') {
+        return {
+          recognitionStrategy: 'stable_primary' as const,
+          lastError: '增强识别策略仅支持 Large V3/Turbo 的中文转录模式。',
+        };
+      }
+      const recognitionStrategyProfiles = withRecognitionStrategy(
+        state.recognitionStrategyProfiles,
+        state.selectedModelId,
+        state.selectedPresetId,
+        recognitionStrategy,
+      );
+      queueMicrotask(() => persistLater(get));
+      return {
+        recognitionStrategy,
+        recognitionStrategyProfiles,
+        lastError: null,
+      };
     }),
   setSubtitleParameter: (key, value) =>
     set((state) => {
@@ -597,11 +827,24 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       return { subtitleParameters, subtitleOverrides };
     }),
   restorePreset: () => {
-    const preset = getPreset(get().selectedPresetId);
+    const preset = getPreset(get().selectedPresetId, get().selectedModelId);
     const subtitle = getSubtitlePreset(get().selectedPresetId);
     set({
       parameters: { ...preset.parameters },
       overrides: {},
+      parameterProfiles: withProfileOverrides(
+        get().parameterProfiles,
+        get().selectedModelId,
+        get().selectedPresetId,
+        {},
+      ),
+      recognitionStrategy: 'stable_primary',
+      recognitionStrategyProfiles: withRecognitionStrategy(
+        get().recognitionStrategyProfiles,
+        get().selectedModelId,
+        get().selectedPresetId,
+        'stable_primary',
+      ),
       subtitleParameters: { ...subtitle.subtitleParameters },
       subtitleOverrides: {},
     });
@@ -619,6 +862,19 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   startTask: async () => {
     const state = get();
     if (state.inputs.length === 0) return;
+    if (
+      state.parameters.task === 'translate' &&
+      !translationTaskSupported(state.selectedModelId, state.selectedPresetId)
+    ) {
+      set({
+        lastError:
+          state.selectedModelId === 'large-v3-turbo'
+            ? 'Large V3 Turbo 不支持可靠的语音翻译；请切换到 Large V3。'
+            : '当前模型与识别模式组合不支持翻译为英语。',
+        activeView: 'models',
+      });
+      return;
+    }
     if (state.inputs.some((input) => !input.valid)) {
       set({ lastError: '输入列表中存在无效路径，请移除或重新选择。' });
       return;
@@ -638,7 +894,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     if (!hardwarePreferenceSupported(state.hardwarePreference, state.environment?.hardware)) {
       set({
         lastError: '当前默认硬件配置在本机不可用，请重新选择。',
-        activeView: 'models',
+        activeView: 'hardware',
       });
       return;
     }
@@ -656,25 +912,40 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ lastError: errorMessage(error) });
       return;
     }
-    set({ startingTask: true, lastError: null });
     const draft: TranscriptionDraft = {
       inputs: state.inputs,
       modelId: state.selectedModelId,
+      recognitionStrategy: state.recognitionStrategy,
       basePresetId: state.selectedPresetId,
       profileMode: state.profileMode,
-      overrides: state.overrides,
+      overrides: normalizedTaskOverrides(state.overrides),
       effectiveParameters: state.parameters,
       subtitleParameters: state.subtitleParameters,
       output: state.output,
       hardware: state.hardwarePreference,
     };
+    if (state.finishAction === 'shutdown') {
+      set({ pendingShutdownStart: { draft }, lastError: null });
+      return;
+    }
+    set({ startingTask: true, lastError: null });
     try {
       await desktopBridge.startTranscription(draft);
-      set({ inputs: [], activeView: 'performance' });
+      set({ inputs: [], finishAction: 'none', activeView: 'performance' });
     } catch (error) {
-      const paths = outputConflictPaths(error);
-      if (paths !== null) {
-        set({ pendingOverwrite: { draft, paths, source: 'workspace' }, lastError: null });
+      const conflict = outputConflictDetails(error);
+      if (conflict !== null) {
+        set({
+          pendingOverwrite: {
+            draft,
+            ...conflict,
+            mode: draft.output.conflictPolicy === 'confirm_skip' ? 'skip' : 'overwrite',
+            finishAction: state.finishAction,
+            source: 'workspace',
+          },
+          lastError: null,
+          selectedTaskId: null,
+        });
       } else {
         set({ lastError: errorMessage(error) });
       }
@@ -682,20 +953,83 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ startingTask: false });
     }
   },
+  confirmShutdownStart: async () => {
+    const pending = get().pendingShutdownStart;
+    if (pending === null || get().startingTask) return;
+    set({ startingTask: true, shutdownArmed: true, lastError: null });
+    try {
+      await desktopBridge.startTranscription(pending.draft, { finishAction: 'shutdown' });
+      set({
+        pendingShutdownStart: null,
+        inputs: [],
+        finishAction: 'none',
+        activeView: 'performance',
+      });
+    } catch (error) {
+      const conflict = outputConflictDetails(error);
+      if (conflict !== null) {
+        set({
+          pendingShutdownStart: null,
+          shutdownArmed: false,
+          pendingOverwrite: {
+            draft: pending.draft,
+            ...conflict,
+            mode: pending.draft.output.conflictPolicy === 'confirm_skip' ? 'skip' : 'overwrite',
+            finishAction: 'shutdown',
+            source: 'workspace',
+          },
+          lastError: null,
+          selectedTaskId: null,
+        });
+      } else {
+        set({
+          pendingShutdownStart: null,
+          shutdownArmed: false,
+          lastError: errorMessage(error),
+        });
+      }
+    } finally {
+      set({ startingTask: false });
+    }
+  },
+  cancelShutdownStart: () => set({ pendingShutdownStart: null }),
   confirmOverwrite: async () => {
     const pending = get().pendingOverwrite;
     if (pending === null || get().startingTask) return;
-    set({ startingTask: true, lastError: null });
+    const armsShutdown = pending.finishAction === 'shutdown';
+    set({
+      startingTask: true,
+      shutdownArmed: armsShutdown ? true : get().shutdownArmed,
+      lastError: null,
+    });
     try {
-      await desktopBridge.startTranscription(pending.draft, { allowOverwrite: true });
+      await desktopBridge.startTranscription(pending.draft, {
+        allowOverwrite: pending.mode === 'overwrite',
+        skipConflicts: pending.mode === 'skip',
+        finishAction: pending.finishAction,
+      });
       set({
         pendingOverwrite: null,
         inputs: pending.source === 'workspace' ? [] : get().inputs,
+        finishAction: pending.source === 'workspace' ? 'none' : get().finishAction,
         activeView: 'performance',
-        selectedTaskId: pending.source === 'retry' ? null : get().selectedTaskId,
+        selectedTaskId: pending.source === 'resume' ? null : get().selectedTaskId,
       });
     } catch (error) {
-      set({ pendingOverwrite: null, lastError: errorMessage(error) });
+      if (isAllOutputsSkipped(error) && pending.mode === 'skip') {
+        set({
+          pendingOverwrite: null,
+          shutdownArmed: armsShutdown ? false : get().shutdownArmed,
+          lastError: null,
+          activeView: pending.source === 'workspace' ? 'workspace' : 'tasks',
+        });
+      } else {
+        set({
+          pendingOverwrite: null,
+          shutdownArmed: armsShutdown ? false : get().shutdownArmed,
+          lastError: errorMessage(error),
+        });
+      }
     } finally {
       set({ startingTask: false });
     }
@@ -729,6 +1063,41 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         ),
       }));
       persistLater(get);
+    }
+  },
+  openTaskOutputDirectory: async (taskId) => {
+    const task = get().tasks.find((item) => item.id === taskId);
+    const outputs = taskOutputPaths(task);
+    if (outputs.length === 0) {
+      set({ lastError: '该任务还没有可打开的输出目录。' });
+      return;
+    }
+    try {
+      const statuses = await desktopBridge.inspectOutputPaths(outputs);
+      const available = statuses.filter((status) => status.exists).map((status) => status.path);
+      if (available.length === 0) {
+        set((state) => ({
+          lastError: '该任务记录的输出文件已经被删除、移动或改名。',
+          tasks: state.tasks.map((item) =>
+            item.id === taskId ? { ...item, outputAvailability: 'missing' } : item,
+          ),
+        }));
+        persistLater(get);
+        return;
+      }
+      let lastOpenError: unknown = null;
+      for (const path of available) {
+        try {
+          await desktopBridge.openOutputDirectory(path);
+          set({ lastError: null });
+          return;
+        } catch (error) {
+          lastOpenError = error;
+        }
+      }
+      set({ lastError: errorMessage(lastOpenError) });
+    } catch (error) {
+      set({ lastError: errorMessage(error) });
     }
   },
   auditTaskOutputs: async () => {
@@ -791,46 +1160,141 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ lastError: '该历史任务没有可复用的参数快照。' });
       return;
     }
-    if (get().hostStatus.state !== 'ready') {
-      set({ lastError: '本地推理 Worker 尚未就绪。' });
-      return;
-    }
     const retryDraftSnapshot = normalizeDraft(task.draft);
-    if (!hardwarePreferenceSupported(retryDraftSnapshot.hardware, get().environment?.hardware)) {
+    if (draftHasUnsupportedTranslation(retryDraftSnapshot)) {
       set({
-        lastError: '原任务的硬件配置在当前设备上不可用。',
+        lastError: '该历史任务使用 Large V3 Turbo 翻译，无法保证英语输出；请改用 Large V3。',
         activeView: 'models',
       });
       return;
     }
     set({ startingTask: true, lastError: null });
-    let retryDraft: TranscriptionDraft | null = null;
     try {
-      const localModels = await desktopBridge.listLocalModels();
-      set({ localModels });
-      if (!localModels.some((item) => item.id === task.modelId && item.installed)) {
-        throw new Error(`原任务使用的模型 ${task.modelId} 已缺失或安装不完整。`);
-      }
       const inputs = await desktopBridge.inspectPaths(
         task.draft.inputs.map((input) => input.path),
         'manual',
       );
-      if (inputs.some((input) => !input.valid)) {
-        throw new Error('历史任务的一个或多个输入路径已失效。');
-      }
-      retryDraft = { ...retryDraftSnapshot, inputs };
-      await desktopBridge.startTranscription(retryDraft);
-      set({ activeView: 'performance', selectedTaskId: null });
+      const hasInvalidInputs = inputs.some((input) => !input.valid);
+      set({
+        inputs,
+        selectedModelId: retryDraftSnapshot.modelId,
+        hardwarePreference: { ...retryDraftSnapshot.hardware },
+        selectedPresetId: retryDraftSnapshot.basePresetId,
+        profileMode: retryDraftSnapshot.profileMode,
+        parameters: { ...retryDraftSnapshot.effectiveParameters },
+        overrides: { ...retryDraftSnapshot.overrides },
+        recognitionStrategy: retryDraftSnapshot.recognitionStrategy ?? 'stable_primary',
+        recognitionStrategyProfiles: withRecognitionStrategy(
+          get().recognitionStrategyProfiles,
+          retryDraftSnapshot.modelId,
+          retryDraftSnapshot.basePresetId,
+          retryDraftSnapshot.recognitionStrategy ?? 'stable_primary',
+        ),
+        parameterProfiles: withProfileOverrides(
+          get().parameterProfiles,
+          retryDraftSnapshot.modelId,
+          retryDraftSnapshot.basePresetId,
+          retryDraftSnapshot.overrides,
+        ),
+        subtitleParameters: { ...retryDraftSnapshot.subtitleParameters },
+        subtitleOverrides: subtitleOverridesFor(retryDraftSnapshot),
+        output: { ...retryDraftSnapshot.output },
+        finishAction: 'none',
+        pendingOverwrite: null,
+        activeView: 'workspace',
+        selectedTaskId: null,
+        lastError: hasInvalidInputs
+          ? '已载入原配置，但一个或多个历史输入路径当前无效，请调整后再执行。'
+          : null,
+      });
+      persistLater(get);
+      window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
     } catch (error) {
-      const paths = outputConflictPaths(error);
-      if (paths !== null && retryDraft !== null) {
+      set({ lastError: errorMessage(error) });
+    } finally {
+      set({ startingTask: false });
+    }
+  },
+  resumeTask: async (taskId) => {
+    const task = get().tasks.find((item) => item.id === taskId);
+    if (task?.draft === undefined || !canResumeTask(task)) {
+      set({ lastError: '该任务没有可靠的媒体完成清单，无法直接继续。' });
+      return;
+    }
+    if (get().hostStatus.state !== 'ready') {
+      set({ lastError: '本地推理 Worker 尚未就绪。' });
+      return;
+    }
+    const resumeDraftSnapshot = normalizeDraft(task.draft);
+    if (draftHasUnsupportedTranslation(resumeDraftSnapshot)) {
+      set({
+        lastError: '该历史任务使用 Large V3 Turbo 翻译，无法安全续接；请改用 Large V3 新建任务。',
+        activeView: 'models',
+      });
+      return;
+    }
+    if (!hardwarePreferenceSupported(resumeDraftSnapshot.hardware, get().environment?.hardware)) {
+      set({
+        lastError: '原任务的硬件配置在当前设备上不可用。',
+        activeView: 'hardware',
+      });
+      return;
+    }
+    set({ startingTask: true, lastError: null });
+    let resumeDraft: TranscriptionDraft | null = null;
+    try {
+      const localModels = await desktopBridge.listLocalModels();
+      set({ localModels });
+      if (!localModels.some((item) => item.id === resumeDraftSnapshot.modelId && item.installed)) {
+        throw new Error(`原任务使用的模型 ${resumeDraftSnapshot.modelId} 已缺失或安装不完整。`);
+      }
+
+      const mediaStates = task.mediaStates ?? [];
+      const completedOutputPaths = mediaStates
+        .filter((media) => media.status === 'completed' || media.status === 'skipped')
+        .flatMap((media) => media.outputPaths ?? []);
+      const outputStatuses =
+        completedOutputPaths.length === 0
+          ? []
+          : await desktopBridge.inspectOutputPaths([...new Set(completedOutputPaths)]);
+      const existingOutputs = new Set(
+        outputStatuses
+          .filter((status) => status.exists)
+          .map((status) => status.path.toLocaleLowerCase()),
+      );
+      const remainingPaths = mediaStates
+        .filter((media) => {
+          if (media.status !== 'completed' && media.status !== 'skipped') return true;
+          const outputs = media.outputPaths ?? [];
+          return (
+            outputs.length === 0 ||
+            outputs.some((path) => !existingOutputs.has(path.toLocaleLowerCase()))
+          );
+        })
+        .map((media) => media.path);
+      if (remainingPaths.length === 0) {
+        throw new Error('已完成媒体的输出仍然存在，没有需要继续处理的媒体。');
+      }
+      const inputs = await desktopBridge.inspectPaths(remainingPaths, 'manual');
+      if (inputs.some((input) => !input.valid)) {
+        throw new Error('待继续媒体中的一个或多个输入路径已失效。');
+      }
+      resumeDraft = { ...resumeDraftSnapshot, inputs };
+      await desktopBridge.startTranscription(resumeDraft);
+      set({ activeView: 'performance', selectedTaskId: null, finishAction: 'none' });
+    } catch (error) {
+      const conflict = outputConflictDetails(error);
+      if (conflict !== null && resumeDraft !== null) {
         set({
           pendingOverwrite: {
-            draft: retryDraft,
-            paths,
-            source: 'retry',
+            draft: resumeDraft,
+            ...conflict,
+            mode: resumeDraft.output.conflictPolicy === 'confirm_skip' ? 'skip' : 'overwrite',
+            finishAction: 'none',
+            source: 'resume',
           },
           lastError: null,
+          selectedTaskId: null,
         });
       } else {
         set({ lastError: errorMessage(error) });
@@ -841,22 +1305,34 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
   clearCompletedHistory: () => {
     if (get().outputAuditPending) return;
-    set((state) => ({
-      tasks: state.tasks.filter(
+    set((state) => {
+      const tasks = state.tasks.filter(
         (task) => task.status !== 'completed' || task.outputAvailability === 'missing',
-      ),
-      selectedTaskId: null,
-      outputPreview: null,
-    }));
+      );
+      return {
+        tasks,
+        monitoredTaskId: tasks.some((task) => task.id === state.monitoredTaskId)
+          ? state.monitoredTaskId
+          : activeTaskId(tasks),
+        selectedTaskId: null,
+        outputPreview: null,
+      };
+    });
     persistLater(get);
   },
   clearAbnormalHistory: () => {
     if (get().outputAuditPending) return;
-    set((state) => ({
-      tasks: state.tasks.filter((task) => !isAbnormalTask(task)),
-      selectedTaskId: null,
-      outputPreview: null,
-    }));
+    set((state) => {
+      const tasks = state.tasks.filter((task) => !isAbnormalTask(task));
+      return {
+        tasks,
+        monitoredTaskId: tasks.some((task) => task.id === state.monitoredTaskId)
+          ? state.monitoredTaskId
+          : activeTaskId(tasks),
+        selectedTaskId: null,
+        outputPreview: null,
+      };
+    });
     persistLater(get);
   },
   deleteTaskHistory: (taskId) => {
@@ -864,6 +1340,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     if (task === undefined || task.status === 'running' || task.status === 'queued') return;
     set((state) => ({
       tasks: state.tasks.filter((item) => item.id !== taskId),
+      monitoredTaskId:
+        state.monitoredTaskId === taskId
+          ? activeTaskId(state.tasks.filter((item) => item.id !== taskId))
+          : state.monitoredTaskId,
       selectedTaskId: state.selectedTaskId === taskId ? null : state.selectedTaskId,
       outputPreview: state.selectedTaskId === taskId ? null : state.outputPreview,
       previewLoading: state.selectedTaskId === taskId ? false : state.previewLoading,
@@ -923,7 +1403,11 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       return;
     }
     if (event.type === 'worker.log') {
-      set((state) => ({ logs: [...state.logs.slice(-199), event.line] }));
+      set((state) => ({ logs: [...state.logs, event.line] }));
+      return;
+    }
+    if (event.type === 'worker.logs_cleared') {
+      set({ logs: [] });
       return;
     }
     if (event.type === 'worker.error') {
@@ -937,15 +1421,28 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       }));
       return;
     }
+    if (event.type === 'power.action') {
+      set({
+        powerActionStatus: event.status,
+        shutdownArmed: event.status.state === 'armed' || event.status.state === 'countdown',
+      });
+      return;
+    }
     if (event.type === 'task.queued') {
-      set((state) => ({ tasks: [event.task, ...state.tasks] }));
+      set((state) => ({
+        tasks: [event.task, ...state.tasks],
+        monitoredTaskId: state.monitoredTaskId ?? event.task.id,
+      }));
       persistLater(get);
       return;
     }
     if (event.type === 'task.progress') {
       set((state) => ({
+        monitoredTaskId: event.taskId,
+        taskWorkspaceMode: state.activeView === 'tasks' ? state.taskWorkspaceMode : 'monitor',
         tasks: state.tasks.map((task) => {
           if (task.id !== event.taskId || isTerminalTaskStatus(task.status)) return task;
+          const newOutputs = event.outputPaths ?? [];
           return {
             ...task,
             status: 'running',
@@ -953,27 +1450,54 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
             stage: event.stage,
             elapsed: event.elapsed,
             activeInput: event.inputPath ?? task.activeInput,
+            currentMediaIndex: event.mediaIndex ?? task.currentMediaIndex,
+            processingCount: event.mediaTotal ?? task.processingCount,
+            taskElapsedSeconds: event.taskElapsedSeconds ?? task.taskElapsedSeconds,
+            mediaStates: limitTaskQualityDiagnostics(updateTaskMediaStates(task, event)),
+            outputs:
+              newOutputs.length > 0
+                ? [...new Set([...(task.outputs ?? []), ...newOutputs])]
+                : task.outputs,
+            outputAvailability: newOutputs.length > 0 ? 'available' : task.outputAvailability,
           };
         }),
       }));
       persistLater(get);
       return;
     }
-    const finishedTask = get().tasks.find((task) => task.id === event.taskId);
+    const stateBeforeTerminal = get();
+    const finishedTask = stateBeforeTerminal.tasks.find((task) => task.id === event.taskId);
     if (finishedTask === undefined || isTerminalTaskStatus(finishedTask.status)) return;
+    const partiallyFailed = event.type === 'task.completed' && (event.failureCount ?? 0) > 0;
+    const startsShutdownCountdown =
+      event.type === 'task.completed' &&
+      !partiallyFailed &&
+      stateBeforeTerminal.shutdownArmed &&
+      !stateBeforeTerminal.tasks.some(
+        (task) =>
+          task.id !== event.taskId && (task.status === 'queued' || task.status === 'running'),
+      );
     set((state) => ({
       tasks: state.tasks.map((task) => {
         if (task.id !== event.taskId) return task;
         if (event.type === 'task.completed') {
+          const partiallyFailed = (event.failureCount ?? 0) > 0;
           return {
             ...task,
-            status: 'completed',
+            status: partiallyFailed ? 'failed' : 'completed',
             progress: 100,
-            stage: '输出已生成',
+            stage: partiallyFailed ? '部分媒体处理失败' : '输出已生成',
             elapsed: event.elapsed,
             outputs: event.outputs,
+            skippedMedia: event.skippedMedia ?? task.skippedMedia,
             outputAvailability: event.outputs.length > 0 ? 'available' : 'missing',
             completedAt: new Date().toISOString(),
+            mediaStates: task.mediaStates?.map((media) =>
+              media.status === 'skipped' || media.status === 'failed'
+                ? media
+                : { ...media, status: 'completed', progress: 100, stage: '已完成' },
+            ),
+            errorCode: partiallyFailed ? 'transcription.partial_failure' : task.errorCode,
           };
         }
         if (event.type === 'task.failed') {
@@ -994,21 +1518,31 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       }),
     }));
     if (finishedTask !== undefined) {
-      void notifyTaskFinished({
-        status:
-          event.type === 'task.completed'
-            ? 'completed'
-            : event.type === 'task.failed'
-              ? 'failed'
-              : 'cancelled',
-        title: finishedTask.title,
-        detail:
-          event.type === 'task.completed'
-            ? `已生成 ${event.outputs.length} 个输出文件`
-            : event.type === 'task.failed'
-              ? event.message
-              : '任务已取消',
-      });
+      if (startsShutdownCountdown) {
+        void notifyPowerCountdown(event.elapsed);
+      } else if (
+        event.type !== 'task.completed' ||
+        partiallyFailed ||
+        !stateBeforeTerminal.shutdownArmed
+      ) {
+        void notifyTaskFinished({
+          status:
+            event.type === 'task.completed' && !partiallyFailed
+              ? 'completed'
+              : event.type === 'task.failed' || partiallyFailed
+                ? 'failed'
+                : 'cancelled',
+          elapsed: event.type === 'task.completed' ? event.elapsed : finishedTask.elapsed,
+          detail:
+            event.type === 'task.completed' && !partiallyFailed
+              ? `已生成 ${event.outputs.length} 个输出文件`
+              : partiallyFailed
+                ? `${event.failureCount} 个媒体处理失败，已生成 ${event.outputs.length} 个输出文件`
+                : event.type === 'task.failed'
+                  ? event.message
+                  : '任务已取消',
+        });
+      }
     }
     persistLater(get);
     if (
@@ -1032,7 +1566,11 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const persisted = loadWorkspaceState();
       if (persisted !== null) {
         applyAppearancePreferences(persisted.preferences);
-        set({ ...persisted.preferences, tasks: persisted.tasks });
+        set({
+          ...persisted.preferences,
+          tasks: persisted.tasks,
+          monitoredTaskId: activeTaskId(persisted.tasks) ?? persisted.tasks.at(0)?.id ?? null,
+        });
       } else {
         applyAppearancePreferences(appearanceFromState(get()));
       }
@@ -1046,6 +1584,20 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       .then((hostStatus) => set({ hostStatus }))
       .catch((error: unknown) => set({ lastError: errorMessage(error) }));
     void get().refreshModels();
+    void desktopBridge
+      .getPowerCapabilities()
+      .then((powerCapabilities) => set({ powerCapabilities }))
+      .catch(() => set({ powerCapabilities: { shutdown: false } }));
+    void desktopBridge
+      .getPowerActionStatus()
+      .then((powerActionStatus) =>
+        set({
+          powerActionStatus,
+          shutdownArmed:
+            powerActionStatus.state === 'armed' || powerActionStatus.state === 'countdown',
+        }),
+      )
+      .catch(() => undefined);
     const systemTheme = window.matchMedia?.('(prefers-color-scheme: light)');
     const handleSystemThemeChange = () => {
       if (get().theme === 'system') applyAppearancePreferences(appearanceFromState(get()));
@@ -1063,12 +1615,45 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function outputConflictPaths(error: unknown): string[] | null {
+function outputConflictDetails(
+  error: unknown,
+): { paths: string[]; conflicts: OutputConflictGroup[]; mediaPaths: string[] } | null {
   if (typeof error !== 'object' || error === null) return null;
-  const candidate = error as { code?: unknown; paths?: unknown };
+  const candidate = error as {
+    code?: unknown;
+    paths?: unknown;
+    conflicts?: unknown;
+    mediaPaths?: unknown;
+  };
   if (candidate.code !== 'output.conflict' || !Array.isArray(candidate.paths)) return null;
   const paths = candidate.paths.filter((item): item is string => typeof item === 'string');
-  return paths.length > 0 ? paths : null;
+  if (paths.length === 0) return null;
+  const conflicts = Array.isArray(candidate.conflicts)
+    ? candidate.conflicts
+        .filter(
+          (item): item is { inputPath: string; paths: string[] } =>
+            typeof item === 'object' &&
+            item !== null &&
+            typeof (item as { inputPath?: unknown }).inputPath === 'string' &&
+            Array.isArray((item as { paths?: unknown }).paths),
+        )
+        .map((item) => ({
+          inputPath: item.inputPath,
+          paths: item.paths.filter((path): path is string => typeof path === 'string'),
+        }))
+    : [];
+  const mediaPaths = Array.isArray(candidate.mediaPaths)
+    ? candidate.mediaPaths.filter((item): item is string => typeof item === 'string')
+    : [];
+  return { paths, conflicts, mediaPaths };
+}
+
+function isAllOutputsSkipped(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 'output.all_skipped'
+  );
 }
 
 function modelMatchesPreference(
@@ -1099,6 +1684,130 @@ function isTerminalTaskStatus(status: TaskStatus): boolean {
   return status === 'completed' || status === 'failed' || status === 'cancelled';
 }
 
+function activeTaskId(tasks: TaskSnapshot[]): string | null {
+  return (
+    tasks.find((task) => task.status === 'running')?.id ??
+    [...tasks].reverse().find((task) => task.status === 'queued')?.id ??
+    null
+  );
+}
+
+function taskOutputPaths(task: TaskSnapshot | undefined): string[] {
+  if (task === undefined) return [];
+  return [
+    ...new Set([
+      ...(task.outputs ?? []),
+      ...(task.mediaStates ?? []).flatMap((media) => media.outputPaths ?? []),
+    ]),
+  ];
+}
+
+export function canResumeTask(task: TaskSnapshot): boolean {
+  if (task.status !== 'failed' && task.status !== 'cancelled') return false;
+  const mediaStates = task.mediaStates ?? [];
+  const hasReliableCompletion = mediaStates.some(
+    (media) =>
+      (media.status === 'completed' || media.status === 'skipped') &&
+      (media.outputPaths?.length ?? 0) > 0,
+  );
+  const hasUnfinishedMedia = mediaStates.some(
+    (media) =>
+      media.status === 'pending' || media.status === 'running' || media.status === 'failed',
+  );
+  return task.draft !== undefined && hasReliableCompletion && hasUnfinishedMedia;
+}
+
+function updateTaskMediaStates(
+  task: TaskSnapshot,
+  event: Extract<DesktopEvent, { type: 'task.progress' }>,
+): TaskSnapshot['mediaStates'] {
+  const path = event.inputPath;
+  if (path === undefined) return task.mediaStates;
+  const current: NonNullable<TaskSnapshot['mediaStates']> =
+    task.mediaStates ??
+    (task.mediaPaths ?? []).map((mediaPath) => ({
+      path: mediaPath,
+      status: 'pending' as const,
+      progress: 0,
+      stage: '等待处理',
+      elapsedSeconds: 0,
+    }));
+  const normalizedPath = path.toLocaleLowerCase();
+  return current.map((media) => {
+    if (media.path.toLocaleLowerCase() === normalizedPath) {
+      return {
+        ...media,
+        status: event.mediaStatus ?? 'running',
+        progress: event.mediaProgress ?? media.progress,
+        stage: event.stage,
+        elapsedSeconds: event.mediaElapsedSeconds ?? media.elapsedSeconds,
+        outputPaths:
+          event.outputPaths !== undefined && event.outputPaths.length > 0
+            ? event.outputPaths
+            : media.outputPaths,
+        qualityDiagnostics: event.qualityDiagnostics ?? media.qualityDiagnostics,
+      };
+    }
+    if (
+      event.mediaIndex !== undefined &&
+      media.status === 'pending' &&
+      (task.mediaPaths ?? []).findIndex(
+        (candidate) => candidate.toLocaleLowerCase() === media.path.toLocaleLowerCase(),
+      ) <
+        event.mediaIndex - 1
+    ) {
+      return { ...media, status: 'completed', progress: 100, stage: '已完成' };
+    }
+    return media;
+  });
+}
+
+function limitTaskQualityDiagnostics(
+  mediaStates: TaskSnapshot['mediaStates'],
+): TaskSnapshot['mediaStates'] {
+  if (mediaStates === undefined) return undefined;
+  let remainingTaskSegments = 50;
+  let remainingTaskRegions = 50;
+  let remainingTaskDetailCandidates = 50;
+  return mediaStates.map((media) => {
+    const diagnostics = media.qualityDiagnostics;
+    if (diagnostics === undefined) return media;
+    const retainedCount = Math.min(12, remainingTaskSegments, diagnostics.segments.length);
+    const retainedRegionCount = Math.min(
+      12,
+      remainingTaskRegions,
+      diagnostics.languageRegions?.length ?? 0,
+    );
+    const retainedCandidateCount = Math.min(
+      12,
+      remainingTaskDetailCandidates,
+      diagnostics.detailCandidates?.length ?? 0,
+    );
+    remainingTaskSegments -= retainedCount;
+    remainingTaskRegions -= retainedRegionCount;
+    remainingTaskDetailCandidates -= retainedCandidateCount;
+    return {
+      ...media,
+      qualityDiagnostics: {
+        ...diagnostics,
+        segments: diagnostics.segments.slice(0, retainedCount),
+        languageRegions: diagnostics.languageRegions?.slice(0, retainedRegionCount),
+        detailCandidates: diagnostics.detailCandidates?.slice(0, retainedCandidateCount),
+        omittedSegmentCount: Math.max(0, diagnostics.lowConfidenceCount - retainedCount),
+      },
+    };
+  });
+}
+
+function subtitleOverridesFor(draft: TranscriptionDraft): Partial<SubtitleParameters> {
+  const defaults = getSubtitlePreset(draft.basePresetId).subtitleParameters;
+  return Object.fromEntries(
+    Object.entries(draft.subtitleParameters).filter(
+      ([key, value]) => defaults[key as keyof SubtitleParameters] !== value,
+    ),
+  ) as Partial<SubtitleParameters>;
+}
+
 export function isAbnormalTask(task: TaskSnapshot): boolean {
   return (
     task.status === 'failed' ||
@@ -1115,10 +1824,18 @@ function normalizeDraft(draft: TranscriptionDraft): TranscriptionDraft {
     hardware?: HardwarePreference;
     output: OutputPolicy & { srtEnabled?: boolean; preserveSourceMarkdown?: boolean };
   };
-  const baseParameters = getPreset(draft.basePresetId).parameters;
+  const modelId = legacy.modelId ?? 'large-v3-turbo';
+  const baseParameters = getPreset(draft.basePresetId, modelId).parameters;
   return {
     ...structuredClone(draft),
-    modelId: legacy.modelId ?? 'large-v3-turbo',
+    modelId,
+    recognitionStrategy:
+      (legacy.recognitionStrategy === 'mixed_zh_en' ||
+        legacy.recognitionStrategy === 'zh_detail_review') &&
+      ['cn', 'cn2'].includes(draft.basePresetId) &&
+      ['large-v3', 'large-v3-turbo'].includes(modelId)
+        ? legacy.recognitionStrategy
+        : 'stable_primary',
     hardware: legacy.hardware ?? { ...DEFAULT_HARDWARE_PREFERENCE },
     profileMode: legacy.profileMode ?? 'transcript',
     effectiveParameters: { ...baseParameters, ...draft.effectiveParameters },
@@ -1131,9 +1848,32 @@ function normalizeDraft(draft: TranscriptionDraft): TranscriptionDraft {
       srtEnabled: legacy.output.srtEnabled ?? false,
       preserveSourceMarkdown: legacy.output.preserveSourceMarkdown ?? false,
       conflictPolicy:
-        legacy.output.conflictPolicy === 'auto_rename' ? 'auto_rename' : 'confirm_overwrite',
+        legacy.output.conflictPolicy === 'auto_rename'
+          ? 'auto_rename'
+          : legacy.output.conflictPolicy === 'confirm_skip'
+            ? 'confirm_skip'
+            : 'confirm_overwrite',
     },
   };
+}
+
+function normalizedTaskOverrides(
+  overrides: Partial<EditableParameters>,
+): Partial<EditableParameters> {
+  const normalized = { ...overrides };
+  for (const key of ['initial_prompt', 'hotwords'] as const) {
+    const value = normalized[key];
+    if (typeof value !== 'string') continue;
+    const text = normalizePromptText(value).trim();
+    if (text.length === 0) delete normalized[key];
+    else normalized[key] = text;
+  }
+  return normalized;
+}
+
+function draftHasUnsupportedTranslation(draft: TranscriptionDraft): boolean {
+  const task = draft.overrides.task ?? draft.effectiveParameters.task;
+  return task === 'translate' && !translationTaskSupported(draft.modelId, draft.basePresetId);
 }
 
 let persistenceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1153,6 +1893,9 @@ function preferencesFromState(state: WorkspaceState): WorkspacePreferences {
     profileMode: state.profileMode,
     parameters: state.parameters,
     overrides: state.overrides,
+    parameterProfiles: state.parameterProfiles,
+    recognitionStrategy: state.recognitionStrategy,
+    recognitionStrategyProfiles: state.recognitionStrategyProfiles,
     subtitleParameters: state.subtitleParameters,
     subtitleOverrides: state.subtitleOverrides,
     output: state.output,

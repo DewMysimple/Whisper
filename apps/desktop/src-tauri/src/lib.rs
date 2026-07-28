@@ -1,3 +1,4 @@
+mod power;
 mod protocol;
 #[cfg(windows)]
 mod windows_notification;
@@ -5,9 +6,13 @@ mod worker_host;
 
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
+use power::{PowerActionStatus, PowerCapabilities, PowerManager};
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{Emitter, Manager, State};
@@ -16,10 +21,12 @@ use tauri::{Emitter, Manager, State};
 use std::os::windows::process::CommandExt;
 use worker_host::{
     BridgeHardwarePreference, EventSink, HostError, HostStatus, InspectedInput,
-    LocalModelDescriptor, StartDraft, StartResult, WorkerManager, inspect_input_paths,
+    LocalModelDescriptor, StartDraft, StartResult, WorkerManager, apply_media_inspections,
+    inspect_input_paths,
 };
 
 struct HostState(Arc<WorkerManager>);
+struct PowerState(Arc<PowerManager>);
 
 const OUTPUT_PREVIEW_LIMIT: usize = 128 * 1024;
 
@@ -46,6 +53,26 @@ fn get_host_status(state: State<'_, HostState>) -> HostStatus {
 #[tauri::command]
 fn get_worker_logs(state: State<'_, HostState>) -> Vec<String> {
     state.0.logs()
+}
+
+#[tauri::command]
+fn clear_worker_logs(state: State<'_, HostState>) {
+    state.0.clear_logs();
+}
+
+#[tauri::command]
+fn get_power_capabilities(state: State<'_, PowerState>) -> PowerCapabilities {
+    state.0.capabilities()
+}
+
+#[tauri::command]
+fn get_power_action_status(state: State<'_, PowerState>) -> PowerActionStatus {
+    state.0.status()
+}
+
+#[tauri::command]
+fn cancel_power_action(state: State<'_, PowerState>) -> PowerActionStatus {
+    state.0.cancel()
 }
 
 #[tauri::command]
@@ -84,7 +111,6 @@ fn write_worker_log_export(path: String, content: String) -> Result<String, Host
 }
 
 #[cfg(windows)]
-#[tauri::command]
 fn play_notification_sound(kind: String) -> Result<(), String> {
     use windows_sys::Win32::System::Diagnostics::Debug::MessageBeep;
     use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONASTERISK, MB_ICONEXCLAMATION};
@@ -102,17 +128,21 @@ fn play_notification_sound(kind: String) -> Result<(), String> {
 }
 
 #[cfg(not(windows))]
-#[tauri::command]
 fn play_notification_sound(_kind: String) -> Result<(), String> {
     Ok(())
 }
 
 #[tauri::command]
-fn show_app_notification(status: String, title: String, detail: String) -> Result<(), String> {
+fn show_app_notification(
+    app: tauri::AppHandle,
+    status: String,
+    title: String,
+    detail: String,
+) -> Result<(), String> {
     let _ = play_notification_sound(status.clone());
     #[cfg(windows)]
     {
-        windows_notification::show_task_notification(&status, &title, &detail)
+        windows_notification::show_task_notification(&app, &status, &title, &detail)
     }
     #[cfg(not(windows))]
     {
@@ -121,9 +151,76 @@ fn show_app_notification(status: String, title: String, detail: String) -> Resul
     }
 }
 
+#[cfg(windows)]
+fn confirm_close_with_active_tasks(window: &tauri::Window) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        IDYES, MB_DEFBUTTON2, MB_ICONWARNING, MB_SETFOREGROUND, MB_YESNO, MessageBoxW,
+    };
+
+    let message = std::ffi::OsStr::new(
+        "转录任务仍在执行或排队。\r\n\r\n关闭软件将终止当前任务和全部等待任务；已生成的输出文件会保留。\r\n\r\n确定关闭 WhisperSubtitle 吗？",
+    )
+    .encode_wide()
+    .chain(std::iter::once(0))
+    .collect::<Vec<_>>();
+    let title = std::ffi::OsStr::new("WhisperSubtitle · 确认关闭")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let owner = window
+        .hwnd()
+        .map(|handle| handle.0 as _)
+        .unwrap_or(std::ptr::null_mut());
+    unsafe {
+        MessageBoxW(
+            owner,
+            message.as_ptr(),
+            title.as_ptr(),
+            MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2 | MB_SETFOREGROUND,
+        ) == IDYES
+    }
+}
+
+#[cfg(not(windows))]
+fn confirm_close_with_active_tasks(_window: &tauri::Window) -> bool {
+    true
+}
+
 #[tauri::command]
-fn inspect_inputs(paths: Vec<String>, origin: String) -> Vec<InspectedInput> {
-    inspect_input_paths(paths, origin)
+async fn inspect_inputs(
+    state: State<'_, HostState>,
+    paths: Vec<String>,
+    origin: String,
+) -> Result<Vec<InspectedInput>, HostError> {
+    let manager = Arc::clone(&state.0);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut inputs = inspect_input_paths(paths, origin);
+        let media_paths = inputs
+            .iter()
+            .flat_map(|input| input.media_paths.iter().cloned())
+            .collect::<Vec<_>>();
+        if media_paths.is_empty() {
+            return Ok(inputs);
+        }
+        match manager.inspect_media(&media_paths) {
+            Ok(inspections) => apply_media_inspections(&mut inputs, &inspections)?,
+            Err(_) => {
+                for input in &mut inputs {
+                    if input.valid {
+                        input.unknown_duration_count = input.media_count;
+                        input.detail = Some(match input.detail.take() {
+                            Some(detail) => format!("{detail} · 时长暂时无法读取"),
+                            None => "时长暂时无法读取".to_owned(),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(inputs)
+    })
+    .await
+    .map_err(|error| HostError::new("host.task_failed", error.to_string()))?
 }
 
 #[tauri::command]
@@ -157,6 +254,43 @@ fn reveal_output(path: String) -> Result<(), HostError> {
         command.arg("/select,");
     }
     command.arg(canonical);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| HostError::new("host.output_open_failed", error.to_string()))
+}
+
+fn existing_output_directory(path: &str) -> Result<PathBuf, HostError> {
+    let canonical = std::fs::canonicalize(path).map_err(|error| {
+        HostError::new(
+            "host.output_not_found",
+            format!("output path cannot be opened: {error}"),
+        )
+    })?;
+    if canonical.is_dir() {
+        return Ok(canonical);
+    }
+    if canonical.is_file() {
+        return canonical.parent().map(PathBuf::from).ok_or_else(|| {
+            HostError::new(
+                "host.output_open_failed",
+                "output file does not have a parent directory",
+            )
+        });
+    }
+    Err(HostError::new(
+        "host.output_not_found",
+        "output path is not a file or directory",
+    ))
+}
+
+#[tauri::command]
+fn open_output_directory(path: String) -> Result<(), HostError> {
+    let directory = existing_output_directory(&path)?;
+    let mut command = Command::new("explorer.exe");
+    command.arg(directory);
     #[cfg(windows)]
     command.creation_flags(0x0800_0000);
     command
@@ -277,12 +411,18 @@ async fn load_model(
 #[tauri::command]
 async fn start_transcription(
     state: State<'_, HostState>,
-    draft: StartDraft,
+    power_state: State<'_, PowerState>,
+    mut draft: StartDraft,
 ) -> Result<StartResult, HostError> {
+    let finish_action = draft.finish_action.take();
     let manager = Arc::clone(&state.0);
-    tauri::async_runtime::spawn_blocking(move || manager.start_transcription(draft))
+    let result = tauri::async_runtime::spawn_blocking(move || manager.start_transcription(draft))
         .await
-        .map_err(|error| HostError::new("host.task_failed", error.to_string()))?
+        .map_err(|error| HostError::new("host.task_failed", error.to_string()))??;
+    if let Some(action) = finish_action {
+        let _ = power_state.0.arm(&result.task_id, action);
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -306,19 +446,44 @@ fn repository_root() -> PathBuf {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let close_authorized = Arc::new(AtomicBool::new(false));
+    let close_authorized_for_window = Arc::clone(&close_authorized);
     let app = tauri::Builder::default()
+        .on_window_event(move |window, event| {
+            if window.label() != "main"
+                || close_authorized_for_window.load(Ordering::SeqCst)
+                || !matches!(event, tauri::WindowEvent::CloseRequested { .. })
+            {
+                return;
+            }
+            let has_active_tasks = window
+                .try_state::<HostState>()
+                .is_some_and(|state| state.0.has_active_tasks());
+            if !has_active_tasks {
+                return;
+            }
+            if confirm_close_with_active_tasks(window) {
+                close_authorized_for_window.store(true, Ordering::SeqCst);
+            } else if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+            }
+        })
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             get_host_status,
             get_worker_logs,
+            clear_worker_logs,
+            get_power_capabilities,
+            get_power_action_status,
+            cancel_power_action,
             write_worker_log_export,
-            play_notification_sound,
             show_app_notification,
             inspect_inputs,
             inspect_output_paths,
             reveal_output,
+            open_output_directory,
             read_output_preview,
             restart_worker,
             worker_environment,
@@ -336,11 +501,30 @@ pub fn run() {
                 let _ = windows_notification::ensure_app_identity();
             }
             let handle = app.handle().clone();
+            let power_sink_handle = app.handle().clone();
+            let power_sink: EventSink = Arc::new(move |channel, payload| {
+                let _ = power_sink_handle.emit(channel, payload);
+            });
+            let power_notice_handle = app.handle().clone();
+            let power_notice_sink = Arc::new(move |remaining_seconds| {
+                let _ = show_app_notification(
+                    power_notice_handle.clone(),
+                    "power".to_owned(),
+                    format!("系统将在 {remaining_seconds} 秒后关机"),
+                    "点击通知返回 WhisperSubtitle，可取消本次关机。".to_owned(),
+                );
+            });
+            let power = PowerManager::new(power_sink, power_notice_sink);
+            let power_observer = Arc::clone(&power);
             let sink: EventSink = Arc::new(move |channel, payload| {
+                if channel == worker_host::WORKER_MESSAGE_EVENT {
+                    power_observer.observe_worker_message(&payload);
+                }
                 let _ = handle.emit(channel, payload);
             });
-            let manager = WorkerManager::new(repository_root(), sink);
+            let manager = WorkerManager::new(repository_root(), Arc::clone(&sink));
             app.manage(HostState(Arc::clone(&manager)));
+            app.manage(PowerState(power));
             tauri::async_runtime::spawn_blocking(move || {
                 let _ = manager.start();
             });
@@ -355,6 +539,11 @@ pub fn run() {
         {
             state.0.shutdown(Duration::from_secs(15));
         }
+        if matches!(event, tauri::RunEvent::ExitRequested { .. })
+            && let Some(state) = handle.try_state::<PowerState>()
+        {
+            state.0.cancel();
+        }
     });
 }
 
@@ -363,7 +552,8 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        inspect_output_paths, read_output_preview, repository_root, write_worker_log_export,
+        existing_output_directory, inspect_output_paths, read_output_preview, repository_root,
+        write_worker_log_export,
     };
 
     #[cfg(windows)]
@@ -410,6 +600,20 @@ mod tests {
         ]);
         assert!(results[0].exists);
         assert!(!results[1].exists);
+    }
+
+    #[test]
+    fn resolves_an_output_file_to_its_existing_directory() {
+        let output = repository_root()
+            .join("tests")
+            .join("golden")
+            .join("cn_real_output.txt");
+        let directory =
+            existing_output_directory(&output.to_string_lossy()).expect("output directory");
+        assert_eq!(
+            directory,
+            std::fs::canonicalize(output.parent().expect("parent")).expect("canonical parent")
+        );
     }
 
     #[test]

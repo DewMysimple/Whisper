@@ -115,6 +115,106 @@ def test_derived_preset_freezes_valid_overrides_without_mutating_registry():
     assert original.params["vad_parameters"]["min_silence_duration_ms"] == 500
 
 
+@pytest.mark.parametrize("model_id", ["large-v3", "large-v3-turbo"])
+@pytest.mark.parametrize("preset_id", ["cn", "cn2", "en_v1", "en_v2"])
+def test_v3_family_profiles_preserve_spoken_language_and_enable_real_fallback(
+    model_id, preset_id
+):
+    preset = derive_preset(preset_id, {}, model_id=model_id)
+
+    assert preset.params["task"] == "transcribe"
+    assert preset.params["language"] is None
+    assert preset.params["multilingual"] is False
+    assert preset.params["language_detection_segments"] == 5
+    assert preset.params["language_detection_threshold"] == 1.0
+    assert list(preset.params["temperature"])[0] == 0.0
+    assert len(preset.params["temperature"]) > 1
+    assert preset.params["initial_prompt"] is None
+
+
+def test_turbo_temperature_fallback_is_capped_below_full_v3():
+    turbo = derive_preset("cn2", {}, model_id="large-v3-turbo")
+    full = derive_preset("cn2", {}, model_id="large-v3")
+
+    assert max(turbo.params["temperature"]) == 0.6
+    assert max(full.params["temperature"]) == 1.0
+
+
+def test_manual_temperature_override_replaces_model_fallback_for_one_task():
+    preset = derive_preset(
+        "en_v2",
+        {"temperature": 0.3},
+        model_id="large-v3",
+    )
+
+    assert preset.params["temperature"] == 0.3
+
+
+def test_v3_english_profile_accepts_local_translation_and_guidance_parameters():
+    preset = derive_preset(
+        "en_v2",
+        {
+            "task": "translate",
+            "initial_prompt": "  CTranslate2\r\nWebView2  ",
+            "hotwords": "WhisperSubtitle\nLarge V3",
+            "repetition_penalty": 1.15,
+            "no_repeat_ngram_size": 3,
+            "prompt_reset_on_temperature": 0.7,
+        },
+        model_id="large-v3",
+    )
+
+    assert preset.params["task"] == "translate"
+    assert preset.params["initial_prompt"] == "CTranslate2\nWebView2"
+    assert preset.params["hotwords"] == "WhisperSubtitle\nLarge V3"
+    assert preset.params["repetition_penalty"] == 1.15
+    assert preset.params["no_repeat_ngram_size"] == 3
+    assert preset.params["prompt_reset_on_temperature"] == 0.7
+
+
+def test_turbo_profile_rejects_translation_task():
+    with pytest.raises(ValueError, match="not trained for translation"):
+        derive_preset(
+            "en_v2",
+            {"task": "translate"},
+            model_id="large-v3-turbo",
+        )
+
+
+@pytest.mark.parametrize("preset_id", ["cn", "cn2"])
+def test_chinese_profiles_reject_translate_task(preset_id):
+    with pytest.raises(ValueError, match="only supported by English presets"):
+        derive_preset(
+            preset_id,
+            {"task": "translate"},
+            model_id="large-v3-turbo",
+        )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"initial_prompt": ""},
+        {"hotwords": "bad\u0000term"},
+        {"initial_prompt": "x" * 4001},
+        {"repetition_penalty": 0.9},
+        {"no_repeat_ngram_size": 11},
+        {"prompt_reset_on_temperature": 1.1},
+    ],
+)
+def test_guidance_and_repeat_overrides_reject_invalid_values(overrides):
+    with pytest.raises(ValueError):
+        derive_preset("en_v1", overrides, model_id="large-v3")
+
+
+def test_small_models_keep_legacy_fixed_language_parameters():
+    preset = derive_preset("cn2", {}, model_id="medium")
+
+    assert preset.params["language"] == "zh"
+    assert "multilingual" not in preset.params
+    assert preset.params["temperature"] == 0.0
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

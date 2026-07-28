@@ -1,34 +1,81 @@
-import { Activity, Braces, CircleDot, Copy, Download } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Activity, Braces, CircleDot, Copy, Download, Trash2 } from 'lucide-react';
+import { useReducedMotion } from 'motion/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { desktopBridge } from '../bridge';
 import { useWorkspace } from '../state/workspace';
+import { useAutoFollow } from './useAutoFollow';
 
 export function WorkerLogsView() {
   const logs = useWorkspace((state) => state.logs);
   const hostStatus = useWorkspace((state) => state.hostStatus);
   const model = useWorkspace((state) => state.model);
   const isReady = hostStatus.state === 'ready';
-  const visibleLogs = logs.slice(-200);
   const streamRef = useRef<HTMLDivElement>(null);
-  const followingRef = useRef(true);
   const [feedback, setFeedback] = useState('');
-  const logText = visibleLogs.length === 0 ? '' : `${visibleLogs.join('\r\n')}\r\n`;
+  const [clearArmed, setClearArmed] = useState(false);
+  const reducedMotion = useReducedMotion();
+  const logText = logs.length === 0 ? '' : `${logs.join('\r\n')}\r\n`;
+
+  const followLatest = useCallback(() => {
+    const stream = streamRef.current;
+    if (stream === null) return;
+    if (typeof stream.scrollTo === 'function') {
+      stream.scrollTo({
+        top: stream.scrollHeight,
+        behavior: reducedMotion ? 'auto' : 'smooth',
+      });
+    } else {
+      stream.scrollTop = stream.scrollHeight;
+    }
+  }, [reducedMotion]);
+  const logFollowHandlers = useAutoFollow({
+    enabled: true,
+    follow: followLatest,
+    targetKey: logs.length,
+  });
 
   useEffect(() => {
-    if (!followingRef.current) return;
-    const frame = requestAnimationFrame(() => {
-      if (streamRef.current) streamRef.current.scrollTop = streamRef.current.scrollHeight;
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [visibleLogs.length]);
+    if (!clearArmed) return;
+    const timeout = window.setTimeout(() => setClearArmed(false), 4000);
+    const cancelOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setClearArmed(false);
+    };
+    const cancelOutside = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest('[data-log-clear]') === null) setClearArmed(false);
+    };
+    document.addEventListener('keydown', cancelOnEscape);
+    document.addEventListener('pointerdown', cancelOutside, true);
+    return () => {
+      window.clearTimeout(timeout);
+      document.removeEventListener('keydown', cancelOnEscape);
+      document.removeEventListener('pointerdown', cancelOutside, true);
+    };
+  }, [clearArmed]);
 
   const copyLogs = async () => {
     try {
       await desktopBridge.copyWorkerLogs(logText);
-      setFeedback(`已复制 ${visibleLogs.length} 行日志`);
+      setFeedback(`已复制 ${logs.length} 行日志`);
     } catch {
       setFeedback('复制失败，请检查系统剪贴板权限');
+    }
+  };
+
+  const clearLogs = async () => {
+    if (!clearArmed) {
+      setClearArmed(true);
+      setFeedback('4 秒内再次点击以清空当前会话日志');
+      return;
+    }
+    try {
+      await desktopBridge.clearWorkerLogs();
+      setClearArmed(false);
+      setFeedback('当前会话日志已清空');
+    } catch {
+      setClearArmed(false);
+      setFeedback('清空失败，Worker 日志未被删除');
     }
   };
 
@@ -69,7 +116,7 @@ export function WorkerLogsView() {
           <CircleDot size={17} />
           <div>
             <small>BUFFER</small>
-            <strong>{visibleLogs.length} / 200</strong>
+            <strong>{logs.length} 行</strong>
           </div>
         </div>
       </section>
@@ -84,7 +131,7 @@ export function WorkerLogsView() {
             <span>{isReady ? '持续接收' : '等待 Worker'}</span>
             <button
               className="secondary-button"
-              disabled={visibleLogs.length === 0}
+              disabled={logs.length === 0}
               onClick={() => void copyLogs()}
               type="button"
             >
@@ -92,33 +139,39 @@ export function WorkerLogsView() {
             </button>
             <button
               className="secondary-button"
-              disabled={visibleLogs.length === 0}
+              disabled={logs.length === 0}
               onClick={() => void exportLogs()}
               type="button"
             >
               <Download size={15} /> 导出 TXT
+            </button>
+            <button
+              aria-pressed={clearArmed}
+              className={`secondary-button is-danger-subtle ${clearArmed ? 'is-delete-armed' : ''}`}
+              data-log-clear
+              disabled={logs.length === 0}
+              onClick={() => void clearLogs()}
+              type="button"
+            >
+              <Trash2 size={15} /> {clearArmed ? '再次点击清空' : '清空日志'}
             </button>
           </div>
         </div>
         <div
           className="log-view worker-log-stream"
           aria-label="Worker 日志"
-          onScroll={(event) => {
-            const element = event.currentTarget;
-            followingRef.current =
-              element.scrollHeight - element.scrollTop - element.clientHeight < 24;
-          }}
+          {...logFollowHandlers}
           ref={streamRef}
           role="log"
         >
-          {visibleLogs.length === 0 ? (
+          {logs.length === 0 ? (
             <div className="worker-log-empty">
               <Braces size={22} />
               <strong>暂无 Worker 日志</strong>
               <span>Worker 启动、模型加载和任务诊断信息会在这里实时出现。</span>
             </div>
           ) : (
-            visibleLogs.map((line, index) => (
+            logs.map((line, index) => (
               <code key={`${index}-${line}`}>
                 <span>{String(index + 1).padStart(3, '0')}</span>
                 {line}
@@ -128,7 +181,7 @@ export function WorkerLogsView() {
         </div>
         <div className="worker-log-footer">
           <p className="worker-log-footnote">
-            只显示当前会话最近 200 行；向上滚动时暂停跟随，回到底部后自动恢复。
+            保留当前会话全部有效日志；人工滚动后暂停追踪，8 秒无操作自动恢复到最新处。
           </p>
           <span aria-live="polite">{feedback}</span>
         </div>

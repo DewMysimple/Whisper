@@ -24,9 +24,10 @@ from ..infrastructure.environment_check import check_worker_environment
 from ..infrastructure.hardware import HardwareDetector, HardwareInfo
 from ..infrastructure.media_files import MediaDiscoveryError, discover_media_files
 from ..infrastructure.output_store import (
+    OutputConflict,
     OutputConflictError,
     OutputPlan,
-    build_configurable_output_plans,
+    select_configurable_outputs,
 )
 from ..infrastructure.performance import collect_performance_sample
 from ..infrastructure.whisper_engine import (
@@ -55,6 +56,7 @@ HardwareCapabilityLoader = Callable[[], Mapping[str, object]]
 EngineLoader = Callable[[HardwareInfo, ModelLocation, str], Any]
 TaskIdFactory = Callable[[], str]
 PerformanceSampler = Callable[[], Mapping[str, Any]]
+MediaDurationProbe = Callable[[Path], tuple[bool, float | None, str | None]]
 
 
 class WorkerCommandError(RuntimeError):
@@ -72,6 +74,32 @@ class WorkerCommandError(RuntimeError):
         self.code = code
         self.data = dict(data or {})
         self.task_id = task_id
+
+
+def _default_media_duration_probe(
+    path: Path,
+) -> tuple[bool, float | None, str | None]:
+    """Read container metadata through the PyAV runtime bundled with the Worker."""
+    try:
+        import av
+
+        with av.open(str(path), mode="r") as container:
+            duration: float | None = None
+            if container.duration is not None and container.duration > 0:
+                duration = float(container.duration) / float(av.time_base)
+            if duration is None:
+                stream_durations = [
+                    float(stream.duration * stream.time_base)
+                    for stream in container.streams
+                    if stream.duration is not None
+                    and stream.time_base is not None
+                    and stream.duration > 0
+                ]
+                if stream_durations:
+                    duration = max(stream_durations)
+        return True, duration, None
+    except Exception as exc:
+        return False, None, str(exc) or type(exc).__name__
 
 
 def normalize_input_path(value: str) -> Path:
@@ -393,16 +421,30 @@ class WorkerTask:
     hardware: HardwareInfo
     preset: Preset
     media_paths: tuple[Path, ...]
+    media_durations_seconds: tuple[float | None, ...]
     output_plans: tuple[OutputPlan, ...]
     subtitle_options: Mapping[str, Any] | None = None
+    skipped_media: tuple[OutputConflict, ...] = ()
+    recognition_strategy: str = "stable_primary"
     cancel: threading.Event = field(default_factory=threading.Event)
     state: str = "queued"
+    started_at_monotonic: float | None = None
 
 
 _PROGRESS_STAGE_MAP = {
     "file_started": TaskStage.TRANSCRIPTION_RUNNING,
+    "segment_progress": TaskStage.TRANSCRIPTION_RUNNING,
     "language_detected": TaskStage.TRANSCRIPTION_RUNNING,
     "segments_collected": TaskStage.TRANSCRIPTION_RUNNING,
+    "language_scan_started": TaskStage.TRANSCRIPTION_RUNNING,
+    "language_scan_completed": TaskStage.TRANSCRIPTION_RUNNING,
+    "secondary_pass_progress": TaskStage.TRANSCRIPTION_RUNNING,
+    "detail_scan_started": TaskStage.TRANSCRIPTION_RUNNING,
+    "detail_scan_completed": TaskStage.TRANSCRIPTION_RUNNING,
+    "detail_primary_scoring_started": TaskStage.TRANSCRIPTION_RUNNING,
+    "detail_primary_scoring_completed": TaskStage.TRANSCRIPTION_RUNNING,
+    "detail_second_pass_progress": TaskStage.TRANSCRIPTION_RUNNING,
+    "file_failed": TaskStage.TRANSCRIPTION_RUNNING,
     "sentences_merged": TaskStage.POSTPROCESS_RUNNING,
     "repetitions_removed": TaskStage.POSTPROCESS_RUNNING,
     "output_written": TaskStage.OUTPUT_WRITING,
@@ -427,6 +469,7 @@ class WorkerRuntime:
         hardware_capability_loader: HardwareCapabilityLoader | None = None,
         engine_loader: EngineLoader = _default_engine_loader,
         performance_sampler: PerformanceSampler = collect_performance_sample,
+        media_duration_probe: MediaDurationProbe = _default_media_duration_probe,
     ) -> None:
         self._emit = emit
         self._check_environment = environment_checker
@@ -435,6 +478,10 @@ class WorkerRuntime:
             lambda: f"task-{uuid.uuid4().hex}"
         )
         self._performance_sampler = performance_sampler
+        self._media_duration_probe = media_duration_probe
+        self._media_duration_cache: dict[
+            str, tuple[int, int, tuple[bool, float | None, str | None]]
+        ] = {}
         if hardware_detector is None:
             detector = HardwareDetector()
             hardware_detector = detector.detect
@@ -543,6 +590,26 @@ class WorkerRuntime:
         if command.method is CommandMethod.SYSTEM_METRICS:
             self._complete_command(command, self._performance_sampler())
             return False
+        if command.method is CommandMethod.MEDIA_INSPECT:
+            paths = tuple(Path(str(value)) for value in command.params["paths"])
+            inspections = self._inspect_media_paths(paths)
+            self._complete_command(
+                command,
+                {
+                    "items": [
+                        {
+                            "path": str(path),
+                            "readable": readable,
+                            "duration_seconds": duration,
+                            "error": error,
+                        }
+                        for path, (readable, duration, error) in zip(
+                            paths, inspections, strict=True
+                        )
+                    ]
+                },
+            )
+            return False
 
         with self._condition:
             if self._stopping:
@@ -583,6 +650,31 @@ class WorkerRuntime:
             f"unsupported worker command: {command.method.value}",
         )
 
+    def _inspect_media_paths(
+        self, paths: Sequence[Path]
+    ) -> tuple[tuple[bool, float | None, str | None], ...]:
+        inspections: list[tuple[bool, float | None, str | None]] = []
+        for path in paths:
+            try:
+                resolved = path.resolve(strict=True)
+                stat = resolved.stat()
+            except OSError as exc:
+                inspections.append((False, None, str(exc)))
+                continue
+            key = str(resolved).casefold()
+            cached = self._media_duration_cache.get(key)
+            if cached is not None and cached[0] == stat.st_size and cached[1] == stat.st_mtime_ns:
+                inspections.append(cached[2])
+                continue
+            result = self._media_duration_probe(resolved)
+            readable, duration, error = result
+            if duration is not None:
+                duration = max(0.0, float(duration))
+            normalized = (bool(readable), duration, error)
+            self._media_duration_cache[key] = (stat.st_size, stat.st_mtime_ns, normalized)
+            inspections.append(normalized)
+        return tuple(inspections)
+
     def _start_task(self, command: CommandMessage) -> None:
         model_id = str(command.params.get("model_id") or DEFAULT_MODEL_NAME)
         hardware_preference = dict(command.params.get("hardware") or {})
@@ -591,6 +683,7 @@ class WorkerRuntime:
             preset = derive_preset(
                 str(profile["base_preset_id"]),
                 profile["overrides"],
+                model_id=model_id,
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise WorkerCommandError(
@@ -601,11 +694,29 @@ class WorkerRuntime:
         with self._condition:
             reserved_paths = tuple(self._reserved_output_paths)
         try:
-            output_plans = build_configurable_output_plans(
+            output_selection = select_configurable_outputs(
                 media_paths,
                 command.params["output"],
                 reserved_paths=reserved_paths,
             )
+            media_paths = output_selection.media_paths
+            output_plans = output_selection.plans
+            skipped_media = output_selection.skipped
+            if not media_paths:
+                raise WorkerCommandError(
+                    ErrorCode.OUTPUT_FAILED,
+                    "all media inputs were skipped because outputs already exist",
+                    data={
+                        "exception": "AllOutputsSkipped",
+                        "skipped_media": [
+                            {
+                                "input_path": str(conflict.media_path),
+                                "paths": [str(path) for path in conflict.paths],
+                            }
+                            for conflict in skipped_media
+                        ],
+                    },
+                )
         except OutputConflictError as exc:
             raise WorkerCommandError(
                 ErrorCode.OUTPUT_FAILED,
@@ -613,6 +724,14 @@ class WorkerRuntime:
                 data={
                     "exception": type(exc).__name__,
                     "paths": [str(path) for path in exc.paths],
+                    "media_paths": [str(path) for path in exc.media_paths],
+                    "conflicts": [
+                        {
+                            "input_path": str(conflict.media_path),
+                            "paths": [str(path) for path in conflict.paths],
+                        }
+                        for conflict in exc.conflicts
+                    ],
                 },
             ) from exc
         except (OSError, TypeError, ValueError) as exc:
@@ -621,6 +740,29 @@ class WorkerRuntime:
                 str(exc),
                 data={"exception": type(exc).__name__},
             ) from exc
+
+        media_inspections = self._inspect_media_paths(media_paths)
+        unreadable = [
+            (path, error)
+            for path, (readable, _duration, error) in zip(
+                media_paths, media_inspections, strict=True
+            )
+            if not readable
+        ]
+        if unreadable:
+            path, error = unreadable[0]
+            raise WorkerCommandError(
+                ErrorCode.REQUEST_INVALID,
+                f"media container cannot be read: {path}",
+                data={
+                    "exception": "MediaInspectionError",
+                    "path": str(path),
+                    "reason": error or "unknown media inspection failure",
+                },
+            )
+        media_durations_seconds = tuple(
+            duration for _readable, duration, _error in media_inspections
+        )
 
         # The Windows process must perform the first faster-whisper/CTranslate2
         # lazy import and model initialization on the stdin command thread.
@@ -650,9 +792,14 @@ class WorkerRuntime:
             hardware_preference=hardware_preference,
             hardware=hardware,
             preset=preset,
+            recognition_strategy=str(
+                command.params.get("recognition_strategy") or "stable_primary"
+            ),
             media_paths=media_paths,
+            media_durations_seconds=media_durations_seconds,
             output_plans=output_plans,
             subtitle_options=command.params["output"].get("subtitle"),
+            skipped_media=skipped_media,
         )
         with self._condition:
             if command.request_id in self._request_ids:
@@ -680,8 +827,18 @@ class WorkerRuntime:
                     EventCode.TASK_QUEUED,
                     {
                         "position": position,
-                        "input_count": len(task.media_paths),
+                        "input_count": len(task.media_paths) + len(task.skipped_media),
+                        "media_paths": [str(path) for path in task.media_paths],
+                        "media_durations_seconds": list(task.media_durations_seconds),
+                        "skipped_media": [
+                            {
+                                "input_path": str(conflict.media_path),
+                                "paths": [str(path) for path in conflict.paths],
+                            }
+                            for conflict in task.skipped_media
+                        ],
                         "model_id": task.model_id,
+                        "recognition_strategy": task.recognition_strategy,
                         "hardware": {
                             "device": task.hardware.device,
                             "device_index": task.hardware.device_index,
@@ -735,6 +892,11 @@ class WorkerRuntime:
         *,
         input_path: Path | None = None,
         message: str | None = None,
+        media_progress_percent: float | None = None,
+        media_elapsed_seconds: float | None = None,
+        media_status: str | None = None,
+        output_paths: Sequence[Path] = (),
+        quality_diagnostics: Mapping[str, Any] | None = None,
     ) -> None:
         data: dict[str, Any] = {
             "stage": stage.value,
@@ -743,6 +905,26 @@ class WorkerRuntime:
         }
         if input_path is not None:
             data["input_path"] = str(input_path)
+        if current > 0:
+            data["media_index"] = current
+        if media_progress_percent is not None:
+            # faster-whisper can surface NumPy scalar timing values. Normalize
+            # them at the IPC boundary so the strict JSON envelope never sees
+            # a third-party numeric scalar.
+            data["media_progress_percent"] = round(float(media_progress_percent), 2)
+        if media_elapsed_seconds is not None:
+            data["media_elapsed_seconds"] = round(float(media_elapsed_seconds), 3)
+        if task.started_at_monotonic is not None:
+            data["task_elapsed_seconds"] = round(
+                max(0.0, time.monotonic() - task.started_at_monotonic),
+                3,
+            )
+        if media_status is not None:
+            data["media_status"] = media_status
+        if output_paths:
+            data["output_paths"] = [str(path) for path in output_paths]
+        if quality_diagnostics is not None:
+            data["quality_diagnostics"] = quality_diagnostics
         self._emit(
             EventMessage(
                 EventCode.TASK_PROGRESS,
@@ -764,6 +946,11 @@ class WorkerRuntime:
                 event.total or 0,
                 input_path=event.input_path,
                 message=event.message,
+                media_progress_percent=event.media_progress_percent,
+                media_elapsed_seconds=event.media_elapsed_seconds,
+                media_status=event.media_status,
+                output_paths=event.output_paths,
+                quality_diagnostics=event.quality_diagnostics,
             )
 
         return report
@@ -802,6 +989,7 @@ class WorkerRuntime:
 
     def _execute_task(self, task: WorkerTask) -> None:
         task.state = "running"
+        task.started_at_monotonic = time.monotonic()
         try:
             self._emit_progress(
                 task,
@@ -847,7 +1035,11 @@ class WorkerRuntime:
                 ):
                     if task.cancel.is_set():
                         raise TranscriptionCancelled()
-                    request = TranscriptionRequest(media_path, task.preset.id)
+                    request = TranscriptionRequest(
+                        media_path,
+                        task.preset.id,
+                        recognition_strategy=task.recognition_strategy,
+                    )
                     try:
                         result = service.transcribe_file(
                             request,
@@ -861,12 +1053,22 @@ class WorkerRuntime:
                                 if task.subtitle_options is not None
                                 else None
                             ),
+                            model_id=task.model_id,
                         )
                     except TranscriptionCancelled:
                         raise
                     except Exception:
                         failure_count += 1
                         self._logger.exception("task %s failed for %s", task.task_id, media_path)
+                        self._emit_progress(
+                            task,
+                            TaskStage.TRANSCRIPTION_RUNNING,
+                            current,
+                            len(media_paths),
+                            input_path=media_path,
+                            message="当前媒体处理失败，继续队列中的其他媒体",
+                            media_status="failed",
+                        )
                         continue
                     success_count += 1
                     outputs.extend(str(path) for path in plan.content_paths)
@@ -890,6 +1092,13 @@ class WorkerRuntime:
                         "success_count": success_count,
                         "failure_count": failure_count,
                         "outputs": list(dict.fromkeys(outputs)),
+                        "skipped_media": [
+                            {
+                                "input_path": str(conflict.media_path),
+                                "paths": [str(path) for path in conflict.paths],
+                            }
+                            for conflict in task.skipped_media
+                        ],
                     },
                     task_id=task.task_id,
                     message="任务完成",

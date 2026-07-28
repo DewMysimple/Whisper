@@ -6,6 +6,7 @@ import pytest
 
 from whisper_subtitle.domain.postprocess import (
     clean_inner_repetition,
+    clean_phrase_repetition,
     clean_repetition,
     ensure_chinese_punctuation,
     ensure_proper_case,
@@ -33,8 +34,14 @@ def test_ensure_proper_case_common_and_edge_cases(source, expected):
         ("你好,世界", "你好，世界。"),
         ("真的?", "真的？"),
         ("(测试):完成!", "（测试）：完成！"),
+        ("收到很多祝福，", "收到很多祝福。"),
         (".", "。"),
         ("已经结束。", "已经结束。"),
+        (
+            "don't couldn't doesn't can't won't it's I'm I'll you're we're John's.",
+            "don't couldn't doesn't can't won't it's I'm I'll you're we're John's.",
+        ),
+        ("don’t couldn’t it’s John’s.", "don’t couldn’t it’s John’s."),
     ],
 )
 def test_ensure_chinese_punctuation_common_and_edge_cases(source, expected):
@@ -68,3 +75,19 @@ def test_clean_repetition_only_removes_consecutive_duplicates(source, expected):
 )
 def test_clean_inner_repetition_keeps_normal_double_emphasis(source, expected):
     assert clean_inner_repetition(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (
+            "所以我们也有很多工作要做，所以我们也有很多工作要做，"
+            "所以我们也有很多工作要做，所以我们也有很多工作要做。",
+            "所以我们也有很多工作要做。",
+        ),
+        ("please check this please check this please check this", "please check this"),
+        ("非常非常感谢", "非常非常感谢"),
+    ],
+)
+def test_clean_phrase_repetition_collapses_only_three_or_more_exact_loops(source, expected):
+    assert clean_phrase_repetition(source) == expected

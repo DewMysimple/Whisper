@@ -266,6 +266,37 @@ def test_fail_conflict_reports_all_disk_and_reserved_targets(tmp_path):
         )
 
     assert captured.value.paths == (txt, markdown)
+    assert captured.value.media_paths == (tmp_path / "same.wav",)
+    assert captured.value.conflicts[0].media_path == tmp_path / "same.wav"
+    assert captured.value.conflicts[0].paths == (txt, markdown)
+
+
+def test_skip_policy_removes_the_whole_conflicting_media_and_keeps_the_rest(tmp_path):
+    root = tmp_path / "output"
+    conflicting_media = tmp_path / "input" / "same.wav"
+    clean_media = tmp_path / "input" / "clean.wav"
+    existing = root / "same.txt"
+    existing.parent.mkdir(parents=True)
+    existing.write_text("existing", encoding="utf-8")
+
+    selection = output_store.select_configurable_outputs(
+        [conflicting_media, clean_media],
+        custom_policy(
+            root,
+            conflict="skip",
+            preserve_txt=False,
+            preserve_markdown=False,
+        ),
+    )
+
+    assert selection.media_paths == (clean_media,)
+    assert len(selection.plans) == 1
+    assert selection.plans[0].primary_txt == root / "clean.txt"
+    assert selection.plans[0].primary_md == root / "clean.md"
+    assert len(selection.skipped) == 1
+    assert selection.skipped[0].media_path == conflicting_media
+    assert selection.skipped[0].paths == (existing,)
+    assert existing.read_text(encoding="utf-8") == "existing"
 
 
 def test_auto_rename_reserves_txt_and_markdown_with_one_suffix(tmp_path):
@@ -288,7 +319,7 @@ def test_auto_rename_reserves_txt_and_markdown_with_one_suffix(tmp_path):
     assert plan.primary_md == root / "same (2).md"
 
 
-def test_srt_only_plan_uses_srt_directory_and_does_not_create_compatibility_txt(tmp_path):
+def test_srt_plan_pairs_subtitle_and_timestamped_txt_in_the_same_directory(tmp_path):
     media = tmp_path / "input" / "lesson.wav"
     media.parent.mkdir()
     media.write_bytes(b"fixture")
@@ -304,5 +335,28 @@ def test_srt_only_plan_uses_srt_directory_and_does_not_create_compatibility_txt(
     plan = output_store.build_configurable_output_plans([media], policy)[0]
 
     assert plan.primary_srt == media.parent / "SRT" / "lesson.srt"
+    assert plan.primary_srt_txt == media.parent / "SRT" / "lesson.txt"
     assert plan.primary_txt is None
     assert plan.backup_txt is None
+
+
+def test_srt_auto_rename_applies_one_suffix_to_both_companion_files(tmp_path):
+    root = tmp_path / "output"
+    root.mkdir()
+    (root / "lesson.txt").write_text("existing", encoding="utf-8")
+    media = tmp_path / "lesson.wav"
+    media.write_bytes(b"fixture")
+    policy = {
+        "mode": "custom",
+        "root_directory": str(root),
+        "txt": {"enabled": False},
+        "markdown": {"enabled": False},
+        "srt": {"enabled": True},
+        "preserve_source_txt": False,
+        "conflict_policy": "auto_rename",
+    }
+
+    plan = output_store.build_configurable_output_plans([media], policy)[0]
+
+    assert plan.primary_srt == root / "lesson (2).srt"
+    assert plan.primary_srt_txt == root / "lesson (2).txt"

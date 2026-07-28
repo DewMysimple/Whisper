@@ -15,8 +15,9 @@ import { useCallback, useEffect, useState } from 'react';
 import type { TaskSnapshot } from '../contracts/desktop';
 import { getModelLabel } from '../data/models';
 import { formatResolvedHardware } from '../state/hardware';
-import { getPreset } from '../data/presets';
-import { isAbnormalTask, useWorkspace } from '../state/workspace';
+import { formatDurationSummary, taskDurationSummary } from '../state/mediaDuration';
+import { getPreset, transcriptionTaskLabel } from '../data/presets';
+import { canResumeTask, isAbnormalTask, useWorkspace } from '../state/workspace';
 import {
   availableTaskDates,
   formatTaskCreatedAt,
@@ -48,6 +49,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
   const revealTaskOutput = useWorkspace((state) => state.revealTaskOutput);
   const selectTask = useWorkspace((state) => state.selectTask);
   const retryTask = useWorkspace((state) => state.retryTask);
+  const resumeTask = useWorkspace((state) => state.resumeTask);
   const clearCompletedHistory = useWorkspace((state) => state.clearCompletedHistory);
   const clearAbnormalHistory = useWorkspace((state) => state.clearAbnormalHistory);
   const auditTaskOutputs = useWorkspace((state) => state.auditTaskOutputs);
@@ -132,7 +134,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
           <p className="step-label">
             {expanded ? 'CONTROLLED LOCAL IPC' : 'LOCAL QUEUE / 本机队列'}
           </p>
-          <h2 id="task-title">{expanded ? '任务队列与本地历史' : '最近任务'}</h2>
+          <h2 id="task-title">{expanded ? '本机任务历史' : '最近任务'}</h2>
         </div>
         <span className="task-count">{tasks.length} 项</span>
       </div>
@@ -141,6 +143,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
           <div className="task-toolbar">
             <input
               aria-label="搜索任务"
+              id="task-history-search"
               onChange={(event) => setTaskSearch(event.target.value)}
               placeholder="按文件名搜索历史…"
               type="search"
@@ -205,135 +208,147 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
       </span>
       <div className="task-list">
         {visibleTasks.length === 0 && <div className="empty-tasks">没有符合条件的任务。</div>}
-        {visibleTasks.map((task) => (
-          <article className="task-row" key={task.id}>
-            <div
-              className={`task-status ${task.outputAvailability === 'missing' ? 'failed' : task.status}`}
-            >
-              <StatusIcon task={task} />
-            </div>
-            <button
-              aria-label={`查看 ${task.title} 详情`}
-              className="task-main task-open"
-              onClick={() => void selectTask(task.id)}
-              type="button"
-            >
-              <div className="task-title-line">
-                <strong>{task.title}</strong>
-                {task.isCustom && <em>自定义</em>}
+        {visibleTasks.map((task) => {
+          const resumable = canResumeTask(task);
+          return (
+            <article className="task-row" key={task.id}>
+              <div
+                className={`task-status ${task.outputAvailability === 'missing' ? 'failed' : task.status}`}
+              >
+                <StatusIcon task={task} />
               </div>
-              <div className="task-meta">
-                <span>
-                  {task.outputAvailability === 'missing' ? '输出文件已丢失或移动' : task.stage}
+              <button
+                aria-label={`查看 ${task.title} 详情`}
+                className="task-main task-open"
+                onClick={() => void selectTask(task.id)}
+                type="button"
+              >
+                <div className="task-title-line">
+                  <strong>{task.title}</strong>
+                  {task.isCustom && <em>自定义</em>}
+                </div>
+                <div className="task-meta">
+                  <span>
+                    {task.outputAvailability === 'missing' ? '输出文件已丢失或移动' : task.stage}
+                  </span>
+                  <span>·</span>
+                  <span>{task.elapsed}</span>
+                  <span>·</span>
+                  <span>{task.sourceCount} 个媒体文件</span>
+                  <span>·</span>
+                  <span>{formatDurationSummary(taskDurationSummary(task))}</span>
+                  <span>·</span>
+                  <span>{getModelLabel(task.modelId)}</span>
+                  <span>·</span>
+                  <span>{formatTaskCreatedAt(task.createdAt)}</span>
+                </div>
+                <div className="progress-track" aria-label={`任务进度 ${task.progress}%`}>
+                  <span style={{ width: `${task.progress}%` }} />
+                </div>
+              </button>
+              <div className="task-card-footer">
+                <span className="task-version">
+                  {getPreset(task.presetId).label} ·{' '}
+                  {recognitionStrategyLabel(task.recognitionStrategy)}
                 </span>
-                <span>·</span>
-                <span>{task.elapsed}</span>
-                <span>·</span>
-                <span>{task.sourceCount} 个媒体文件</span>
-                <span>·</span>
-                <span>{getModelLabel(task.modelId)}</span>
-                <span>·</span>
-                <span>{formatTaskCreatedAt(task.createdAt)}</span>
-              </div>
-              <div className="progress-track" aria-label={`任务进度 ${task.progress}%`}>
-                <span style={{ width: `${task.progress}%` }} />
-              </div>
-            </button>
-            <div className="task-card-footer">
-              <span className="task-version">{getPreset(task.presetId).label}</span>
-              <div className="task-card-footer-actions">
-                <strong className="task-percent">{task.progress}%</strong>
-                {task.status === 'running' || task.status === 'queued' ? (
-                  <button
-                    aria-label={`取消 ${task.title}`}
-                    className="icon-button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void cancelTask(task.id);
-                    }}
-                    type="button"
-                  >
-                    <CircleStop size={17} />
-                  </button>
-                ) : (
-                  <div className="task-actions">
+                <div className="task-card-footer-actions">
+                  <strong className="task-percent">{task.progress}%</strong>
+                  {task.status === 'running' || task.status === 'queued' ? (
                     <button
-                      aria-label={`${armedDelete?.key === `task:${task.id}` ? '再次点击删除' : '删除'} ${task.title} 的任务记录`}
-                      aria-pressed={armedDelete?.key === `task:${task.id}`}
-                      className={`icon-button has-tooltip is-danger-action ${armedDelete?.key === `task:${task.id}` ? 'is-delete-armed' : ''}`}
-                      data-delete-arm-key={`task:${task.id}`}
-                      data-tooltip={
-                        armedDelete?.key === `task:${task.id}` ? '再次点击删除' : '删除任务记录'
-                      }
+                      aria-label={`取消 ${task.title}`}
+                      className="icon-button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        armOrDelete(
-                          `task:${task.id}`,
-                          `再次点击删除 ${task.title} 的任务记录`,
-                          () => deleteTaskHistory(task.id),
-                        );
+                        void cancelTask(task.id);
                       }}
                       type="button"
                     >
-                      <Trash2 size={17} />
+                      <CircleStop size={17} />
                     </button>
-                    {task.draft && (
+                  ) : (
+                    <div className="task-actions">
                       <button
-                        aria-label={`重新转录 ${task.title}`}
-                        className="icon-button has-tooltip"
-                        data-tooltip="重新转录"
+                        aria-label={`${armedDelete?.key === `task:${task.id}` ? '再次点击删除' : '删除'} ${task.title} 的任务记录`}
+                        aria-pressed={armedDelete?.key === `task:${task.id}`}
+                        className={`icon-button has-tooltip is-danger-action ${armedDelete?.key === `task:${task.id}` ? 'is-delete-armed' : ''}`}
+                        data-delete-arm-key={`task:${task.id}`}
+                        data-tooltip={
+                          armedDelete?.key === `task:${task.id}` ? '再次点击删除' : '删除任务记录'
+                        }
                         onClick={(event) => {
                           event.stopPropagation();
-                          setRetryTaskId(task.id);
+                          armOrDelete(
+                            `task:${task.id}`,
+                            `再次点击删除 ${task.title} 的任务记录`,
+                            () => deleteTaskHistory(task.id),
+                          );
                         }}
                         type="button"
                       >
-                        <RotateCcw size={17} />
+                        <Trash2 size={17} />
                       </button>
-                    )}
-                    {task.status === 'completed' &&
-                      task.outputAvailability !== 'missing' &&
-                      (task.outputs?.length ?? 0) > 0 && (
+                      {task.draft && (
                         <button
-                          aria-label={`在资源管理器中定位 ${task.title} 的输出`}
+                          aria-label={`${resumable ? '继续转录' : '重新转录'} ${task.title}`}
                           className="icon-button has-tooltip"
-                          data-tooltip="定位输出"
+                          data-tooltip={resumable ? '继续转录' : '重新转录'}
                           onClick={(event) => {
                             event.stopPropagation();
-                            void revealTaskOutput(task.id);
+                            if (resumable) {
+                              void resumeTask(task.id);
+                            } else {
+                              setRetryTaskId(task.id);
+                            }
                           }}
                           type="button"
                         >
-                          <FolderOpen size={18} />
+                          <RotateCcw size={17} />
                         </button>
                       )}
-                    <button
-                      aria-label={`查看 ${task.title} 详情`}
-                      className="icon-button has-tooltip"
-                      data-tooltip="查看任务详情"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void selectTask(task.id);
-                      }}
-                      type="button"
-                    >
-                      <Eye size={18} />
-                    </button>
-                  </div>
-                )}
+                      {task.status === 'completed' &&
+                        task.outputAvailability !== 'missing' &&
+                        (task.outputs?.length ?? 0) > 0 && (
+                          <button
+                            aria-label={`在资源管理器中定位 ${task.title} 的输出`}
+                            className="icon-button has-tooltip"
+                            data-tooltip="定位输出"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void revealTaskOutput(task.id);
+                            }}
+                            type="button"
+                          >
+                            <FolderOpen size={18} />
+                          </button>
+                        )}
+                      <button
+                        aria-label={`查看 ${task.title} 详情`}
+                        className="icon-button has-tooltip"
+                        data-tooltip="查看任务详情"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void selectTask(task.id);
+                        }}
+                        type="button"
+                      >
+                        <Eye size={18} />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </div>
       <ConfirmDialog
-        confirmLabel="确认重新转录"
-        description="软件将按历史快照重新检查输入路径并创建一个新任务；原任务记录和已有输出不会被删除。"
+        confirmLabel="载入原配置"
+        description="软件只会把历史输入、参数、模型、硬件和输出策略载入转录工作台，不会立即创建或执行任务。"
         onCancel={closeRetryConfirmation}
         onConfirm={() => void confirmRetry()}
         open={retryCandidate !== undefined}
         pending={startingTask}
-        title="确认重新转录？"
+        title="载入历史转录配置？"
       >
         {retryCandidate && (
           <dl>
@@ -344,6 +359,14 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
             <div>
               <dt>转录版本</dt>
               <dd>{getPreset(retryCandidate.presetId).label}</dd>
+            </div>
+            <div>
+              <dt>识别策略</dt>
+              <dd>{recognitionStrategyLabel(retryCandidate.recognitionStrategy)}</dd>
+            </div>
+            <div>
+              <dt>任务类型</dt>
+              <dd>{transcriptionTaskLabel(retryCandidate.draft?.effectiveParameters.task)}</dd>
             </div>
             <div>
               <dt>推理模型</dt>
@@ -366,4 +389,12 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
       </ConfirmDialog>
     </section>
   );
+}
+
+function recognitionStrategyLabel(
+  strategy: import('../contracts/desktop').RecognitionStrategy | undefined,
+): string {
+  if (strategy === 'mixed_zh_en') return '复杂中英混合';
+  if (strategy === 'zh_detail_review') return '中文细节增强';
+  return '稳定主语言';
 }

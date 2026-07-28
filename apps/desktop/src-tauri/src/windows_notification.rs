@@ -2,7 +2,8 @@ use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use std::path::PathBuf;
 
-use tauri_winrt_notification::{IconCrop, Toast};
+use tauri::{AppHandle, Manager};
+use tauri_winrt_notification::{Duration as ToastDuration, IconCrop, Toast};
 use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
 use winreg::RegKey;
 use winreg::enums::HKEY_CURRENT_USER;
@@ -65,17 +66,45 @@ fn heading(status: &str) -> Result<&'static str, String> {
         "completed" => Ok("转录任务已完成"),
         "failed" => Ok("转录任务需要处理"),
         "cancelled" => Ok("转录任务已取消"),
+        "power" => Ok("WhisperSubtitle 电源操作"),
         _ => Err(format!("unsupported task notification status: {status}")),
     }
 }
 
-pub fn show_task_notification(status: &str, task_title: &str, detail: &str) -> Result<(), String> {
+fn focus_main_window(app: &AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "WhisperSubtitle main window is unavailable".to_owned())?;
+    window
+        .show()
+        .map_err(|error| format!("main window could not be shown: {error}"))?;
+    window
+        .unminimize()
+        .map_err(|error| format!("main window could not be restored: {error}"))?;
+    window
+        .set_focus()
+        .map_err(|error| format!("main window could not be focused: {error}"))
+}
+
+pub fn show_task_notification(
+    app: &AppHandle,
+    status: &str,
+    task_title: &str,
+    detail: &str,
+) -> Result<(), String> {
     let icon_path = ensure_app_identity()?;
+    let activation_handle = app.clone();
     Toast::new(APP_USER_MODEL_ID)
         .title(heading(status)?)
         .text1(task_title)
         .text2(detail)
         .icon(&icon_path, IconCrop::Circular, APP_DISPLAY_NAME)
+        .duration(ToastDuration::Long)
+        .add_button("返回 WhisperSubtitle", "open-app")
+        .on_activated(move |_| {
+            let _ = focus_main_window(&activation_handle);
+            Ok(())
+        })
         .sound(None)
         .show()
         .map_err(|error| format!("WhisperSubtitle notification could not be shown: {error}"))
@@ -90,17 +119,7 @@ mod tests {
         assert_eq!(heading("completed").unwrap(), "转录任务已完成");
         assert_eq!(heading("failed").unwrap(), "转录任务需要处理");
         assert_eq!(heading("cancelled").unwrap(), "转录任务已取消");
+        assert_eq!(heading("power").unwrap(), "WhisperSubtitle 电源操作");
         assert!(heading("running").is_err());
-    }
-
-    #[test]
-    #[ignore = "shows one branded Windows notification"]
-    fn shows_branded_windows_notification() {
-        super::show_task_notification(
-            "completed",
-            "WhisperSubtitle 通知身份测试",
-            "应显示蜘蛛侠图标，而不是 Windows PowerShell",
-        )
-        .expect("branded notification");
     }
 }

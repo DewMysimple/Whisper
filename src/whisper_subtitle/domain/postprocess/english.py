@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from types import MappingProxyType
 
+from .multilingual import ensure_contextual_terminator, normalize_mixed_punctuation
+
 
 PROPER_NOUNS = MappingProxyType(
     {
@@ -77,8 +79,8 @@ def ensure_proper_case(text: str) -> str:
 
 
 def ensure_punctuation(text: str) -> str:
-    """Ensure English text ends in the same punctuation accepted by old Core."""
-    text = text.strip()
-    if text and text[-1] not in ".!?":
-        text += "."
-    return text
+    """Use English punctuation around Latin text and preserve CJK conventions."""
+    return ensure_contextual_terminator(
+        normalize_mixed_punctuation(text, "en"),
+        "en",
+    )

@@ -1,4 +1,4 @@
-import { Captions, Check, Copy, FolderOutput, RotateCcw } from 'lucide-react';
+import { Captions, Check, Copy, FolderOutput, Power, RotateCcw } from 'lucide-react';
 
 import { useWorkspace } from '../state/workspace';
 import { HelpTip } from './HelpTip';
@@ -12,6 +12,9 @@ export function OutputPanel() {
   );
   const profileMode = useWorkspace((state) => state.profileMode);
   const subtitleParameters = useWorkspace((state) => state.subtitleParameters);
+  const finishAction = useWorkspace((state) => state.finishAction);
+  const powerCapabilities = useWorkspace((state) => state.powerCapabilities);
+  const setFinishAction = useWorkspace((state) => state.setFinishAction);
   const usesCustomLocation = output.mode === 'custom' && output.rootDirectory !== null;
   const enabledDirectories =
     profileMode === 'subtitle'
@@ -129,9 +132,9 @@ export function OutputPanel() {
             <Captions size={16} />
           </span>
           <span className="output-format-copy">
-            <strong>SRT 字幕</strong>
+            <strong>SRT 字幕 + 时间戳 TXT</strong>
             <small>
-              {subtitleParameters.max_lines_per_cue} 行 × 每行{' '}
+              两个文件内容完全一致 · {subtitleParameters.max_lines_per_cue} 行 × 每行{' '}
               {subtitleParameters.max_characters_per_line} 字符 ·{' '}
               {subtitleParameters.max_characters_per_second} 字符/秒
             </small>
@@ -191,24 +194,56 @@ export function OutputPanel() {
         <strong className="output-footnote-label">
           同名文件
           <HelpTip id="output-conflict-help" label="查看同名冲突处理方式" align="right">
-            发现同名输出时，会在创建任务前请求本次覆盖确认，或自动安全重命名。
+            发现同名输出时，可在创建任务前确认覆盖、整条媒体跳过，或自动安全重命名。
           </HelpTip>
         </strong>
-        <span>覆盖必须由本次任务明确确认</span>
+        <span>确认只对本次任务生效</span>
       </div>
       <div className="output-conflict-control">
         <select
           aria-label="同名冲突策略"
           onChange={(event) =>
             setOutput({
-              conflictPolicy: event.target.value as 'confirm_overwrite' | 'auto_rename',
+              conflictPolicy: event.target.value as
+                'confirm_overwrite' | 'confirm_skip' | 'auto_rename',
             })
           }
           value={output.conflictPolicy}
         >
           <option value="confirm_overwrite">执行前确认覆盖同名文件</option>
+          <option value="confirm_skip">执行前确认跳过同名媒体</option>
           <option value="auto_rename">自动安全重命名</option>
         </select>
+      </div>
+
+      <div className="output-section-heading output-finish-heading">
+        <strong className="output-footnote-label">
+          执行完
+          <HelpTip id="output-finish-help" label="查看任务完成后的系统操作" align="right">
+            该选择只对下一次成功创建的任务批次生效。队列全部成功后会显示 60 秒倒计时；
+            任一任务失败或取消时不会执行。
+          </HelpTip>
+        </strong>
+        <span>一次性操作，不写入任务历史</span>
+      </div>
+      <div className="finish-action-options" aria-label="任务完成后的系统操作">
+        <button
+          aria-pressed={finishAction === 'none'}
+          className={finishAction === 'none' ? 'is-selected' : ''}
+          onClick={() => setFinishAction('none')}
+          type="button"
+        >
+          无操作
+        </button>
+        <button
+          aria-pressed={finishAction === 'shutdown'}
+          className={finishAction === 'shutdown' ? 'is-selected' : ''}
+          disabled={!powerCapabilities.shutdown}
+          onClick={() => setFinishAction('shutdown')}
+          type="button"
+        >
+          <Power size={15} /> 关机
+        </button>
       </div>
     </section>
   );

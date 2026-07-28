@@ -42,17 +42,19 @@ export const MODEL_PRESENTATIONS: Record<ModelId, ModelPresentation> = {
     tier: '高精度',
     speed: '较慢',
     accuracy: '最高档',
-    summary: '面向优先追求识别质量的本地转录任务。',
+    summary: '面向优先追求识别质量的本地转录任务，并支持本地语音翻译为英语。',
   },
   'large-v3-turbo': {
     label: 'Large V3 Turbo',
     tier: '默认推荐',
     speed: '高性能',
     accuracy: '高',
-    summary: '当前正式默认，在质量、速度和显存占用之间保持平衡。',
+    summary: '当前正式默认，在质量、速度和显存占用之间保持平衡；仅用于原声转录。',
   },
 };
 
 export function getModelLabel(modelId: ModelId): string {
   return MODEL_PRESENTATIONS[modelId].label;
 }
+
+export const VISIBLE_MODEL_IDS = ['large-v3', 'large-v3-turbo'] as const;

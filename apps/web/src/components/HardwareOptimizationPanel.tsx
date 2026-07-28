@@ -22,11 +22,13 @@ export function HardwareOptimizationPanel() {
   const pendingHardware = useWorkspace((state) => state.pendingHardware);
   const model = useWorkspace((state) => state.model);
   const modelSwitching = useWorkspace((state) => state.modelSwitching);
+  const tasks = useWorkspace((state) => state.tasks);
   const setHardwarePreference = useWorkspace((state) => state.setHardwarePreference);
   const restoreHardwareDefaults = useWorkspace((state) => state.restoreHardwareDefaults);
   const [draft, setDraft] = useState<HardwarePreference>(selected);
   const capabilities = environment?.hardware;
   const dirty = JSON.stringify(draft) !== JSON.stringify(selected);
+  const busy = tasks.some((task) => task.status === 'queued' || task.status === 'running');
 
   useEffect(() => setDraft(selected), [selected]);
 
@@ -49,7 +51,7 @@ export function HardwareOptimizationPanel() {
   const draftSupported = hardwarePreferenceSupported(draft, capabilities);
 
   const patchDraft = (patch: Partial<HardwarePreference>) =>
-    setDraft((current) => ({ ...current, ...patch }));
+    !busy && setDraft((current) => ({ ...current, ...patch }));
 
   return (
     <section className="panel hardware-optimizer" aria-labelledby="hardware-optimizer-title">
@@ -60,7 +62,7 @@ export function HardwareOptimizationPanel() {
           <p>选择推理设备、计算精度和 CPU 线程；每个任务会冻结提交时的配置。</p>
         </div>
         <span className={`hardware-pending-chip ${pendingHardware ? 'is-pending' : ''}`}>
-          {pendingHardware ? '等待后续任务生效' : '配置已生效'}
+          {busy ? '任务执行期间已锁定' : pendingHardware ? '等待后续任务生效' : '配置已生效'}
         </span>
       </div>
 
@@ -102,7 +104,12 @@ export function HardwareOptimizationPanel() {
         </div>
       </div>
 
-      <div className="hardware-control-grid" aria-busy={modelSwitching}>
+      <div
+        aria-busy={modelSwitching}
+        aria-disabled={busy}
+        className={`hardware-control-grid ${busy ? 'is-locked' : ''}`}
+        title={busy ? '任务执行期间不可更改硬件配置' : undefined}
+      >
         <fieldset className="hardware-device-control">
           <legend>推理设备</legend>
           <div className="hardware-segmented-control">
@@ -116,7 +123,9 @@ export function HardwareOptimizationPanel() {
               <button
                 aria-pressed={draft.mode === mode}
                 disabled={
-                  capabilities === undefined || (mode === 'cuda' && capabilities.gpus.length === 0)
+                  busy ||
+                  capabilities === undefined ||
+                  (mode === 'cuda' && capabilities.gpus.length === 0)
                 }
                 key={mode}
                 onClick={() => patchDraft({ mode })}
@@ -135,7 +144,10 @@ export function HardwareOptimizationPanel() {
           <select
             aria-label="CUDA 设备"
             disabled={
-              capabilities === undefined || capabilities.gpus.length <= 1 || draft.mode === 'cpu'
+              capabilities === undefined ||
+              capabilities.gpus.length <= 1 ||
+              draft.mode === 'cpu' ||
+              busy
             }
             onChange={(event) => {
               const gpuDeviceIndex = Number(event.target.value);
@@ -163,7 +175,7 @@ export function HardwareOptimizationPanel() {
           <select
             aria-label="CUDA 计算精度"
             disabled={
-              capabilities === undefined || draft.mode === 'cpu' || cudaOptions.length === 0
+              capabilities === undefined || draft.mode === 'cpu' || cudaOptions.length === 0 || busy
             }
             onChange={(event) =>
               patchDraft({
@@ -185,7 +197,7 @@ export function HardwareOptimizationPanel() {
           <span>CPU 计算精度</span>
           <select
             aria-label="CPU 计算精度"
-            disabled={capabilities === undefined || draft.mode === 'cuda'}
+            disabled={busy || capabilities === undefined || draft.mode === 'cuda'}
             onChange={(event) =>
               patchDraft({
                 cpuComputeType: event.target.value as HardwarePreference['cpuComputeType'],
@@ -208,7 +220,7 @@ export function HardwareOptimizationPanel() {
           </span>
           <input
             aria-label="CPU 推理线程"
-            disabled={capabilities === undefined || draft.mode === 'cuda'}
+            disabled={busy || capabilities === undefined || draft.mode === 'cuda'}
             max={maxThreads}
             min={1}
             onChange={(event) => patchDraft({ cpuThreads: Number(event.target.value) })}
@@ -222,7 +234,7 @@ export function HardwareOptimizationPanel() {
       <div className="hardware-optimizer-actions">
         <button
           className="quiet-button"
-          disabled={modelSwitching || !dirty}
+          disabled={busy || modelSwitching || !dirty}
           onClick={() => setDraft(selected)}
           type="button"
         >
@@ -230,7 +242,7 @@ export function HardwareOptimizationPanel() {
         </button>
         <button
           className="secondary-button"
-          disabled={modelSwitching || capabilities === undefined}
+          disabled={busy || modelSwitching || capabilities === undefined}
           onClick={() => {
             const recommended = recommendedHardwarePreference(capabilities);
             setDraft(recommended);
@@ -242,7 +254,9 @@ export function HardwareOptimizationPanel() {
         </button>
         <button
           className="primary-button"
-          disabled={capabilities === undefined || modelSwitching || !dirty || !draftSupported}
+          disabled={
+            busy || capabilities === undefined || modelSwitching || !dirty || !draftSupported
+          }
           onClick={() => void setHardwarePreference(draft)}
           type="button"
         >

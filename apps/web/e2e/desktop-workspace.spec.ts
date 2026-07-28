@@ -17,35 +17,32 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
         source: rect('.source-panel'),
         output: rect('.output-panel'),
         preset: rect('.preset-panel:not(.subtitle-profile-panel)'),
+        subtitlePanel: rect('.subtitle-profile-panel'),
         launch: rect('.launch-card'),
       };
     });
   const transcript = await measure();
-  expect(transcript.source.height).toBeCloseTo(transcript.output.height, 5);
+  expect(transcript.source.height).toBeCloseTo(transcript.output.height, 1);
 
-  await page.getByRole('button', { name: '粘贴 Windows 路径' }).click();
-  const pathGeometry = await page.evaluate(() => {
-    const textarea = document
-      .querySelector('.directory-path-input textarea')!
-      .getBoundingClientRect();
-    const label = document.querySelector('.directory-path-input > span')!.getBoundingClientRect();
-    return {
-      textareaCenter: { x: textarea.x + textarea.width / 2, y: textarea.y + textarea.height / 2 },
-      labelCenter: { x: label.x + label.width / 2, y: label.y + label.height / 2 },
-    };
+  const intakeRatio = await page.evaluate(() => {
+    const local = document.querySelector('.drop-zone')!.getBoundingClientRect();
+    const clipboard = document.querySelector('.clipboard-intake')!.getBoundingClientRect();
+    return local.height / clipboard.height;
   });
-  expect(pathGeometry.labelCenter.x).toBeCloseTo(pathGeometry.textareaCenter.x, 5);
-  expect(pathGeometry.labelCenter.y).toBeCloseTo(pathGeometry.textareaCenter.y, 5);
+  expect(intakeRatio).toBeGreaterThan(1.8);
+  expect(intakeRatio).toBeLessThan(2.8);
+  await page.getByRole('button', { name: '粘贴 Windows 路径' }).click();
+  await expect(page.getByLabel('待转录媒体队列')).toContainText('剪贴板课程 01.mp4');
+  await expect(page.getByRole('textbox', { name: '粘贴 Windows 路径' })).toHaveCount(0);
 
   await page.locator('.subtitle-profile-panel .preset-card').first().click();
   const subtitle = await measure();
-  expect(subtitle.source.height).toBeCloseTo(subtitle.output.height, 5);
-  await page.locator('.workspace-grid').evaluate((element) => {
-    element.removeAttribute('data-profile-mode');
-  });
-  const subtitleWithoutAdjustment = await measure();
-  expect(subtitle.preset.height - subtitleWithoutAdjustment.preset.height).toBeCloseTo(3, 5);
-  expect(subtitle.launch.height - subtitleWithoutAdjustment.launch.height).toBeCloseTo(3, 5);
+  expect(subtitle.source.height).toBeCloseTo(subtitle.output.height, 1);
+  expect(subtitle.preset.height).toBeCloseTo(subtitle.launch.height, 1);
+  await expect(
+    page.locator('.preset-panel:not(.subtitle-profile-panel) .inference-parameter-editor'),
+  ).toHaveCount(0);
+  expect(subtitle.subtitlePanel.height).toBeGreaterThan(transcript.subtitlePanel.height);
 
   await page.setViewportSize({ width: 900, height: 900 });
   await expect(
@@ -55,16 +52,55 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   ).resolves.toBe(1);
 });
 
-test('manages the local model library without interrupting queued work', async ({
+test('freezes the optional recognition strategies in the Chinese V3 profile', async ({ page }) => {
+  await page
+    .locator('.preset-panel:not(.subtitle-profile-panel) .preset-card')
+    .filter({ hasText: '中文防幻觉' })
+    .click();
+  await page.getByRole('button', { name: '查看并修改模型参数' }).click();
+  const strategy = page.getByRole('group', { name: '识别策略' });
+  await expect(strategy).toBeVisible();
+  await strategy.getByRole('button', { name: '复杂中英混合' }).click();
+  await expect(strategy.getByRole('button', { name: '复杂中英混合' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.getByText(/先完成稳定中文识别/)).toBeVisible();
+
+  await strategy.getByRole('button', { name: '中文细节增强' }).click();
+  await expect(strategy.getByRole('button', { name: '中文细节增强' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.getByText(/耗时显著增加/)).toBeVisible();
+
+  await page.getByRole('button', { name: '更换识别模式' }).click();
+  await expect(page.locator('.launch-summary')).toContainText('中文细节增强');
+});
+
+test('locks model and hardware changes while queued or running work exists', async ({
   page,
 }, testInfo) => {
   await page.getByRole('button', { name: '模型切换' }).click();
   await expect(page.getByRole('heading', { name: '当前推理模型' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '本地模型库' })).toBeVisible();
-  await expect(page.locator('.model-card')).toHaveCount(6);
-  await expect(page.getByText('2 / 6')).toBeVisible();
+  await expect(page.locator('.model-card')).toHaveCount(3);
+  await expect(page.getByText('1 / 2')).toBeVisible();
   await expect(page.getByRole('button', { name: '打开模型目录' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '硬件优化' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '当前模型参数' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '待自定义' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tiny' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Medium' })).toHaveCount(0);
+
+  const turboCard = page
+    .locator('.model-card')
+    .filter({ has: page.getByRole('heading', { name: 'Large V3 Turbo' }) });
+  await expect(turboCard).toBeDisabled();
+  await expect(turboCard).toHaveAttribute('title', '任务执行期间不可切换模型');
+  await expect(page.getByText('任务执行期间已锁定')).toHaveCount(1);
+
+  await page.getByRole('button', { name: '硬件优化' }).click();
+  await expect(page.getByRole('heading', { name: '硬件优化', level: 1 })).toBeVisible();
   const hardware = page.locator('.hardware-optimizer');
   await expect(hardware.getByRole('button', { name: '自动' })).toHaveAttribute(
     'aria-pressed',
@@ -74,24 +110,8 @@ test('manages the local model library without interrupting queued work', async (
     'INT8 + FP16',
   );
 
-  const mediumCard = page
-    .locator('.model-card')
-    .filter({ has: page.getByRole('heading', { name: 'Medium' }) });
-  await expect(mediumCard).toContainText('已完整安装');
-  await mediumCard.getByRole('button', { name: '设为转录模型' }).click();
-  await expect(mediumCard.getByRole('button', { name: '等待生效' })).toBeVisible();
-  await expect(page.getByText('当前队列结束后生效')).toBeVisible();
-
-  const tinyCard = page
-    .locator('.model-card')
-    .filter({ has: page.getByRole('heading', { name: 'Tiny' }) });
-  await expect(tinyCard.getByRole('button', { name: '设为转录模型' })).toBeDisabled();
-  await expect(tinyCard).toContainText('请放入 models\\tiny');
-  await expect(
-    mediumCard
-      .getByRole('button', { name: '等待生效' })
-      .evaluate((element) => getComputedStyle(element).color),
-  ).resolves.toBe('rgb(255, 255, 255)');
+  await expect(page.getByText('任务执行期间已锁定')).toHaveCount(1);
+  await expect(hardware.getByRole('button', { name: '自动' })).toBeDisabled();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('model-library-light.png') });
@@ -113,12 +133,6 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   ).resolves.toBe('13px');
   await expect(
     page
-      .locator('.parameter-field')
-      .first()
-      .evaluate((element) => getComputedStyle(element).fontSize),
-  ).resolves.toBe('12px');
-  await expect(
-    page
       .locator('.output-section-heading')
       .first()
       .evaluate((element) => getComputedStyle(element).fontSize),
@@ -132,9 +146,11 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   await page.getByRole('button', { name: '添加文件夹' }).click();
   await expect(page.getByLabel('待转录媒体队列')).toContainText('共 8 个媒体文件');
 
+  await page.getByRole('button', { name: '查看并修改模型参数' }).click();
   const beamSize = page.getByRole('spinbutton', { name: 'Beam size' });
   await beamSize.fill('6');
   await expect(page.getByText('派生自定义')).toBeVisible();
+  await page.getByRole('button', { name: '更换识别模式' }).click();
 
   await page.getByText('Markdown', { exact: true }).click();
   await expect(page.getByText('跟随媒体')).toBeVisible();
@@ -185,7 +201,9 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   await page.getByRole('button', { name: '继续转录' }).click();
   await expect(page.getByRole('heading', { name: '性能监控' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
-  await expect(page.getByRole('button', { name: /任务记录/ })).toContainText('3');
+  await expect(
+    page.getByRole('button', { name: /任务监控与记录/ }).locator('.nav-count'),
+  ).toHaveText(/^(?:[1-9]|10)$/);
   await page.getByRole('button', { name: '转录工作台' }).click();
   await expect(page.getByRole('heading', { name: '最近任务' })).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -204,6 +222,35 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   });
 });
 
+test('confirms the one-time shutdown action without exposing hibernate', async ({
+  page,
+}, testInfo) => {
+  await expect(page.getByRole('button', { name: '休眠' })).toHaveCount(0);
+  await page.getByRole('button', { name: '选择媒体文件' }).click();
+  await page.getByRole('button', { name: '关机' }).click();
+  await page.getByRole('button', { name: /开始本地转录/ }).click();
+  await expect(page.getByRole('dialog', { name: '确认使用标准转录版本？' })).toBeVisible();
+  await page.getByRole('button', { name: '继续转录' }).click();
+  const shutdownDialog = page.getByRole('dialog', { name: '确认任务完成后关闭电脑？' });
+  await expect(shutdownDialog).toBeVisible();
+  await expect(shutdownDialog).toContainText('60 秒关机倒计时');
+  await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath('shutdown-confirmation.png'),
+  });
+  await page.getByRole('button', { name: '取消' }).click();
+  await expect(page.getByLabel('待转录媒体队列')).toContainText('P20-核心语法-整数类型.mp4');
+  await expect(page.getByRole('button', { name: '关机' })).toHaveAttribute('aria-pressed', 'true');
+
+  await page
+    .locator('.preset-panel:not(.subtitle-profile-panel) .preset-card')
+    .filter({ hasText: '中文防幻觉' })
+    .click();
+  await page.getByRole('button', { name: /开始本地转录/ }).click();
+  await page.getByRole('button', { name: '确认并开始转录' }).click();
+  await expect(page.getByRole('heading', { name: '性能监控' })).toBeVisible();
+});
+
 test('supports workspace navigation, theme and configuration export', async ({
   page,
 }, testInfo) => {
@@ -219,8 +266,12 @@ test('supports workspace navigation, theme and configuration export', async ({
       .first()
       .evaluate((element) => getComputedStyle(element).minHeight),
   ).resolves.toBe('116px');
+  await page.getByRole('button', { name: '查看并修改模型参数' }).click();
   await expect(
-    page.locator('.parameter-grid').evaluate((element) => getComputedStyle(element).rowGap),
+    page
+      .locator('.parameter-grid')
+      .first()
+      .evaluate((element) => getComputedStyle(element).rowGap),
   ).resolves.toBe('10px');
   await expect(
     page
@@ -228,6 +279,7 @@ test('supports workspace navigation, theme and configuration export', async ({
       .first()
       .evaluate((element) => getComputedStyle(element).minHeight),
   ).resolves.toBe('38px');
+  await page.getByRole('button', { name: '更换识别模式' }).click();
   await page.getByRole('button', { name: '性能监控' }).click();
   await expect(page.getByRole('heading', { name: '性能监控' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '实时性能趋势' })).toBeVisible();
@@ -339,12 +391,7 @@ test('supports workspace navigation, theme and configuration export', async ({
     page.locator('html').evaluate((element) => element.style.getPropertyValue('--log-font-size')),
   ).resolves.toBe('12px');
   await page.getByRole('button', { name: '转录工作台' }).click();
-  await expect(
-    page
-      .locator('.parameter-field')
-      .first()
-      .evaluate((element) => getComputedStyle(element).fontSize),
-  ).resolves.toBe('14px');
+  await expect(page.getByRole('button', { name: '查看并修改模型参数' })).toBeVisible();
   await expect(
     page
       .locator('.preset-panel')
@@ -357,15 +404,6 @@ test('supports workspace navigation, theme and configuration export', async ({
       .first()
       .evaluate((element) => getComputedStyle(element).minHeight),
   ).resolves.toBe('116px');
-  await expect(
-    page.locator('.parameter-grid').evaluate((element) => getComputedStyle(element).rowGap),
-  ).resolves.toBe('10px');
-  await expect(
-    page
-      .locator('.parameter-field input')
-      .first()
-      .evaluate((element) => getComputedStyle(element).minHeight),
-  ).resolves.toBe('38px');
   await expect(
     page.locator('.output-panel').evaluate((element) => element.clientWidth),
   ).resolves.toBeGreaterThanOrEqual(330);
@@ -390,7 +428,11 @@ test('supports workspace navigation, theme and configuration export', async ({
       .first()
       .evaluate((element) => getComputedStyle(element).minHeight),
   ).resolves.toBe('86px');
-  await page.getByRole('button', { name: /任务记录/ }).click();
+  await page.getByRole('button', { name: /任务监控与记录/ }).click();
+  await page
+    .getByLabel('任务监控与历史记录')
+    .getByRole('button', { name: /历史记录/ })
+    .click();
   await expect(
     page
       .locator('.task-summary-card strong')
@@ -411,12 +453,7 @@ test('supports workspace navigation, theme and configuration export', async ({
   await page.getByRole('button', { name: '增大日志字号' }).click();
   await expect(page.getByRole('group', { name: '日志字号' })).toContainText('13px');
   await page.getByRole('button', { name: '转录工作台' }).click();
-  await expect(
-    page
-      .locator('.parameter-field')
-      .first()
-      .evaluate((element) => getComputedStyle(element).fontSize),
-  ).resolves.toBe('16px');
+  await expect(page.getByRole('button', { name: '查看并修改模型参数' })).toBeVisible();
   await expect(
     page
       .locator('.preset-panel')
@@ -429,23 +466,11 @@ test('supports workspace navigation, theme and configuration export', async ({
       .first()
       .evaluate((element) => getComputedStyle(element).minHeight),
   ).resolves.toBe('116px');
-  await expect(
-    page.locator('.parameter-grid').evaluate((element) => getComputedStyle(element).rowGap),
-  ).resolves.toBe('10px');
-  await expect(
-    page
-      .locator('.parameter-field input')
-      .first()
-      .evaluate((element) => getComputedStyle(element).minHeight),
-  ).resolves.toBe('38px');
   await expect(page.locator('.output-panel')).toBeVisible();
   await expect(page.locator('.launch-card')).toBeVisible();
   await page.getByRole('button', { name: '粘贴 Windows 路径' }).click();
-  await expect(
-    page
-      .locator('.path-paste-row textarea')
-      .evaluate((element) => getComputedStyle(element).minHeight),
-  ).resolves.toBe('62px');
+  await expect(page.getByLabel('待转录媒体队列')).toContainText('剪贴板课程 01.mp4');
+  await expect(page.getByRole('button', { name: '休眠' })).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('workspace-large.png') });
@@ -481,8 +506,12 @@ test('supports workspace navigation, theme and configuration export', async ({
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('settings-dark.png') });
   await page.getByText('浅色', { exact: true }).click();
 
-  await page.getByRole('button', { name: /任务记录/ }).click();
-  await expect(page.getByRole('heading', { name: '任务队列与本地历史' })).toBeVisible();
+  await page.getByRole('button', { name: /任务监控与记录/ }).click();
+  await page
+    .getByLabel('任务监控与历史记录')
+    .getByRole('button', { name: /历史记录/ })
+    .click();
+  await expect(page.getByRole('heading', { name: '本机任务历史' })).toBeVisible();
   await expect(page.getByLabel('任务概览')).toContainText('全部任务');
   await expect(
     page
@@ -504,19 +533,23 @@ test('supports workspace navigation, theme and configuration export', async ({
 });
 
 test('opens an accessible task detail and output preview', async ({ page }) => {
-  await page.getByRole('button', { name: /任务记录/ }).click();
+  await page.getByRole('button', { name: /任务监控与记录/ }).click();
+  await page
+    .getByLabel('任务监控与历史记录')
+    .getByRole('button', { name: /历史记录/ })
+    .click();
   const retry = page.getByRole('button', { name: '重新转录 Product Interview 06.mkv' });
   await expect(retry).toHaveAttribute('data-tooltip', '重新转录');
   await retry.click();
-  await expect(page.getByRole('dialog', { name: '确认重新转录？' })).toContainText(
+  await expect(page.getByRole('dialog', { name: '载入历史转录配置？' })).toContainText(
     'Product Interview 06.mkv',
   );
   await page.getByRole('button', { name: '取消', exact: true }).click();
   await page.getByText('Product Interview 06.mkv').click();
   await expect(page.getByRole('dialog', { name: 'Product Interview 06.mkv' })).toBeVisible();
   await expect(page.getByText('This is a local output preview')).toBeVisible();
-  await page.getByRole('button', { name: '按此快照重试' }).click();
-  await expect(page.getByRole('dialog', { name: '确认重新转录？' })).toBeVisible();
+  await page.getByRole('button', { name: '载入原配置' }).click();
+  await expect(page.getByRole('dialog', { name: '载入历史转录配置？' })).toBeVisible();
   await page.getByRole('button', { name: '取消', exact: true }).click();
   await page.getByRole('button', { name: '关闭任务详情' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -528,7 +561,11 @@ test('monitors the active task and manages dated history in a responsive grid', 
   await page.getByRole('button', { name: '性能监控' }).click();
   const monitor = page.getByRole('region', { name: '任务进度监视' });
   await expect(monitor).toContainText('设计评审会议.m4a');
-  await expect(monitor.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '63');
+  await expect(monitor.getByLabel('当前任务日期版本与模型')).toContainText('2026-07-22 21:42');
+  await expect(monitor.getByLabel('当前任务日期版本与模型')).toContainText('中文防幻觉');
+  await expect(monitor.getByLabel('当前任务日期版本与模型')).toContainText('Large V3 Turbo');
+  await expect(monitor.getByRole('progressbar')).toHaveCount(2);
+  await expect(monitor.getByRole('progressbar').first()).toHaveAttribute('aria-valuenow', '63');
   await expect(
     page.evaluate(() => {
       const trend = document.querySelector('.performance-trend')!.getBoundingClientRect();
@@ -537,7 +574,23 @@ test('monitors the active task and manages dated history in a responsive grid', 
     }),
   ).resolves.toBeLessThan(1);
 
-  await page.getByRole('button', { name: /任务记录/ }).click();
+  await page.getByRole('button', { name: /任务监控与记录/ }).click();
+  await page
+    .getByLabel('任务监控与历史记录')
+    .getByRole('button', { name: /任务监控/ })
+    .click();
+  await expect(page.getByRole('heading', { name: '设计评审会议.m4a' })).toBeVisible();
+  await expect(page.locator('.task-monitor-source')).toHaveText('多文件路径 · 2 个媒体文件');
+  await expect(page.getByRole('heading', { name: '媒体文件进度' })).toBeVisible();
+  await expect(page.locator('.task-monitor-stop')).toBeVisible();
+  await page.locator('.task-monitor-stop').click();
+  await expect(page.locator('.confirm-dialog')).toBeVisible();
+  await page.locator('.confirm-dialog .secondary-button').click();
+  await expect(page.locator('.confirm-dialog')).toHaveCount(0);
+  await page
+    .getByLabel('任务监控与历史记录')
+    .getByRole('button', { name: /历史记录/ })
+    .click();
   await expect(
     page
       .locator('.task-panel.is-expanded .task-list')
@@ -580,9 +633,20 @@ test('monitors the active task and manages dated history in a responsive grid', 
   await expect(page.getByRole('region', { name: '任务进度监视' })).toContainText(
     '当前没有正在执行的任务',
   );
+  await page.getByRole('button', { name: /任务监控与记录/ }).click();
+  await page
+    .getByLabel('任务监控与历史记录')
+    .getByRole('button', { name: /任务监控/ })
+    .click();
+  await expect(page.getByRole('heading', { name: '设计评审会议.m4a' })).toBeVisible();
+  await expect(page.getByText('任务已终止')).toBeVisible();
 
   await page.setViewportSize({ width: 1000, height: 900 });
-  await page.getByRole('button', { name: /任务记录/ }).click();
+  await page.getByRole('button', { name: /任务监控与记录/ }).click();
+  await page
+    .getByLabel('任务监控与历史记录')
+    .getByRole('button', { name: /历史记录/ })
+    .click();
   await expect(
     page
       .locator('.task-panel.is-expanded .task-list')
@@ -594,7 +658,11 @@ test('monitors the active task and manages dated history in a responsive grid', 
 });
 
 test('clears completed and abnormal history independently', async ({ page }) => {
-  await page.getByRole('button', { name: /任务记录/ }).click();
+  await page.getByRole('button', { name: /任务监控与记录/ }).click();
+  await page
+    .getByLabel('任务监控与历史记录')
+    .getByRole('button', { name: /历史记录/ })
+    .click();
 
   const clearCompleted = page.getByRole('button', { name: /清除已完成历史 · 1/ });
   const clearAbnormal = page.getByRole('button', { name: /清除异常历史 · 0/ });
@@ -621,19 +689,21 @@ test('creates an SRT task from the independent subtitle profile', async ({ page 
   await subtitlePanel.getByRole('button', { name: /中文防幻觉/ }).click();
   await expect(subtitlePanel.getByText('当前输出 SRT')).toBeVisible();
   await expect(page.getByLabel('当前 SRT 输出摘要')).toContainText('1 行 × 每行 18 字符');
-  await expect(page.getByRole('spinbutton', { name: 'Compression ratio' })).toHaveValue('2');
-  await expect(page.getByRole('spinbutton', { name: 'Log probability' })).toHaveValue('-1.5');
-  await expect(page.getByRole('spinbutton', { name: 'VAD 最短静音' })).toHaveValue('500');
+  await expect(page.getByRole('spinbutton', { name: 'Compression ratio' })).toHaveCount(0);
+  await expect(page.getByRole('spinbutton', { name: 'Log probability' })).toHaveCount(0);
+  await expect(page.getByRole('spinbutton', { name: 'VAD 最短静音' })).toHaveCount(0);
   await page.getByRole('spinbutton', { name: '每行最多字符' }).fill('22');
   await expect(subtitlePanel.getByText('字幕自定义')).toBeVisible();
   await subtitlePanel.scrollIntoViewIfNeeded();
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('srt-profile-custom.png') });
 
   await page.getByRole('button', { name: '选择媒体文件' }).click();
-  await expect(page.getByRole('button', { name: /开始生成 SRT 字幕/ })).toBeEnabled();
-  await page.getByRole('button', { name: /开始生成 SRT 字幕/ }).click();
+  await expect(page.getByRole('button', { name: /开始生成 SRT 与时间戳 TXT/ })).toBeEnabled();
+  await page.getByRole('button', { name: /开始生成 SRT 与时间戳 TXT/ }).click();
   await expect(page.getByRole('heading', { name: '性能监控' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /任务记录/ })).toContainText('3');
+  await expect(
+    page.getByRole('button', { name: /任务监控与记录/ }).locator('.nav-count'),
+  ).toHaveText(/^[1-9]$/);
 });
 
 test('opens the independent Worker log workspace and exposes only the restored shortcut', async ({
@@ -643,8 +713,9 @@ test('opens the independent Worker log workspace and exposes only the restored s
   await expect(navigation.getByRole('button')).toHaveText([
     '转录工作台',
     '模型切换',
+    '硬件优化',
     '性能监控',
-    /任务记录/,
+    /任务监控与记录/,
     'Worker 日志',
     '偏好设置',
   ]);

@@ -5,6 +5,7 @@ import type {
   OutputPolicy,
   ProfileMode,
   PresetId,
+  RecognitionStrategy,
   SubtitleParameters,
   TaskSnapshot,
 } from '../contracts/desktop';
@@ -12,6 +13,16 @@ import { MODEL_IDS, PRESET_IDS } from '../contracts/desktop';
 import { getPreset } from '../data/presets';
 import { getSubtitlePreset } from '../data/subtitlePresets';
 import { DEFAULT_HARDWARE_PREFERENCE } from './hardware';
+import {
+  isV3ModelId,
+  parameterProfileKey,
+  sanitizeProfileOverrides,
+  profileRecognitionStrategy,
+  withRecognitionStrategy,
+  translationTaskSupported,
+  type ParameterProfiles,
+  type RecognitionStrategyProfiles,
+} from './parameterProfiles';
 
 export type ThemePreference = 'dark' | 'light' | 'system';
 export type AccentPreset = 'orange' | 'blue' | 'green' | 'purple' | 'custom';
@@ -46,6 +57,9 @@ export interface WorkspacePreferences {
   profileMode: ProfileMode;
   parameters: EditableParameters;
   overrides: Partial<EditableParameters>;
+  parameterProfiles: ParameterProfiles;
+  recognitionStrategy: RecognitionStrategy;
+  recognitionStrategyProfiles: RecognitionStrategyProfiles;
   subtitleParameters: SubtitleParameters;
   subtitleOverrides: Partial<SubtitleParameters>;
   output: OutputPolicy;
@@ -216,7 +230,7 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   const customAccentColor = value.customAccentColor ?? DEFAULT_APPEARANCE.customAccentColor;
   const uiFontFamily = value.uiFontFamily ?? DEFAULT_APPEARANCE.uiFontFamily;
   const monoFontFamily = value.monoFontFamily ?? DEFAULT_APPEARANCE.monoFontFamily;
-  const selectedModelId = value.selectedModelId ?? 'large-v3-turbo';
+  const requestedModelId = value.selectedModelId ?? 'large-v3-turbo';
   const hardwarePreference = value.hardwarePreference ?? DEFAULT_HARDWARE_PREFERENCE;
   if (
     !isNumberInRange(uiFontSize, UI_FONT_SIZE_RANGE.minimum, UI_FONT_SIZE_RANGE.maximum, true) ||
@@ -226,16 +240,69 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
     normalizeHexColor(customAccentColor) === null ||
     !isUiFontFamily(uiFontFamily) ||
     !isMonoFontFamily(monoFontFamily) ||
-    !isModelId(selectedModelId) ||
+    !isModelId(requestedModelId) ||
     !isHardwarePreference(hardwarePreference)
   ) {
     return null;
   }
+  const selectedModelId = isV3ModelId(requestedModelId) ? requestedModelId : 'large-v3-turbo';
   const profileMode = value.profileMode ?? 'transcript';
   if (profileMode !== 'transcript' && profileMode !== 'subtitle') return null;
+  if (!isOverrides(value.overrides)) return null;
+  const parsedProfiles = parseParameterProfiles(value.parameterProfiles);
+  if (parsedProfiles === null) return null;
+  let parameterProfiles = parsedProfiles;
+  const currentProfileKey = parameterProfileKey(selectedModelId, value.selectedPresetId);
+  if (value.parameterProfiles === undefined && Object.keys(value.overrides).length > 0) {
+    parameterProfiles = {
+      [currentProfileKey]: sanitizeProfileOverrides(
+        selectedModelId,
+        value.selectedPresetId,
+        value.overrides,
+      ),
+    };
+  }
+  const currentOverrides = parameterProfiles[currentProfileKey] ?? {};
+  const parsedRecognitionProfiles = parseRecognitionStrategyProfiles(
+    value.recognitionStrategyProfiles,
+  );
+  if (parsedRecognitionProfiles === null) return null;
+  let recognitionStrategyProfiles = parsedRecognitionProfiles;
+  if (
+    value.recognitionStrategyProfiles === undefined &&
+    (value.recognitionStrategy === 'mixed_zh_en' ||
+      value.recognitionStrategy === 'zh_detail_review')
+  ) {
+    recognitionStrategyProfiles = withRecognitionStrategy(
+      recognitionStrategyProfiles,
+      selectedModelId,
+      value.selectedPresetId,
+      value.recognitionStrategy,
+    );
+  }
+  const recognitionStrategy = profileRecognitionStrategy(
+    recognitionStrategyProfiles,
+    selectedModelId,
+    value.selectedPresetId,
+  );
   const parameterValue = isRecord(value.parameters) ? value.parameters : {};
-  const parameters = { ...getPreset(value.selectedPresetId).parameters, ...parameterValue };
-  if (!isParameters(parameters) || !isOverrides(value.overrides)) return null;
+  const importedParameterSnapshot = {
+    ...getPreset(value.selectedPresetId, selectedModelId).parameters,
+    ...parameterValue,
+  };
+  if (
+    importedParameterSnapshot.task === 'translate' &&
+    !translationTaskSupported(selectedModelId, value.selectedPresetId)
+  ) {
+    importedParameterSnapshot.task = 'transcribe';
+  }
+  if (!isParameters(importedParameterSnapshot)) return null;
+  const parameters = {
+    ...getPreset(value.selectedPresetId, selectedModelId).parameters,
+    ...(value.parameterProfiles === undefined ? importedParameterSnapshot : {}),
+    ...currentOverrides,
+  };
+  if (!isParameters(parameters)) return null;
   const subtitleValue = isRecord(value.subtitleParameters) ? value.subtitleParameters : {};
   const subtitleOverrides = value.subtitleOverrides ?? {};
   if (!isSubtitleOverrides(subtitleOverrides)) return null;
@@ -259,7 +326,11 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
     srtEnabled: value.output.srtEnabled ?? false,
     preserveSourceMarkdown: value.output.preserveSourceMarkdown ?? false,
     conflictPolicy:
-      value.output.conflictPolicy === 'auto_rename' ? 'auto_rename' : 'confirm_overwrite',
+      value.output.conflictPolicy === 'auto_rename'
+        ? 'auto_rename'
+        : value.output.conflictPolicy === 'confirm_skip'
+          ? 'confirm_skip'
+          : 'confirm_overwrite',
   };
   if (!isOutputPolicy(output)) return null;
   return {
@@ -275,7 +346,10 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
     selectedPresetId: value.selectedPresetId,
     profileMode,
     parameters,
-    overrides: value.overrides,
+    overrides: currentOverrides,
+    parameterProfiles,
+    recognitionStrategy,
+    recognitionStrategyProfiles,
     subtitleParameters,
     subtitleOverrides,
     output,
@@ -303,12 +377,30 @@ function normalizeTaskSnapshot(task: TaskSnapshot): TaskSnapshot {
   return {
     ...task,
     modelId: isModelId(legacy.modelId) ? legacy.modelId : 'large-v3-turbo',
+    recognitionStrategy:
+      (task.recognitionStrategy === 'mixed_zh_en' ||
+        task.recognitionStrategy === 'zh_detail_review') &&
+      ['cn', 'cn2'].includes(task.presetId) &&
+      ['large-v3', 'large-v3-turbo'].includes(
+        isModelId(legacy.modelId) ? legacy.modelId : 'large-v3-turbo',
+      )
+        ? task.recognitionStrategy
+        : 'stable_primary',
     draft:
       legacy.draft === undefined
         ? undefined
         : {
             ...legacy.draft,
             modelId: isModelId(legacy.draft.modelId) ? legacy.draft.modelId : 'large-v3-turbo',
+            recognitionStrategy:
+              (legacy.draft.recognitionStrategy === 'mixed_zh_en' ||
+                legacy.draft.recognitionStrategy === 'zh_detail_review') &&
+              ['cn', 'cn2'].includes(legacy.draft.basePresetId) &&
+              ['large-v3', 'large-v3-turbo'].includes(
+                isModelId(legacy.draft.modelId) ? legacy.draft.modelId : 'large-v3-turbo',
+              )
+                ? legacy.draft.recognitionStrategy
+                : 'stable_primary',
             hardware: isHardwarePreference(legacy.draft.hardware)
               ? legacy.draft.hardware
               : DEFAULT_HARDWARE_PREFERENCE,
@@ -317,7 +409,9 @@ function normalizeTaskSnapshot(task: TaskSnapshot): TaskSnapshot {
               conflictPolicy:
                 legacy.draft.output.conflictPolicy === 'auto_rename'
                   ? 'auto_rename'
-                  : 'confirm_overwrite',
+                  : legacy.draft.output.conflictPolicy === 'confirm_skip'
+                    ? 'confirm_skip'
+                    : 'confirm_overwrite',
             },
           },
   };
@@ -337,15 +431,21 @@ function isHardwarePreference(value: unknown): value is HardwarePreference {
 function isParameters(value: unknown): value is EditableParameters {
   if (!isRecord(value)) return false;
   return (
+    (value.task === 'transcribe' || value.task === 'translate') &&
     isNumberInRange(value.beam_size, 1, 20, true) &&
     isNumberInRange(value.best_of, 1, 20, true) &&
     isNumberInRange(value.patience, 0, 5) &&
     isNumberInRange(value.length_penalty, 0, 2) &&
     isNumberInRange(value.temperature, 0, 1) &&
+    isNumberInRange(value.repetition_penalty, 1, 2) &&
+    isNumberInRange(value.no_repeat_ngram_size, 0, 10, true) &&
     isNumberInRange(value.compression_ratio_threshold, 0, 10) &&
     isNumberInRange(value.log_prob_threshold, -10, 0) &&
     isNumberInRange(value.no_speech_threshold, 0, 1) &&
     typeof value.condition_on_previous_text === 'boolean' &&
+    isNumberInRange(value.prompt_reset_on_temperature, 0, 1) &&
+    isPromptText(value.initial_prompt) &&
+    isPromptText(value.hotwords) &&
     isNumberInRange(value.min_silence_duration_ms, 0, 10000, true)
   );
 }
@@ -353,27 +453,84 @@ function isParameters(value: unknown): value is EditableParameters {
 function isOverrides(value: unknown): value is Partial<EditableParameters> {
   if (!isRecord(value)) return false;
   const allowed = new Set([
+    'task',
     'beam_size',
     'best_of',
     'patience',
     'length_penalty',
     'temperature',
+    'repetition_penalty',
+    'no_repeat_ngram_size',
     'compression_ratio_threshold',
     'log_prob_threshold',
     'no_speech_threshold',
     'condition_on_previous_text',
+    'prompt_reset_on_temperature',
+    'initial_prompt',
+    'hotwords',
     'min_silence_duration_ms',
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) return false;
   return Object.entries(value).every(([key, item]) => {
+    if (key === 'task') return item === 'transcribe' || item === 'translate';
+    if (key === 'initial_prompt' || key === 'hotwords') return isPromptText(item);
     if (key === 'condition_on_previous_text') return typeof item === 'boolean';
     if (key === 'beam_size' || key === 'best_of') return isNumberInRange(item, 1, 20, true);
     if (key === 'patience') return isNumberInRange(item, 0, 5);
     if (key === 'length_penalty') return isNumberInRange(item, 0, 2);
+    if (key === 'repetition_penalty') return isNumberInRange(item, 1, 2);
+    if (key === 'no_repeat_ngram_size') return isNumberInRange(item, 0, 10, true);
     if (key === 'compression_ratio_threshold') return isNumberInRange(item, 0, 10);
     if (key === 'log_prob_threshold') return isNumberInRange(item, -10, 0);
     if (key === 'min_silence_duration_ms') return isNumberInRange(item, 0, 10000, true);
     return isNumberInRange(item, 0, 1);
+  });
+}
+
+function parseParameterProfiles(value: unknown): ParameterProfiles | null {
+  if (value === undefined) return {};
+  if (!isRecord(value)) return null;
+  const profiles: ParameterProfiles = {};
+  for (const [key, overrides] of Object.entries(value)) {
+    if (!/^(large-v3|large-v3-turbo):(cn|cn2|en_v1|en_v2)$/.test(key)) return null;
+    if (!isOverrides(overrides)) return null;
+    const [modelId, presetId] = key.split(':') as [
+      'large-v3' | 'large-v3-turbo',
+      'cn' | 'cn2' | 'en_v1' | 'en_v2',
+    ];
+    profiles[key as keyof ParameterProfiles] = sanitizeProfileOverrides(
+      modelId,
+      presetId,
+      overrides,
+    );
+  }
+  return profiles;
+}
+
+function parseRecognitionStrategyProfiles(value: unknown): RecognitionStrategyProfiles | null {
+  if (value === undefined) return {};
+  if (!isRecord(value)) return null;
+  const profiles: RecognitionStrategyProfiles = {};
+  for (const [key, strategy] of Object.entries(value)) {
+    if (!/^(large-v3|large-v3-turbo):(cn|cn2|en_v1|en_v2)$/.test(key)) return null;
+    if (
+      strategy !== 'mixed_zh_en' &&
+      strategy !== 'zh_detail_review' &&
+      strategy !== 'stable_primary'
+    )
+      return null;
+    if (/:(cn|cn2)$/.test(key) && (strategy === 'mixed_zh_en' || strategy === 'zh_detail_review')) {
+      profiles[key as keyof RecognitionStrategyProfiles] = strategy;
+    }
+  }
+  return profiles;
+}
+
+function isPromptText(value: unknown): value is string {
+  if (typeof value !== 'string' || Array.from(value).length > 4000) return false;
+  return Array.from(value).every((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return character === '\n' || character === '\t' || code >= 0x20;
   });
 }
 
@@ -422,7 +579,9 @@ function isOutputPolicy(value: unknown): value is OutputPolicy {
     (value.txtEnabled || value.markdownEnabled || value.srtEnabled) &&
     typeof value.preserveSourceTxt === 'boolean' &&
     typeof value.preserveSourceMarkdown === 'boolean' &&
-    (value.conflictPolicy === 'confirm_overwrite' || value.conflictPolicy === 'auto_rename')
+    (value.conflictPolicy === 'confirm_overwrite' ||
+      value.conflictPolicy === 'confirm_skip' ||
+      value.conflictPolicy === 'auto_rename')
   );
 }
 

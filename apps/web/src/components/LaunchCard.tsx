@@ -1,7 +1,13 @@
-import { ChevronRight, Layers3, Play, X } from 'lucide-react';
+import { ChevronRight, Layers3, Play, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
-import { getPreset } from '../data/presets';
+import { getPreset, transcriptionTaskLabel } from '../data/presets';
+import { getModelLabel } from '../data/models';
+import {
+  formatDurationSummary,
+  formatMediaDuration,
+  summarizeInputDurations,
+} from '../state/mediaDuration';
 import { useWorkspace } from '../state/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -16,13 +22,19 @@ export function LaunchCard() {
   const inputs = useWorkspace((state) => state.inputs);
   const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
   const overrides = useWorkspace((state) => state.overrides);
+  const parameters = useWorkspace((state) => state.parameters);
   const startTask = useWorkspace((state) => state.startTask);
   const removeInput = useWorkspace((state) => state.removeInput);
+  const clearInputs = useWorkspace((state) => state.clearInputs);
   const hostStatus = useWorkspace((state) => state.hostStatus);
   const startingTask = useWorkspace((state) => state.startingTask);
   const output = useWorkspace((state) => state.output);
   const profileMode = useWorkspace((state) => state.profileMode);
   const activeView = useWorkspace((state) => state.activeView);
+  const selectedModelId = useWorkspace((state) => state.selectedModelId);
+  const recognitionStrategy = useWorkspace((state) => state.recognitionStrategy);
+  const pendingOverwrite = useWorkspace((state) => state.pendingOverwrite);
+  const pendingShutdownStart = useWorkspace((state) => state.pendingShutdownStart);
   const [presetConfirmationOpen, setPresetConfirmationOpen] = useState(false);
   const hasInvalidInput = inputs.some((input) => !input.valid);
   const needsOutputRoot = output.mode === 'custom' && output.rootDirectory === null;
@@ -33,10 +45,13 @@ export function LaunchCard() {
     !needsOutputRoot &&
     hasOutputTarget &&
     hostStatus.state === 'ready' &&
-    !startingTask;
+    !startingTask &&
+    pendingOverwrite === null &&
+    pendingShutdownStart === null;
   const needsPresetConfirmation = selectedPresetId === 'cn' || selectedPresetId === 'en_v1';
   const preset = getPreset(selectedPresetId);
   const mediaCount = inputs.reduce((total, input) => total + (input.mediaCount ?? 1), 0);
+  const durationSummary = summarizeInputDurations(inputs);
 
   const requestStart = useCallback(() => {
     if (!canStart) return;
@@ -85,14 +100,30 @@ export function LaunchCard() {
           <kbd>CTRL + ENTER</kbd>
         </div>
         <h2>{inputs.length > 0 ? `${mediaCount} 个媒体已就绪` : '等待输入来源'}</h2>
-        <p>
-          {needsOutputRoot
-            ? '请选择真实输出目录'
-            : hasInvalidInput
-              ? '请先处理无效输入'
-              : !hasOutputTarget
-                ? '请至少启用一种输出格式'
-                : `${Object.keys(overrides).length > 0 ? '自定义参数' : '稳定 preset'} · ${preset.label} · ${profileMode === 'subtitle' ? 'SRT 字幕' : 'TXT / MD 文本'} · 本地离线处理`}
+        <p className="launch-summary">
+          {needsOutputRoot ? (
+            '请选择真实输出目录'
+          ) : hasInvalidInput ? (
+            '请先处理无效输入'
+          ) : !hasOutputTarget ? (
+            '请至少启用一种输出格式'
+          ) : (
+            <>
+              <span>
+                版本：{preset.label}
+                {Object.keys(overrides).length > 0 ? '（自定义参数）' : ''} · 输出：
+                {profileMode === 'subtitle' ? 'SRT 字幕 + 时间戳 TXT' : 'TXT / MD 文本'} ·{' '}
+                {transcriptionTaskLabel(parameters.task)} ·{' '}
+                {recognitionStrategy === 'mixed_zh_en'
+                  ? '复杂中英混合'
+                  : recognitionStrategy === 'zh_detail_review'
+                    ? '中文细节增强'
+                    : '稳定主语言'}{' '}
+                · {formatDurationSummary(durationSummary)}
+              </span>
+              <span>模型：{getModelLabel(selectedModelId)} · 本地离线处理</span>
+            </>
+          )}
         </p>
         <button
           className="primary-button"
@@ -104,7 +135,7 @@ export function LaunchCard() {
           {startingTask
             ? '正在准备本地模型…'
             : profileMode === 'subtitle'
-              ? '开始生成 SRT 字幕'
+              ? '开始生成 SRT 与时间戳 TXT'
               : '开始本地转录'}
           <ChevronRight size={17} />
         </button>
@@ -115,9 +146,16 @@ export function LaunchCard() {
             <p className="step-label">MEDIA QUEUE</p>
             <h3 id="launch-title">媒体队列</h3>
           </div>
-          <span>
-            {inputs.length} 项 · {mediaCount} 个媒体
-          </span>
+          <div className="launch-queue-tools">
+            <span>
+              {inputs.length} 项 · {mediaCount} 个媒体 · {formatDurationSummary(durationSummary)}
+            </span>
+            {inputs.length > 0 && (
+              <button className="launch-queue-clear" onClick={clearInputs} type="button">
+                <Trash2 size={14} /> 清空队列
+              </button>
+            )}
+          </div>
         </div>
         <div className="launch-queue-list" aria-label="待转录媒体队列" tabIndex={0}>
           {inputs.length === 0 ? (
@@ -138,6 +176,12 @@ export function LaunchCard() {
                       : source.detail
                         ? ` · ${source.detail}`
                         : ''}
+                    {' · '}
+                    {source.unknownDurationCount && source.unknownDurationCount > 0
+                      ? source.durationSeconds !== undefined
+                        ? `已知 ${formatMediaDuration(source.durationSeconds)} + ${source.unknownDurationCount} 个未知`
+                        : `${source.unknownDurationCount} 个时长未知`
+                      : `时长 ${formatMediaDuration(source.durationSeconds)}`}
                   </span>
                 </div>
                 <button
@@ -165,7 +209,9 @@ export function LaunchCard() {
         <dl>
           <div>
             <dt>当前工作区</dt>
-            <dd>{profileMode === 'subtitle' ? 'SRT 字幕识别' : 'TXT / Markdown 文本识别'}</dd>
+            <dd>
+              {profileMode === 'subtitle' ? 'SRT 字幕 + 时间戳 TXT' : 'TXT / Markdown 文本识别'}
+            </dd>
           </div>
           <div>
             <dt>转录版本</dt>

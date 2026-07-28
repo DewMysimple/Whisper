@@ -88,14 +88,22 @@ def test_transcription_result_exposes_request_identity_and_validates_error_state
 
 def test_progress_event_normalizes_path_and_validates_counts():
     event = ProgressEvent(
-        "transcribing", "processing", current=1, total=2, input_path="input.wav"
+        "transcribing",
+        "processing",
+        current=1,
+        total=2,
+        input_path="input.wav",
+        output_paths=("output.txt", "output.md"),
     )
 
     assert event.input_path == Path("input.wav")
+    assert event.output_paths == (Path("output.txt"), Path("output.md"))
     with pytest.raises(ValueError, match="cannot exceed"):
         ProgressEvent("transcribing", "processing", current=3, total=2)
     with pytest.raises(ValueError, match="non-negative"):
         ProgressEvent("transcribing", "processing", current=-1)
+    with pytest.raises(TypeError, match="sequence of paths"):
+        ProgressEvent("transcribing", "processing", output_paths="output.txt")
 
 
 def test_batch_result_counts_outcomes_and_produces_exit_code():
@@ -114,3 +122,19 @@ def test_batch_result_counts_outcomes_and_produces_exit_code():
     assert BatchResult.from_results([succeeded]).outcome == "success"
     assert BatchResult.from_results([failed]).outcome == "failure"
     assert BatchResult().exit_code == 0
+
+
+def test_mixed_recognition_is_limited_to_chinese_presets(tmp_path):
+    request = TranscriptionRequest(
+        tmp_path / "mixed.wav",
+        "cn2",
+        recognition_strategy="mixed_zh_en",
+    )
+    assert request.recognition_strategy == "mixed_zh_en"
+
+    with pytest.raises(ValueError, match="only supported by cn and cn2"):
+        TranscriptionRequest(
+            tmp_path / "mixed.wav",
+            "en_v2",
+            recognition_strategy="mixed_zh_en",
+        )

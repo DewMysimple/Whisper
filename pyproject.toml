@@ -12,6 +12,7 @@ dependencies = [
     "psutil>=5.9",
     "nvidia-ml-py>=12.0",
     "nvidia-cublas-cu12>=12.0,<13",
+    "opencc>=1.4,<1.5",
 ]
 
 [project.optional-dependencies]

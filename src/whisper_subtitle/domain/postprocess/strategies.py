@@ -8,7 +8,12 @@ from types import MappingProxyType
 
 from .chinese import ensure_chinese_punctuation
 from .english import ensure_proper_case, ensure_punctuation
-from .repetition import clean_inner_repetition, clean_repetition
+from .multilingual import sanitize_and_simplify
+from .repetition import (
+    clean_inner_repetition,
+    clean_phrase_repetition,
+    clean_repetition,
+)
 
 
 TextTransform = Callable[[str], str]
@@ -39,23 +44,37 @@ STRATEGIES = MappingProxyType(
         "english_standard": PostprocessStrategy(
             id="english_standard",
             label="无",
-            text_transforms=(ensure_proper_case, ensure_punctuation),
+            text_transforms=(
+                sanitize_and_simplify,
+                ensure_proper_case,
+                ensure_punctuation,
+            ),
         ),
         "english_anti_hallucination": PostprocessStrategy(
             id="english_anti_hallucination",
             label="clean_repetition()",
-            text_transforms=(ensure_proper_case, ensure_punctuation),
+            text_transforms=(
+                sanitize_and_simplify,
+                clean_phrase_repetition,
+                ensure_proper_case,
+                ensure_punctuation,
+            ),
             lines_transforms=(clean_repetition,),
         ),
         "chinese_standard": PostprocessStrategy(
             id="chinese_standard",
             label="无",
-            text_transforms=(ensure_chinese_punctuation,),
+            text_transforms=(sanitize_and_simplify, ensure_chinese_punctuation),
         ),
         "chinese_anti_hallucination": PostprocessStrategy(
             id="chinese_anti_hallucination",
             label="中文标点 + clean_inner_repetition + clean_repetition",
-            text_transforms=(ensure_chinese_punctuation, clean_inner_repetition),
+            text_transforms=(
+                sanitize_and_simplify,
+                clean_phrase_repetition,
+                clean_inner_repetition,
+                ensure_chinese_punctuation,
+            ),
             lines_transforms=(clean_repetition,),
         ),
     }

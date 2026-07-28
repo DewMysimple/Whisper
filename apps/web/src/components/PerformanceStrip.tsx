@@ -13,6 +13,8 @@ import {
 import { useMemo, useState, type CSSProperties } from 'react';
 
 import type { PerformanceSample } from '../contracts/desktop';
+import { getModelLabel } from '../data/models';
+import { getPreset } from '../data/presets';
 import {
   metricUtilization,
   summarizePerformanceMetric,
@@ -24,8 +26,15 @@ import {
   PERFORMANCE_WINDOW_MS,
   samplesInPerformanceWindow,
 } from '../state/performanceWindow';
+import {
+  formatDurationSummary,
+  formatMediaDuration,
+  taskDurationSummary,
+} from '../state/mediaDuration';
+import { formatTaskCreatedAt } from '../state/taskHistory';
 import { useWorkspace } from '../state/workspace';
 import { HelpTip } from './HelpTip';
+import { formatElapsedSeconds, useTaskTiming } from './useTaskTiming';
 
 type MetricId = PerformanceMetricId;
 
@@ -526,7 +535,21 @@ export function PerformanceView() {
   const queuedTasks = tasks.filter((task) => task.status === 'queued');
   const activeTask = runningTask ?? queuedTasks[0];
   const waitingCount = queuedTasks.filter((task) => task.id !== activeTask?.id).length;
-  const activeInputName = activeTask?.activeInput?.split(/[/\\]/).at(-1);
+  const activeMediaStates = activeTask?.mediaStates ?? [];
+  const processingTotal = activeTask?.processingCount ?? activeTask?.sourceCount ?? 0;
+  const runningMediaIndex = activeMediaStates.findIndex((media) => media.status === 'running');
+  const currentMediaNumber =
+    activeTask?.status === 'running'
+      ? (activeTask.currentMediaIndex ?? (runningMediaIndex >= 0 ? runningMediaIndex + 1 : 0))
+      : 0;
+  const currentMedia =
+    activeMediaStates.find((media) => media.status === 'running') ??
+    activeMediaStates[
+      Math.max(0, Math.min(activeMediaStates.length - 1, (activeTask?.currentMediaIndex ?? 1) - 1))
+    ];
+  const activeInputName = (currentMedia?.path ?? activeTask?.activeInput)?.split(/[/\\]/).at(-1);
+  const timing = useTaskTiming(activeTask, currentMedia);
+  const mediaProgress = currentMedia?.progress ?? null;
 
   return (
     <div
@@ -619,28 +642,70 @@ export function PerformanceView() {
           <div className="task-progress-body">
             <div className="task-progress-identity">
               <div>
+                <p className="step-label">LIVE TASK MONITOR</p>
                 <strong>{activeTask.title}</strong>
                 <span>{activeTask.stage}</span>
               </div>
-              <strong className="task-progress-percent">{activeTask.progress}%</strong>
             </div>
-            <div
-              aria-label={`当前任务进度 ${activeTask.progress}%`}
-              aria-valuemax={100}
-              aria-valuemin={0}
-              aria-valuenow={activeTask.progress}
-              className="task-progress-track"
-              role="progressbar"
-            >
-              <span style={{ width: `${activeTask.progress}%` }} />
+            <div className="task-progress-meta" aria-label="当前任务日期版本与模型">
+              <span>{formatTaskCreatedAt(activeTask.createdAt)}</span>
+              <span>{getPreset(activeTask.presetId).label}</span>
+              <span>{getModelLabel(activeTask.modelId)}</span>
+            </div>
+            <div className="task-progress-lanes">
+              <div className="task-progress-lane">
+                <div>
+                  <span>整体任务进度</span>
+                  <strong>
+                    {Math.min(currentMediaNumber, processingTotal)} / {processingTotal} ·{' '}
+                    {activeTask.progress}%
+                  </strong>
+                </div>
+                <div
+                  aria-label={`整体任务进度 ${activeTask.progress}%`}
+                  aria-valuemax={100}
+                  aria-valuemin={0}
+                  aria-valuenow={activeTask.progress}
+                  className="task-progress-track"
+                  role="progressbar"
+                >
+                  <span style={{ width: `${activeTask.progress}%` }} />
+                </div>
+              </div>
+              <div className="task-progress-lane is-media">
+                <div>
+                  <span>{activeInputName ? `当前媒体 · ${activeInputName}` : '当前媒体'}</span>
+                  <strong>{mediaProgress === null ? '—' : `${Math.round(mediaProgress)}%`}</strong>
+                </div>
+                <div
+                  aria-label={
+                    mediaProgress === null
+                      ? '当前媒体进度未知'
+                      : `当前媒体进度 ${Math.round(mediaProgress)}%`
+                  }
+                  aria-valuemax={100}
+                  aria-valuemin={0}
+                  aria-valuenow={mediaProgress ?? undefined}
+                  className={`task-progress-track ${
+                    mediaProgress === null ? 'is-indeterminate' : ''
+                  }`}
+                  role="progressbar"
+                >
+                  {mediaProgress !== null && (
+                    <span style={{ width: `${Math.max(0, Math.min(100, mediaProgress))}%` }} />
+                  )}
+                </div>
+              </div>
             </div>
             <div className="task-progress-facts">
               <span>
-                <Clock3 size={15} /> 已用时 {activeTask.elapsed}
+                <Clock3 size={15} /> 总耗时 {formatElapsedSeconds(timing.taskSeconds)}
               </span>
               <span>{activeTask.sourceCount} 个媒体文件</span>
-              <span className="task-progress-input">
-                {activeInputName ? `当前：${activeInputName}` : '等待媒体处理信息'}
+              <span>{formatDurationSummary(taskDurationSummary(activeTask))}</span>
+              <span>
+                当前媒体耗时 {formatElapsedSeconds(timing.mediaSeconds)} / 时长{' '}
+                {formatMediaDuration(currentMedia?.durationSeconds)}
               </span>
               {waitingCount > 0 && <span>另有 {waitingCount} 项等待</span>}
             </div>

@@ -1,21 +1,25 @@
-import { AlertTriangle, Moon, Search, Sun, X } from 'lucide-react';
+import { Activity, AlertTriangle, History, Moon, Search, Sun, X } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
 
 import { desktopBridge } from './bridge';
 import { HelpTip } from './components/HelpTip';
+import { HardwareOptimizationPanel } from './components/HardwareOptimizationPanel';
 import { LaunchCard } from './components/LaunchCard';
 import { ModelSwitchView } from './components/ModelSwitchView';
 import { OutputPanel } from './components/OutputPanel';
 import { OverwriteConfirmDialog } from './components/OverwriteConfirmDialog';
 import { PerformanceView } from './components/PerformanceStrip';
 import { PresetPanel } from './components/PresetPanel';
+import { PowerCountdownBanner } from './components/PowerCountdownBanner';
 import { SubtitleProfilePanel } from './components/SubtitleProfilePanel';
 import { Sidebar } from './components/Sidebar';
 import { SourcePanel } from './components/SourcePanel';
 import { SettingsView } from './components/SettingsView';
+import { ShutdownConfirmDialog } from './components/ShutdownConfirmDialog';
 import { TaskDetail } from './components/TaskDetail';
 import { TaskList } from './components/TaskList';
+import { TaskMonitor } from './components/TaskMonitor';
 import { WorkerLogsView } from './components/WorkerLogsView';
 import { isAbnormalTask, useWorkspace, type WorkspaceViewId } from './state/workspace';
 
@@ -30,10 +34,15 @@ const PAGE_COPY: Record<WorkspaceViewId, { eyebrow: string; title: string; summa
     title: '模型切换',
     summary: '管理本地模型，并为新任务选择冻结的推理模型。',
   },
+  hardware: {
+    eyebrow: 'LOCAL COMPUTE',
+    title: '硬件优化',
+    summary: '选择本机推理设备、计算精度与 CPU 线程配置。',
+  },
   tasks: {
     eyebrow: 'LOCAL QUEUE',
-    title: '任务记录',
-    summary: '查看任务快照、输出与重试状态。',
+    title: '任务监控与记录',
+    summary: '监视正在执行的媒体进度，并管理本机任务历史。',
   },
   performance: {
     eyebrow: 'SYSTEM INSIGHT',
@@ -56,6 +65,7 @@ function Topbar() {
   const hostStatus = useWorkspace((state) => state.hostStatus);
   const activeView = useWorkspace((state) => state.activeView);
   const setActiveView = useWorkspace((state) => state.setActiveView);
+  const setTaskWorkspaceMode = useWorkspace((state) => state.setTaskWorkspaceMode);
   const theme = useWorkspace((state) => state.theme);
   const setTheme = useWorkspace((state) => state.setTheme);
   const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() =>
@@ -94,7 +104,13 @@ function Topbar() {
         <button
           aria-label="搜索任务"
           className="round-button"
-          onClick={() => setActiveView('tasks')}
+          onClick={() => {
+            setActiveView('tasks');
+            setTaskWorkspaceMode('history');
+            window.requestAnimationFrame(() =>
+              document.querySelector<HTMLInputElement>('#task-history-search')?.focus(),
+            );
+          }}
           type="button"
         >
           <Search size={18} />
@@ -130,8 +146,18 @@ function WorkspaceView() {
   );
 }
 
+function HardwareView() {
+  return (
+    <div className="hardware-workspace">
+      <HardwareOptimizationPanel />
+    </div>
+  );
+}
+
 function TasksView() {
   const tasks = useWorkspace((state) => state.tasks);
+  const mode = useWorkspace((state) => state.taskWorkspaceMode);
+  const setMode = useWorkspace((state) => state.setTaskWorkspaceMode);
   const active = tasks.filter(
     (task) => task.status === 'queued' || task.status === 'running',
   ).length;
@@ -142,29 +168,61 @@ function TasksView() {
 
   return (
     <div className="tasks-view">
-      <div className="task-summary" aria-label="任务概览">
-        <div className="task-summary-card">
-          <small>全部任务</small>
-          <strong>{tasks.length}</strong>
-          <span>本地历史快照</span>
-        </div>
-        <div className="task-summary-card">
-          <small>正在运行</small>
-          <strong>{active}</strong>
-          <span>排队或转录中</span>
-        </div>
-        <div className="task-summary-card">
-          <small>已完成</small>
-          <strong>{completed}</strong>
-          <span>本地输出已生成</span>
-        </div>
-        <div className="task-summary-card">
-          <small>需要处理</small>
-          <strong>{attention}</strong>
-          <span>失败、取消或输出丢失</span>
-        </div>
+      <div className="task-workspace-switcher" aria-label="任务监控与历史记录">
+        <button
+          aria-pressed={mode === 'monitor'}
+          className={mode === 'monitor' ? 'is-active' : ''}
+          onClick={() => setMode('monitor')}
+          type="button"
+        >
+          <Activity size={17} />
+          <span>
+            <strong>任务监控</strong>
+            <small>{active > 0 ? `${active} 项活动任务` : '当前空闲'}</small>
+          </span>
+        </button>
+        <button
+          aria-pressed={mode === 'history'}
+          className={mode === 'history' ? 'is-active' : ''}
+          onClick={() => setMode('history')}
+          type="button"
+        >
+          <History size={17} />
+          <span>
+            <strong>历史记录</strong>
+            <small>{tasks.length} 条本机快照</small>
+          </span>
+        </button>
       </div>
-      <TaskList expanded />
+      {mode === 'monitor' ? (
+        <TaskMonitor />
+      ) : (
+        <>
+          <div className="task-summary" aria-label="任务概览">
+            <div className="task-summary-card">
+              <small>全部任务</small>
+              <strong>{tasks.length}</strong>
+              <span>本地历史快照</span>
+            </div>
+            <div className="task-summary-card">
+              <small>正在运行</small>
+              <strong>{active}</strong>
+              <span>排队或转录中</span>
+            </div>
+            <div className="task-summary-card">
+              <small>已完成</small>
+              <strong>{completed}</strong>
+              <span>本地输出已生成</span>
+            </div>
+            <div className="task-summary-card">
+              <small>需要处理</small>
+              <strong>{attention}</strong>
+              <span>失败、取消或输出丢失</span>
+            </div>
+          </div>
+          <TaskList expanded />
+        </>
+      )}
     </div>
   );
 }
@@ -172,15 +230,38 @@ function TasksView() {
 function ErrorBanner() {
   const lastError = useWorkspace((state) => state.lastError);
   const clearError = useWorkspace((state) => state.clearError);
+  const reducedMotion = useReducedMotion();
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    if (!lastError) {
+      setFading(false);
+      return;
+    }
+    setFading(false);
+    const fadeTimer = reducedMotion ? null : window.setTimeout(() => setFading(true), 4_840);
+    const clearTimer = window.setTimeout(clearError, 5_000);
+    return () => {
+      if (fadeTimer !== null) window.clearTimeout(fadeTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [clearError, lastError, reducedMotion]);
+
   if (!lastError) return null;
   return (
-    <div className="error-banner" role="alert">
+    <motion.div
+      animate={{ opacity: fading ? 0 : 1 }}
+      className="error-banner"
+      initial={false}
+      role="alert"
+      transition={{ duration: reducedMotion ? 0 : 0.16, ease: 'easeOut' }}
+    >
       <AlertTriangle size={17} />
       <span>{lastError}</span>
       <button aria-label="关闭错误提示" onClick={clearError} type="button">
         <X size={16} />
       </button>
-    </div>
+    </motion.div>
   );
 }
 
@@ -202,6 +283,7 @@ export default function App() {
       <Sidebar />
       <main className="main-canvas">
         <Topbar />
+        <PowerCountdownBanner />
         <ErrorBanner />
         <motion.div
           animate={{ opacity: 1, y: 0 }}
@@ -216,6 +298,7 @@ export default function App() {
         >
           {activeView === 'workspace' && <WorkspaceView />}
           {activeView === 'models' && <ModelSwitchView />}
+          {activeView === 'hardware' && <HardwareView />}
           {activeView === 'performance' && <PerformanceView />}
           {activeView === 'tasks' && <TasksView />}
           {activeView === 'logs' && <WorkerLogsView />}
@@ -223,6 +306,7 @@ export default function App() {
         </motion.div>
       </main>
       <TaskDetail />
+      <ShutdownConfirmDialog />
       <OverwriteConfirmDialog />
       <div className="desktop-only" aria-hidden="true">
         {desktopBridge.mode === 'mock' ? 'Mock desktop bridge' : 'Tauri desktop bridge'}

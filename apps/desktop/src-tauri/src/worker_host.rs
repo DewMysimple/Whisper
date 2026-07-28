@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
@@ -18,14 +18,15 @@ use crate::protocol::{event_code, request_id, valid_identifier, validate_worker_
 pub const WORKER_MESSAGE_EVENT: &str = "desktop://worker-message";
 pub const HOST_STATUS_EVENT: &str = "desktop://host-status";
 pub const WORKER_LOG_EVENT: &str = "desktop://worker-log";
+pub const WORKER_LOGS_CLEARED_EVENT: &str = "desktop://worker-logs-cleared";
 
 const START_TIMEOUT: Duration = Duration::from_secs(180);
 const MODEL_LOAD_TIMEOUT: Duration = Duration::from_secs(180);
+const MEDIA_INSPECT_TIMEOUT: Duration = Duration::from_secs(120);
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(15);
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-const LOG_LIMIT: usize = 200;
 pub const DEFAULT_MODEL_ID: &str = "large-v3-turbo";
 pub const SUPPORTED_MODEL_IDS: &[&str] = &[
     "tiny",
@@ -167,6 +168,10 @@ pub struct StartDraft {
     pub request_id: String,
     #[serde(default = "default_model_id")]
     pub model_id: String,
+    #[serde(default = "default_recognition_strategy")]
+    pub recognition_strategy: String,
+    #[serde(default)]
+    pub finish_action: Option<String>,
     pub inputs: Vec<BridgeInputSource>,
     pub base_preset_id: String,
     pub overrides: Map<String, Value>,
@@ -177,6 +182,10 @@ pub struct StartDraft {
 
 fn default_model_id() -> String {
     DEFAULT_MODEL_ID.to_owned()
+}
+
+fn default_recognition_strategy() -> String {
+    "stable_primary".to_owned()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -194,7 +203,19 @@ pub struct InspectedInput {
     pub origin: String,
     pub valid: bool,
     pub media_count: Option<usize>,
+    pub duration_seconds: Option<f64>,
+    pub unknown_duration_count: Option<usize>,
     pub detail: Option<String>,
+    #[serde(skip)]
+    pub media_paths: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct MediaInspectionItem {
+    pub path: String,
+    pub readable: bool,
+    pub duration_seconds: Option<f64>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -225,6 +246,7 @@ pub struct WorkerManager {
     child: Mutex<Option<Child>>,
     stdin: Mutex<Option<ChildStdin>>,
     pending: Mutex<HashMap<String, mpsc::SyncSender<PendingResult>>>,
+    active_tasks: Mutex<HashSet<String>>,
     logs: Mutex<VecDeque<String>>,
     request_sequence: AtomicU64,
     generation: AtomicU64,
@@ -241,6 +263,7 @@ impl WorkerManager {
             child: Mutex::new(None),
             stdin: Mutex::new(None),
             pending: Mutex::new(HashMap::new()),
+            active_tasks: Mutex::new(HashSet::new()),
             logs: Mutex::new(VecDeque::new()),
             request_sequence: AtomicU64::new(1),
             generation: AtomicU64::new(0),
@@ -267,6 +290,18 @@ impl WorkerManager {
             .unwrap_or_default()
     }
 
+    pub fn clear_logs(&self) {
+        if let Ok(mut logs) = self.logs.lock() {
+            logs.clear();
+            // Keep the buffer mutation and its broadcast ordered against
+            // concurrent push_log calls: a new line must never be followed
+            // by a late "cleared" event in the WebView.
+            (self.sink)(WORKER_LOGS_CLEARED_EVENT, json!({}));
+            return;
+        }
+        (self.sink)(WORKER_LOGS_CLEARED_EVENT, json!({}));
+    }
+
     fn push_log(&self, body: impl AsRef<str>) {
         let line = format!(
             "[{}] {}",
@@ -275,9 +310,6 @@ impl WorkerManager {
         );
         if let Ok(mut logs) = self.logs.lock() {
             logs.push_back(line.clone());
-            while logs.len() > LOG_LIMIT {
-                logs.pop_front();
-            }
         }
         (self.sink)(WORKER_LOG_EVENT, json!({"line": line}));
     }
@@ -290,6 +322,9 @@ impl WorkerManager {
 
         let launch = self.resolve_launch()?;
         self.stopping.store(false, Ordering::SeqCst);
+        if let Ok(mut active_tasks) = self.active_tasks.lock() {
+            active_tasks.clear();
+        }
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         self.update_status(HostStatus {
             state: "starting".to_owned(),
@@ -380,8 +415,48 @@ impl WorkerManager {
         self.send_generated_command("system.health", json!({}), COMMAND_TIMEOUT)
     }
 
+    pub fn has_active_tasks(&self) -> bool {
+        self.active_tasks
+            .lock()
+            .map(|tasks| !tasks.is_empty())
+            .unwrap_or(true)
+    }
+
     pub fn metrics(&self) -> Result<Value, HostError> {
         self.send_generated_command("system.metrics", json!({}), COMMAND_TIMEOUT)
+    }
+
+    pub fn inspect_media(&self, paths: &[PathBuf]) -> Result<Vec<MediaInspectionItem>, HostError> {
+        if paths.is_empty() {
+            return Ok(Vec::new());
+        }
+        let response = self.send_generated_command(
+            "media.inspect",
+            json!({"paths": paths}),
+            MEDIA_INSPECT_TIMEOUT,
+        )?;
+        let items = response
+            .pointer("/data/result/items")
+            .cloned()
+            .ok_or_else(|| {
+                HostError::new(
+                    "host.protocol_mismatch",
+                    "media.inspect result has no items",
+                )
+            })?;
+        let items: Vec<MediaInspectionItem> = serde_json::from_value(items).map_err(|error| {
+            HostError::new(
+                "host.protocol_mismatch",
+                format!("media.inspect returned invalid items: {error}"),
+            )
+        })?;
+        if items.len() != paths.len() {
+            return Err(HostError::new(
+                "host.protocol_mismatch",
+                "media.inspect result does not align with requested paths",
+            ));
+        }
+        Ok(items)
     }
 
     pub fn load_model(
@@ -773,6 +848,30 @@ impl WorkerManager {
             self.update_status(status);
         }
 
+        match event_code(&message) {
+            Some("task.queued") => {
+                if let Some(task_id) = message
+                    .get("task_id")
+                    .and_then(Value::as_str)
+                    .or_else(|| message.get("taskId").and_then(Value::as_str))
+                    && let Ok(mut active_tasks) = self.active_tasks.lock()
+                {
+                    active_tasks.insert(task_id.to_owned());
+                }
+            }
+            Some("task.completed" | "task.failed" | "task.cancelled") => {
+                if let Some(task_id) = message
+                    .get("task_id")
+                    .and_then(Value::as_str)
+                    .or_else(|| message.get("taskId").and_then(Value::as_str))
+                    && let Ok(mut active_tasks) = self.active_tasks.lock()
+                {
+                    active_tasks.remove(task_id);
+                }
+            }
+            _ => {}
+        }
+
         let completion = matches!(
             event_code(&message),
             Some("command.completed" | "task.queued")
@@ -783,6 +882,9 @@ impl WorkerManager {
         }
         if let Some(summary) = worker_log_summary(&message) {
             self.push_log(summary);
+        }
+        for line in worker_quality_diagnostic_log_lines(&message) {
+            self.push_log(line);
         }
         (self.sink)(WORKER_MESSAGE_EVENT, message);
     }
@@ -850,6 +952,9 @@ impl WorkerManager {
     fn worker_disconnected(&self, generation: u64) {
         if generation != self.generation.load(Ordering::SeqCst) {
             return;
+        }
+        if let Ok(mut active_tasks) = self.active_tasks.lock() {
+            active_tasks.clear();
         }
         if self.stopping.load(Ordering::SeqCst) {
             self.update_status(HostStatus::stopped());
@@ -1003,20 +1108,33 @@ fn worker_log_summary(message: &Value) -> Option<String> {
                 .unwrap_or("unknown")
         )),
         "task.queued" => Some(format!(
-            "[TASK {}] queued · {} 个媒体 · {}",
+            "[TASK {}] queued · {} 个媒体 · {} · {}",
             task.unwrap_or("unknown"),
             data.get("input_count")
                 .and_then(Value::as_u64)
                 .unwrap_or_default(),
             data.get("model_id")
                 .and_then(Value::as_str)
-                .unwrap_or(DEFAULT_MODEL_ID)
+                .unwrap_or(DEFAULT_MODEL_ID),
+            recognition_strategy_label(
+                data.get("recognition_strategy")
+                    .and_then(Value::as_str)
+                    .unwrap_or("stable_primary")
+            )
         )),
         "task.progress" => {
             let stage = data
                 .get("stage")
                 .and_then(Value::as_str)
                 .unwrap_or("unknown");
+            if stage == "transcription.running"
+                && data
+                    .get("media_progress_percent")
+                    .and_then(Value::as_f64)
+                    .is_some_and(|percent| percent > 0.0)
+            {
+                return None;
+            }
             let current = data
                 .get("current")
                 .and_then(Value::as_u64)
@@ -1073,6 +1191,257 @@ fn worker_log_summary(message: &Value) -> Option<String> {
     }
 }
 
+fn worker_quality_diagnostic_log_lines(message: &Value) -> Vec<String> {
+    if event_code(message) != Some("task.progress") {
+        return Vec::new();
+    }
+    let Some(diagnostics) = message
+        .get("data")
+        .and_then(|data| data.get("quality_diagnostics"))
+    else {
+        return Vec::new();
+    };
+    let task = message
+        .get("task_id")
+        .and_then(Value::as_str)
+        .map(short_task_id)
+        .unwrap_or("unknown");
+    let language = diagnostics
+        .get("detected_language")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let probability = diagnostics
+        .get("language_probability")
+        .and_then(Value::as_f64)
+        .map(|value| format!("{value:.3}"))
+        .unwrap_or_else(|| "unknown".to_owned());
+    let segment_count = diagnostics
+        .get("segment_count")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    let fallback_count = diagnostics
+        .get("fallback_segment_count")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    let low_confidence_count = diagnostics
+        .get("low_confidence_count")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    let strategy = recognition_strategy_label(
+        diagnostics
+            .get("recognition_strategy")
+            .and_then(Value::as_str)
+            .unwrap_or("stable_primary"),
+    );
+    let mut lines = vec![format!(
+        "[TASK {task}] quality · {strategy} · language {language} ({probability}) · \
+         {segment_count} 段 · 温度回退 {fallback_count} · 需复核 {low_confidence_count}"
+    )];
+    if let Some(segments) = diagnostics.get("segments").and_then(Value::as_array) {
+        for segment in segments {
+            let start = segment
+                .get("start")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.2}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let end = segment
+                .get("end")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.2}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let temperature = segment
+                .get("temperature")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.1}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let log_probability = segment
+                .get("avg_logprob")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.3}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let compression = segment
+                .get("compression_ratio")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.3}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let no_speech = segment
+                .get("no_speech_prob")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.3}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let reasons = segment
+                .get("reasons")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
+                .unwrap_or_default();
+            let text = segment.get("text").and_then(Value::as_str).unwrap_or("");
+            lines.push(format!(
+                "[TASK {task}] quality detail · {start}-{end}s · t={temperature} · \
+                 logprob={log_probability} · compression={compression} · \
+                 no-speech={no_speech} · {reasons} · {text}"
+            ));
+        }
+    }
+    if let Some(regions) = diagnostics
+        .get("language_regions")
+        .and_then(Value::as_array)
+    {
+        for region in regions {
+            let start = region
+                .get("start")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.2}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let end = region
+                .get("end")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.2}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let zh = region
+                .get("chinese_probability")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.3}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let en = region
+                .get("english_probability")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.3}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let result = region
+                .get("decision")
+                .and_then(Value::as_str)
+                .unwrap_or("candidate_rejected");
+            let primary = region
+                .get("primary_text")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let candidate = region
+                .get("candidate_text")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            lines.push(format!(
+                "[TASK {task}] language region · {start}-{end}s · zh={zh} en={en} · {result} · \
+                 first={primary} · second={candidate}"
+            ));
+        }
+    }
+    if let Some(candidates) = diagnostics
+        .get("detail_candidates")
+        .and_then(Value::as_array)
+    {
+        for candidate in candidates {
+            let start = candidate
+                .get("start")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.2}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let end = candidate
+                .get("end")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.2}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let result = candidate
+                .get("decision")
+                .and_then(Value::as_str)
+                .unwrap_or("rejected");
+            let reason = candidate
+                .get("reason")
+                .and_then(Value::as_str)
+                .unwrap_or("-");
+            let primary_word = candidate
+                .get("primary_word_probability")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.3}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let candidate_word = candidate
+                .get("candidate_word_probability")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.3}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let primary_log = candidate
+                .get("primary_log_probability")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.3}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let candidate_log = candidate
+                .get("candidate_log_probability")
+                .and_then(Value::as_f64)
+                .map(|value| format!("{value:.3}"))
+                .unwrap_or_else(|| "?".to_owned());
+            let recovered = candidate
+                .get("recovered_hotwords")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_default();
+            let primary = candidate
+                .get("primary_text")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let second = candidate
+                .get("candidate_text")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            lines.push(format!(
+                "[TASK {task}] Chinese detail candidate · {start}-{end}s · {result} · {reason} · \
+                 word-prob {primary_word}->{candidate_word} · logprob {primary_log}->{candidate_log} · \
+                 recovered [{recovered}] · first={primary} · second={second}"
+            ));
+        }
+    }
+    if let Some(audit) = diagnostics.get("hotword_audit") {
+        let total = audit
+            .get("term_count")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        let matched = audit
+            .get("matched_terms")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        let missing = audit
+            .get("missing_terms")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        lines.push(format!(
+            "[TASK {task}] hotwords · total {total} · matched [{matched}] · missing [{missing}]"
+        ));
+    }
+    lines
+}
+
+fn recognition_strategy_label(value: &str) -> &'static str {
+    match value {
+        "mixed_zh_en" => "复杂中英混合",
+        "zh_detail_review" => "中文细节增强",
+        _ => "稳定主语言",
+    }
+}
+
 fn short_task_id(value: &str) -> &str {
     value.get(value.len().saturating_sub(8)..).unwrap_or(value)
 }
@@ -1085,21 +1454,30 @@ fn is_supported_media(path: &Path) -> bool {
         })
 }
 
-fn count_supported_media(path: &Path) -> Result<usize, std::io::Error> {
+fn collect_supported_media(path: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
     if path.is_file() {
-        return Ok(usize::from(is_supported_media(path)));
+        return Ok(if is_supported_media(path) {
+            vec![path.to_path_buf()]
+        } else {
+            Vec::new()
+        });
     }
-    let mut count = 0;
+    let mut media = Vec::new();
     for entry in std::fs::read_dir(path)? {
         let entry = entry?;
         let file_type = entry.file_type()?;
         if file_type.is_dir() {
-            count += count_supported_media(&entry.path())?;
+            media.extend(collect_supported_media(&entry.path())?);
         } else if file_type.is_file() && is_supported_media(&entry.path()) {
-            count += 1;
+            media.push(entry.path());
         }
     }
-    Ok(count)
+    media.sort_by(|left, right| {
+        left.to_string_lossy()
+            .to_lowercase()
+            .cmp(&right.to_string_lossy().to_lowercase())
+    });
+    Ok(media)
 }
 
 pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedInput> {
@@ -1119,15 +1497,18 @@ pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedI
                     } else {
                         "file"
                     };
-                    match count_supported_media(Path::new(path)) {
-                        Ok(media_count) if media_count > 0 => InspectedInput {
+                    match collect_supported_media(Path::new(path)) {
+                        Ok(media_paths) if !media_paths.is_empty() => InspectedInput {
                             path: path.to_owned(),
                             kind: kind.to_owned(),
                             origin: normalized_origin.clone(),
                             valid: true,
-                            media_count: Some(media_count),
+                            media_count: Some(media_paths.len()),
+                            duration_seconds: None,
+                            unknown_duration_count: Some(media_paths.len()),
                             detail: (kind == "directory")
-                                .then(|| format!("递归发现 {media_count} 个媒体文件")),
+                                .then(|| format!("递归发现 {} 个媒体文件", media_paths.len())),
+                            media_paths,
                         },
                         Ok(_) => InspectedInput {
                             path: path.to_owned(),
@@ -1135,7 +1516,10 @@ pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedI
                             origin: normalized_origin.clone(),
                             valid: false,
                             media_count: Some(0),
+                            duration_seconds: None,
+                            unknown_duration_count: Some(0),
                             detail: Some("未发现支持的媒体文件".to_owned()),
+                            media_paths: Vec::new(),
                         },
                         Err(error) => InspectedInput {
                             path: path.to_owned(),
@@ -1143,7 +1527,10 @@ pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedI
                             origin: normalized_origin.clone(),
                             valid: false,
                             media_count: None,
+                            duration_seconds: None,
+                            unknown_duration_count: None,
                             detail: Some(format!("无法读取媒体目录: {error}")),
+                            media_paths: Vec::new(),
                         },
                     }
                 }
@@ -1153,7 +1540,10 @@ pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedI
                     origin: normalized_origin.clone(),
                     valid: false,
                     media_count: None,
+                    duration_seconds: None,
+                    unknown_duration_count: None,
                     detail: Some("输入不是文件或目录".to_owned()),
+                    media_paths: Vec::new(),
                 },
                 Err(error) => InspectedInput {
                     path: path.to_owned(),
@@ -1161,11 +1551,57 @@ pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedI
                     origin: normalized_origin.clone(),
                     valid: false,
                     media_count: None,
+                    duration_seconds: None,
+                    unknown_duration_count: None,
                     detail: Some(error.to_string()),
+                    media_paths: Vec::new(),
                 },
             }
         })
         .collect()
+}
+
+pub fn apply_media_inspections(
+    inputs: &mut [InspectedInput],
+    inspections: &[MediaInspectionItem],
+) -> Result<(), HostError> {
+    let expected = inputs
+        .iter()
+        .map(|input| input.media_paths.len())
+        .sum::<usize>();
+    if expected != inspections.len() {
+        return Err(HostError::new(
+            "host.protocol_mismatch",
+            "media inspections do not align with inspected inputs",
+        ));
+    }
+    let mut cursor = 0;
+    for input in inputs {
+        let count = input.media_paths.len();
+        if count == 0 {
+            continue;
+        }
+        let values = &inspections[cursor..cursor + count];
+        cursor += count;
+        let known = values
+            .iter()
+            .filter_map(|item| item.duration_seconds)
+            .collect::<Vec<_>>();
+        input.duration_seconds = (!known.is_empty()).then(|| known.iter().sum());
+        input.unknown_duration_count = Some(count.saturating_sub(known.len()));
+        if let Some(item) = values.iter().find(|item| !item.readable) {
+            input.valid = false;
+            input.detail = Some(format!(
+                "无法读取媒体容器：{}{}",
+                item.path,
+                item.error
+                    .as_deref()
+                    .map(|error| format!("（{error}）"))
+                    .unwrap_or_default()
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn strip_one_pair_of_quotes(value: &str) -> &str {
@@ -1188,6 +1624,28 @@ fn validate_start_draft(draft: &StartDraft) -> Result<(), HostError> {
     if !SUPPORTED_MODEL_IDS.contains(&draft.model_id.as_str()) {
         return Err(HostError::new("request.invalid", "model_id is unsupported"));
     }
+    if !matches!(
+        draft.recognition_strategy.as_str(),
+        "stable_primary" | "mixed_zh_en" | "zh_detail_review"
+    ) || (draft.recognition_strategy != "stable_primary"
+        && (!matches!(draft.base_preset_id.as_str(), "cn" | "cn2")
+            || !matches!(draft.model_id.as_str(), "large-v3" | "large-v3-turbo")))
+    {
+        return Err(HostError::new(
+            "request.invalid",
+            "recognition_strategy is unsupported for the selected preset",
+        ));
+    }
+    if draft
+        .finish_action
+        .as_deref()
+        .is_some_and(|action| action != "shutdown")
+    {
+        return Err(HostError::new(
+            "request.invalid",
+            "finish_action is unsupported",
+        ));
+    }
     for input in &draft.inputs {
         if input.path.trim().is_empty()
             || !matches!(input.kind.as_str(), "file" | "directory")
@@ -1205,7 +1663,7 @@ fn validate_start_draft(draft: &StartDraft) -> Result<(), HostError> {
     ) {
         return Err(HostError::new("request.invalid", "base preset is invalid"));
     }
-    validate_overrides(&draft.overrides)?;
+    validate_overrides(&draft.overrides, &draft.base_preset_id, &draft.model_id)?;
     if let Some(hardware) = draft.hardware.as_ref() {
         validate_hardware_preference(hardware)?;
     }
@@ -1213,7 +1671,7 @@ fn validate_start_draft(draft: &StartDraft) -> Result<(), HostError> {
     if !matches!(output.mode.as_str(), "compatibility" | "custom")
         || !matches!(
             output.conflict_policy.as_str(),
-            "fail" | "overwrite" | "auto_rename"
+            "fail" | "overwrite" | "auto_rename" | "skip"
         )
         || (!output.txt_enabled && !output.markdown_enabled && !output.srt_enabled)
     {
@@ -1251,16 +1709,31 @@ fn validate_start_draft(draft: &StartDraft) -> Result<(), HostError> {
     Ok(())
 }
 
-fn validate_overrides(overrides: &Map<String, Value>) -> Result<(), HostError> {
+fn validate_overrides(
+    overrides: &Map<String, Value>,
+    base_preset_id: &str,
+    model_id: &str,
+) -> Result<(), HostError> {
     for (name, value) in overrides {
         let valid = match name.as_str() {
+            "task" => value.as_str().is_some_and(|task| {
+                task == "transcribe"
+                    || (task == "translate"
+                        && model_id != "large-v3-turbo"
+                        && matches!(base_preset_id, "en_v1" | "en_v2"))
+            }),
             "beam_size" | "best_of" => value.as_i64().is_some_and(|item| (1..=20).contains(&item)),
             "patience" => number_in_range(value, 0.0, 5.0),
             "length_penalty" => number_in_range(value, 0.0, 2.0),
-            "temperature" | "no_speech_threshold" => number_in_range(value, 0.0, 1.0),
+            "temperature" | "no_speech_threshold" | "prompt_reset_on_temperature" => {
+                number_in_range(value, 0.0, 1.0)
+            }
+            "repetition_penalty" => number_in_range(value, 1.0, 2.0),
+            "no_repeat_ngram_size" => value.as_i64().is_some_and(|item| (0..=10).contains(&item)),
             "compression_ratio_threshold" => number_in_range(value, 0.0, 10.0),
             "log_prob_threshold" => number_in_range(value, -10.0, 0.0),
             "condition_on_previous_text" => value.is_boolean(),
+            "initial_prompt" | "hotwords" => value.as_str().is_some_and(valid_prompt_text),
             "min_silence_duration_ms" => value
                 .as_i64()
                 .is_some_and(|item| (0..=10_000).contains(&item)),
@@ -1274,6 +1747,15 @@ fn validate_overrides(overrides: &Map<String, Value>) -> Result<(), HostError> {
         }
     }
     Ok(())
+}
+
+fn valid_prompt_text(value: &str) -> bool {
+    let normalized = value.trim();
+    !normalized.is_empty()
+        && normalized.chars().count() <= 4000
+        && normalized
+            .chars()
+            .all(|character| !character.is_control() || matches!(character, '\n' | '\t'))
 }
 
 fn number_in_range(value: &Value, minimum: f64, maximum: f64) -> bool {
@@ -1314,6 +1796,7 @@ fn draft_to_protocol_params(draft: StartDraft) -> Value {
     let hardware = draft.hardware;
     let mut params = json!({
         "model_id": draft.model_id,
+        "recognition_strategy": draft.recognition_strategy,
         "inputs": draft.inputs,
         "profile": {
             "base_preset_id": draft.base_preset_id,
@@ -1349,16 +1832,17 @@ mod tests {
     use std::env;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::{Arc, mpsc};
+    use std::sync::{Arc, Mutex, mpsc};
     use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
     use serde_json::{Map, Value, json};
 
     use super::{
         BridgeHardwarePreference, BridgeInputSource, BridgeOutputPolicy, BridgeSubtitleParameters,
-        StartDraft, WORKER_MESSAGE_EVENT, WorkerManager, draft_to_protocol_params,
-        inspect_input_paths, inspect_local_models, strip_one_pair_of_quotes, validate_start_draft,
-        worker_log_summary,
+        MediaInspectionItem, StartDraft, WORKER_LOGS_CLEARED_EVENT, WORKER_MESSAGE_EVENT,
+        WorkerManager, apply_media_inspections, draft_to_protocol_params, inspect_input_paths,
+        inspect_local_models, strip_one_pair_of_quotes, validate_start_draft, worker_log_summary,
+        worker_quality_diagnostic_log_lines,
     };
 
     fn subtitle_parameters() -> BridgeSubtitleParameters {
@@ -1376,6 +1860,8 @@ mod tests {
         StartDraft {
             request_id: "desktop-1".to_owned(),
             model_id: "large-v3-turbo".to_owned(),
+            recognition_strategy: "stable_primary".to_owned(),
+            finish_action: None,
             inputs: vec![BridgeInputSource {
                 path: r"C:\Media\lesson.mp4".to_owned(),
                 kind: "file".to_owned(),
@@ -1403,10 +1889,50 @@ mod tests {
         let params = draft_to_protocol_params(valid_draft());
         assert_eq!(params["profile"]["base_preset_id"], json!("en_v1"));
         assert_eq!(params["model_id"], json!("large-v3-turbo"));
+        assert_eq!(params["recognition_strategy"], json!("stable_primary"));
         assert_eq!(params["output"]["txt"]["enabled"], json!(true));
         assert_eq!(params["output"]["root_directory"], Value::Null);
         assert_eq!(params["output"]["preserve_source_markdown"], json!(false));
         assert!(params.get("effectiveParameters").is_none());
+    }
+
+    #[test]
+    fn accepts_mixed_strategy_only_for_chinese_presets_and_freezes_it() {
+        let mut draft = valid_draft();
+        draft.base_preset_id = "cn2".to_owned();
+        draft.recognition_strategy = "mixed_zh_en".to_owned();
+        validate_start_draft(&draft).expect("mixed strategy is valid for cn2");
+        let params = draft_to_protocol_params(draft);
+        assert_eq!(params["recognition_strategy"], json!("mixed_zh_en"));
+
+        let mut english = valid_draft();
+        english.recognition_strategy = "mixed_zh_en".to_owned();
+        assert!(validate_start_draft(&english).is_err());
+
+        let mut detail = valid_draft();
+        detail.base_preset_id = "cn".to_owned();
+        detail.model_id = "large-v3".to_owned();
+        detail.recognition_strategy = "zh_detail_review".to_owned();
+        validate_start_draft(&detail).expect("detail strategy is valid for V3 Chinese preset");
+        let params = draft_to_protocol_params(detail);
+        assert_eq!(params["recognition_strategy"], json!("zh_detail_review"));
+
+        let mut hidden_model = valid_draft();
+        hidden_model.base_preset_id = "cn2".to_owned();
+        hidden_model.model_id = "small".to_owned();
+        hidden_model.recognition_strategy = "zh_detail_review".to_owned();
+        assert!(validate_start_draft(&hidden_model).is_err());
+    }
+
+    #[test]
+    fn preserves_en_v2_identity_in_worker_request() {
+        let mut draft = valid_draft();
+        draft.base_preset_id = "en_v2".to_owned();
+
+        validate_start_draft(&draft).expect("valid en_v2 draft");
+        let params = draft_to_protocol_params(draft);
+
+        assert_eq!(params["profile"]["base_preset_id"], json!("en_v2"));
     }
 
     #[test]
@@ -1444,6 +1970,62 @@ mod tests {
             cpu_threads: 4,
         });
 
+        assert!(validate_start_draft(&draft).is_err());
+    }
+
+    #[test]
+    fn accepts_translation_guidance_and_repeat_overrides_for_english_presets() {
+        let mut draft = valid_draft();
+        draft.model_id = "large-v3".to_owned();
+        draft.base_preset_id = "en_v2".to_owned();
+        draft.overrides = Map::from_iter([
+            ("task".to_owned(), json!("translate")),
+            ("initial_prompt".to_owned(), json!("CTranslate2\nWebView2")),
+            ("hotwords".to_owned(), json!("WhisperSubtitle Large V3")),
+            ("repetition_penalty".to_owned(), json!(1.15)),
+            ("no_repeat_ngram_size".to_owned(), json!(3)),
+            ("prompt_reset_on_temperature".to_owned(), json!(0.7)),
+            ("temperature".to_owned(), json!(0.0)),
+        ]);
+
+        validate_start_draft(&draft).expect("valid advanced overrides");
+        let params = draft_to_protocol_params(draft);
+        assert_eq!(params["profile"]["overrides"]["task"], json!("translate"));
+        assert_eq!(
+            params["profile"]["overrides"]["initial_prompt"],
+            json!("CTranslate2\nWebView2")
+        );
+    }
+
+    #[test]
+    fn rejects_translation_for_chinese_presets_and_invalid_prompt_text() {
+        let mut translated = valid_draft();
+        translated.base_preset_id = "cn2".to_owned();
+        translated
+            .overrides
+            .insert("task".to_owned(), json!("translate"));
+        assert!(validate_start_draft(&translated).is_err());
+
+        let mut turbo_translation = valid_draft();
+        turbo_translation.base_preset_id = "en_v2".to_owned();
+        turbo_translation
+            .overrides
+            .insert("task".to_owned(), json!("translate"));
+        assert!(validate_start_draft(&turbo_translation).is_err());
+
+        let mut invalid_prompt = valid_draft();
+        invalid_prompt
+            .overrides
+            .insert("initial_prompt".to_owned(), json!("bad\u{0}prompt"));
+        assert!(validate_start_draft(&invalid_prompt).is_err());
+    }
+
+    #[test]
+    fn accepts_only_shutdown_as_a_finish_action() {
+        let mut draft = valid_draft();
+        draft.finish_action = Some("shutdown".to_owned());
+        assert!(validate_start_draft(&draft).is_ok());
+        draft.finish_action = Some("hibernate".to_owned());
         assert!(validate_start_draft(&draft).is_err());
     }
 
@@ -1514,7 +2096,7 @@ mod tests {
         fs::write(nested.join("two.WAV"), b"fixture").expect("nested media fixture");
         fs::write(nested.join("ignore.txt"), b"fixture").expect("non-media fixture");
 
-        let inspected = inspect_input_paths(
+        let mut inspected = inspect_input_paths(
             vec![root.to_string_lossy().into_owned()],
             "dialog".to_owned(),
         );
@@ -1525,6 +2107,28 @@ mod tests {
             inspected[0].detail.as_deref(),
             Some("递归发现 2 个媒体文件")
         );
+        assert_eq!(inspected[0].media_paths.len(), 2);
+        let media_paths = inspected[0].media_paths.clone();
+        apply_media_inspections(
+            &mut inspected,
+            &[
+                MediaInspectionItem {
+                    path: media_paths[0].to_string_lossy().into_owned(),
+                    readable: true,
+                    duration_seconds: Some(12.25),
+                    error: None,
+                },
+                MediaInspectionItem {
+                    path: media_paths[1].to_string_lossy().into_owned(),
+                    readable: true,
+                    duration_seconds: None,
+                    error: None,
+                },
+            ],
+        )
+        .expect("aligned media inspections");
+        assert_eq!(inspected[0].duration_seconds, Some(12.25));
+        assert_eq!(inspected[0].unknown_duration_count, Some(1));
 
         fs::remove_dir_all(root).expect("remove temporary fixture");
     }
@@ -1627,6 +2231,150 @@ mod tests {
     }
 
     #[test]
+    fn formats_every_quality_diagnostic_for_worker_logs() {
+        let progress = json!({
+            "schema_version": 1,
+            "type": "event",
+            "event": "task.progress",
+            "task_id": "task-12345678",
+            "data": {
+                "stage": "transcription.running",
+                "current": 1,
+                "total": 1,
+                "quality_diagnostics": {
+                    "detected_language": "zh",
+                    "language_probability": 0.91,
+                    "segment_count": 2,
+                    "fallback_segment_count": 1,
+                    "max_temperature": 0.4,
+                    "low_confidence_count": 1,
+                    "recognition_strategy": "mixed_zh_en",
+                    "rejected_region_count": 0,
+                    "detail_candidates": [{
+                        "start": 35.0,
+                        "end": 40.0,
+                        "chinese_probability": 0.94,
+                        "primary_text": "拟太环境",
+                        "candidate_text": "拟态环境",
+                        "decision": "replaced",
+                        "reason": "hotword_recovered",
+                        "primary_word_probability": 0.62,
+                        "candidate_word_probability": 0.91,
+                        "primary_log_probability": -0.85,
+                        "candidate_log_probability": -0.62,
+                        "recovered_hotwords": ["拟态"]
+                    }],
+                    "language_regions": [{
+                        "start": 25.0,
+                        "end": 31.0,
+                        "top_language": "en",
+                        "top_probability": 0.92,
+                        "english_probability": 0.92,
+                        "chinese_probability": 0.03,
+                        "primary_text": "错误中文",
+                        "candidate_text": "I'm free.",
+                        "decision": "replaced",
+                        "reason": null
+                    }],
+                    "hotword_audit": {
+                        "term_count": 2,
+                        "matched_count": 1,
+                        "missing_count": 1,
+                        "matched_terms": ["Walter Lippmann"],
+                        "missing_terms": ["simulacra-self"],
+                        "omitted_term_count": 0
+                    },
+                    "segments": [{
+                        "index": 1,
+                        "start": 3.0,
+                        "end": 5.0,
+                        "text": "需要复核",
+                        "temperature": 0.4,
+                        "avg_logprob": -1.2,
+                        "compression_ratio": 2.5,
+                        "no_speech_prob": 0.1,
+                        "reasons": ["fallback_temperature"]
+                    }]
+                }
+            }
+        });
+
+        let lines = worker_quality_diagnostic_log_lines(&progress);
+        assert_eq!(lines.len(), 5);
+        assert!(lines[0].contains("复杂中英混合"));
+        assert!(lines[0].contains("需复核 1"));
+        assert!(lines[1].contains("需要复核"));
+        assert!(lines[1].contains("logprob=-1.200"));
+        assert!(lines[2].contains("language region"));
+        assert!(lines[2].contains("second=I'm free."));
+        assert!(lines[3].contains("Chinese detail candidate"));
+        assert!(lines[3].contains("first=拟太环境"));
+        assert!(lines[4].contains("missing [simulacra-self]"));
+    }
+
+    #[test]
+    fn keeps_the_full_session_log_and_clears_it_atomically() {
+        let channels = Arc::new(Mutex::new(Vec::new()));
+        let captured = Arc::clone(&channels);
+        let sink = Arc::new(move |channel: &str, _payload: Value| {
+            captured
+                .lock()
+                .expect("captured channels")
+                .push(channel.to_owned());
+        });
+        let manager = WorkerManager::new(PathBuf::from("."), sink);
+
+        for index in 0..205 {
+            manager.push_log(format!("line {index}"));
+        }
+        assert_eq!(manager.logs().len(), 205);
+
+        manager.clear_logs();
+        assert!(manager.logs().is_empty());
+        assert_eq!(
+            channels
+                .lock()
+                .expect("captured channels")
+                .last()
+                .map(String::as_str),
+            Some(WORKER_LOGS_CLEARED_EVENT)
+        );
+    }
+
+    #[test]
+    fn tracks_active_tasks_from_authoritative_worker_events() {
+        let manager = WorkerManager::new(PathBuf::from("."), Arc::new(|_, _| {}));
+        let generation = manager.generation.load(std::sync::atomic::Ordering::SeqCst);
+
+        manager.handle_worker_message(
+            json!({
+                "schema_version": 1,
+                "type": "event",
+                "event": "task.queued",
+                "request_id": "request-1",
+                "task_id": "task-1",
+                "message": "queued",
+                "data": {}
+            }),
+            generation,
+        );
+        assert!(manager.has_active_tasks());
+
+        manager.handle_worker_message(
+            json!({
+                "schema_version": 1,
+                "type": "event",
+                "event": "task.completed",
+                "task_id": "task-1",
+                "message": "completed",
+                "data": {"outputs": []}
+            }),
+            generation,
+        );
+        assert!(!manager.has_active_tasks());
+    }
+
+    #[test]
     #[ignore = "requires the project Python environment and a real NVIDIA GPU"]
     fn real_worker_process_gpu_smoke() {
         let repository_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1681,6 +2429,8 @@ mod tests {
         let draft = StartDraft {
             request_id: "batch4-real-gpu".to_owned(),
             model_id: "large-v3-turbo".to_owned(),
+            recognition_strategy: "stable_primary".to_owned(),
+            finish_action: None,
             inputs: vec![BridgeInputSource {
                 path: fixture.to_string_lossy().into_owned(),
                 kind: "file".to_owned(),

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DesktopEvent, TranscriptionDraft } from '../contracts/desktop';
+import { getPreset } from '../data/presets';
 
 const native = vi.hoisted(() => ({
   handlers: new Map<string, (event: { payload: unknown }) => void>(),
@@ -8,6 +9,7 @@ const native = vi.hoisted(() => ({
     ((event: { payload: { type: string; paths: string[] } }) => void) | undefined,
   invoke: vi.fn(),
   open: vi.fn(),
+  readText: vi.fn(),
   save: vi.fn(),
   writeText: vi.fn(),
 }));
@@ -35,7 +37,10 @@ vi.mock('@tauri-apps/api/path', () => ({
   desktopDir: vi.fn(async () => 'C:\\Users\\Test\\Desktop'),
   join: vi.fn(async (...parts: string[]) => parts.join('\\')),
 }));
-vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({ writeText: native.writeText }));
+vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
+  readText: native.readText,
+  writeText: native.writeText,
+}));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: native.open, save: native.save }));
 
 import { TauriDesktopBridge } from './tauriDesktopBridge';
@@ -61,18 +66,7 @@ const DRAFT: TranscriptionDraft = {
   basePresetId: 'en_v1',
   profileMode: 'transcript',
   overrides: {},
-  effectiveParameters: {
-    beam_size: 5,
-    best_of: 5,
-    patience: 1.5,
-    length_penalty: 1,
-    temperature: 0,
-    compression_ratio_threshold: 2.4,
-    log_prob_threshold: -1,
-    no_speech_threshold: 0.6,
-    condition_on_previous_text: true,
-    min_silence_duration_ms: 300,
-  },
+  effectiveParameters: { ...getPreset('en_v1').parameters },
   subtitleParameters: {
     max_characters_per_line: 42,
     max_lines_per_cue: 2,
@@ -99,8 +93,10 @@ describe('TauriDesktopBridge', () => {
     native.dragHandler = undefined;
     native.invoke.mockReset();
     native.open.mockReset();
+    native.readText.mockReset();
     native.save.mockReset();
     native.writeText.mockReset();
+    native.readText.mockResolvedValue('"F:\\Media\\clipboard lesson.wav"');
     native.invoke.mockImplementation(
       async (command: string, arguments_: Record<string, unknown>) => {
         if (command === 'get_host_status') {
@@ -262,6 +258,13 @@ describe('TauriDesktopBridge', () => {
     bridge.dispose();
   });
 
+  it('reads Windows clipboard text through the native clipboard capability', async () => {
+    const bridge = new TauriDesktopBridge();
+    await expect(bridge.readClipboardText()).resolves.toBe('"F:\\Media\\clipboard lesson.wav"');
+    expect(native.readText).toHaveBeenCalledOnce();
+    bridge.dispose();
+  });
+
   it('maps validated Worker task messages without parsing presentation text', async () => {
     const bridge = new TauriDesktopBridge();
     const events: DesktopEvent[] = [];
@@ -311,6 +314,121 @@ describe('TauriDesktopBridge', () => {
           title: 'lesson.wav',
           modelId: 'large-v3-turbo',
           createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        }),
+      }),
+    );
+
+    native.handlers.get('desktop://worker-message')?.({
+      payload: {
+        schema_version: 1,
+        type: 'event',
+        task_id: 'task-real-1',
+        event: 'task.progress',
+        data: {
+          stage: 'output.writing',
+          current: 1,
+          total: 1,
+          input_path: 'F:\\Media\\lesson.wav',
+          media_index: 1,
+          media_progress_percent: 100,
+          media_elapsed_seconds: 9.5,
+          task_elapsed_seconds: 10,
+          media_status: 'completed',
+          output_paths: ['F:\\Text\\lesson.txt'],
+          quality_diagnostics: {
+            detected_language: 'zh',
+            language_probability: 0.92,
+            segment_count: 2,
+            fallback_segment_count: 1,
+            max_temperature: 0.4,
+            low_confidence_count: 1,
+            recognition_strategy: 'mixed_zh_en',
+            secondary_pass_count: 1,
+            replaced_region_count: 1,
+            review_region_count: 0,
+            rejected_region_count: 0,
+            detail_candidates: [
+              {
+                start: 35,
+                end: 40,
+                chinese_probability: 0.94,
+                primary_text: '拟太环境',
+                candidate_text: '拟态环境',
+                decision: 'replaced',
+                reason: 'hotword_recovered',
+                primary_word_probability: 0.62,
+                candidate_word_probability: 0.91,
+                primary_log_probability: -0.85,
+                candidate_log_probability: -0.62,
+                recovered_hotwords: ['拟态'],
+              },
+            ],
+            language_regions: [
+              {
+                start: 25,
+                end: 31.5,
+                top_language: 'en',
+                top_probability: 0.91,
+                english_probability: 0.91,
+                chinese_probability: 0.04,
+                primary_text: '第一遍文本',
+                candidate_text: 'This is an English candidate.',
+                decision: 'replaced',
+                reason: null,
+              },
+            ],
+            hotword_audit: {
+              term_count: 2,
+              matched_count: 1,
+              missing_count: 1,
+              matched_terms: ['Walter Lippmann'],
+              missing_terms: ['simulacra-self'],
+              omitted_term_count: 0,
+            },
+            segments: [
+              {
+                index: 1,
+                start: 3,
+                end: 5,
+                text: '需要复核',
+                temperature: 0.4,
+                avg_logprob: -1.2,
+                compression_ratio: 2.5,
+                no_speech_prob: 0.1,
+                reasons: ['fallback_temperature'],
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'task.progress',
+        taskId: 'task-real-1',
+        mediaStatus: 'completed',
+        outputPaths: ['F:\\Text\\lesson.txt'],
+        qualityDiagnostics: expect.objectContaining({
+          detectedLanguage: 'zh',
+          lowConfidenceCount: 1,
+          recognitionStrategy: 'mixed_zh_en',
+          languageRegions: [
+            expect.objectContaining({
+              englishProbability: 0.91,
+              decision: 'replaced',
+            }),
+          ],
+          detailCandidates: [
+            expect.objectContaining({
+              primaryText: '拟太环境',
+              candidateText: '拟态环境',
+              decision: 'replaced',
+              recoveredHotwords: ['拟态'],
+            }),
+          ],
+          hotwordAudit: expect.objectContaining({
+            matchedTerms: ['Walter Lippmann'],
+          }),
         }),
       }),
     );
@@ -423,6 +541,14 @@ describe('TauriDesktopBridge', () => {
     const bridge = new TauriDesktopBridge();
     await bridge.revealOutput('F:\\Text\\lesson.txt');
     expect(native.invoke).toHaveBeenCalledWith('reveal_output', {
+      path: 'F:\\Text\\lesson.txt',
+    });
+  });
+
+  it('opens an output directory through the whitelisted Rust command', async () => {
+    const bridge = new TauriDesktopBridge();
+    await bridge.openOutputDirectory('F:\\Text\\lesson.txt');
+    expect(native.invoke).toHaveBeenCalledWith('open_output_directory', {
       path: 'F:\\Text\\lesson.txt',
     });
   });

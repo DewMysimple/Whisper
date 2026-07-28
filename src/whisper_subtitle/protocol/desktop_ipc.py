@@ -25,6 +25,7 @@ class CommandMethod(str, Enum):
     SYSTEM_HEALTH = "system.health"
     SYSTEM_ENVIRONMENT = "system.environment"
     SYSTEM_METRICS = "system.metrics"
+    MEDIA_INSPECT = "media.inspect"
     MODEL_LOAD = "model.load"
     MODEL_UNLOAD = "model.unload"
     TRANSCRIPTION_START = "transcription.start"
@@ -86,13 +87,16 @@ FrozenJson: TypeAlias = (
 
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _PRESET_IDS = frozenset({"cn", "cn2", "en_v1", "en_v2"})
+_RECOGNITION_STRATEGIES = frozenset(
+    {"stable_primary", "mixed_zh_en", "zh_detail_review"}
+)
 _MODEL_IDS = frozenset(
     {"tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"}
 )
 _INPUT_KINDS = frozenset({"file", "directory"})
 _INPUT_ORIGINS = frozenset({"dialog", "drop", "paste", "manual"})
 _OUTPUT_MODES = frozenset({"compatibility", "custom"})
-_CONFLICT_POLICIES = frozenset({"overwrite", "fail", "auto_rename"})
+_CONFLICT_POLICIES = frozenset({"overwrite", "fail", "auto_rename", "skip"})
 _CANCEL_REASONS = frozenset({"user", "shutdown", "superseded"})
 _HARDWARE_MODES = frozenset({"auto", "cuda", "cpu"})
 _CUDA_COMPUTE_TYPES = frozenset({"float16", "int8_float16", "float32"})
@@ -105,13 +109,17 @@ _PARAMETER_RULES: Mapping[str, tuple[type, float, float]] = MappingProxyType(
         "patience": (float, 0, 5),
         "length_penalty": (float, 0, 2),
         "temperature": (float, 0, 1),
+        "repetition_penalty": (float, 1, 2),
+        "no_repeat_ngram_size": (int, 0, 10),
         "compression_ratio_threshold": (float, 0, 10),
         "log_prob_threshold": (float, -10, 0),
         "no_speech_threshold": (float, 0, 1),
         "condition_on_previous_text": (bool, 0, 1),
+        "prompt_reset_on_temperature": (float, 0, 1),
         "min_silence_duration_ms": (int, 0, 10000),
     }
 )
+_SPECIAL_PARAMETER_NAMES = frozenset({"task", "initial_prompt", "hotwords"})
 
 _SUBTITLE_PARAMETER_RULES: Mapping[str, tuple[type, float, float]] = MappingProxyType(
     {
@@ -251,6 +259,445 @@ def _require_fields(
         )
 
 
+def _require_path_array(value: Any, field_name: str) -> list[str]:
+    if not isinstance(value, list) or not all(
+        isinstance(item, str) and item for item in value
+    ):
+        raise ProtocolValidationError(
+            ErrorCode.PROTOCOL_INVALID_MESSAGE,
+            f"{field_name} must be an array of non-empty paths",
+        )
+    return value
+
+
+def _require_conflict_groups(value: Any, field_name: str) -> None:
+    if not isinstance(value, list):
+        raise ProtocolValidationError(
+            ErrorCode.PROTOCOL_INVALID_MESSAGE,
+            f"{field_name} must be an array",
+        )
+    for index, item in enumerate(value):
+        group = _require_object(item, f"{field_name}[{index}]")
+        _require_fields(
+            group,
+            required={"input_path", "paths"},
+            field_name=f"{field_name}[{index}]",
+        )
+        _require_nonempty_string(
+            group["input_path"],
+            f"{field_name}[{index}].input_path",
+            code=ErrorCode.PROTOCOL_INVALID_MESSAGE,
+        )
+        _require_path_array(group["paths"], f"{field_name}[{index}].paths")
+
+
+def _validate_quality_diagnostics(value: Any, field_name: str) -> None:
+    diagnostics = _require_object(value, field_name)
+    _require_fields(
+        diagnostics,
+        required={
+            "detected_language",
+            "language_probability",
+            "segment_count",
+            "fallback_segment_count",
+            "max_temperature",
+            "low_confidence_count",
+            "segments",
+        },
+        optional={
+            "recognition_strategy",
+            "language_regions",
+            "detail_candidates",
+            "secondary_pass_count",
+            "replaced_region_count",
+            "review_region_count",
+            "rejected_region_count",
+            "hotword_audit",
+        },
+        field_name=field_name,
+    )
+    language = diagnostics["detected_language"]
+    if language is not None:
+        _require_nonempty_string(
+            language,
+            f"{field_name}.detected_language",
+            code=ErrorCode.PROTOCOL_INVALID_MESSAGE,
+        )
+    probability = diagnostics["language_probability"]
+    if probability is not None and (
+        not isinstance(probability, (int, float))
+        or isinstance(probability, bool)
+        or not math.isfinite(probability)
+        or not 0 <= probability <= 1
+    ):
+        raise ProtocolValidationError(
+            ErrorCode.PROTOCOL_INVALID_MESSAGE,
+            f"{field_name}.language_probability must be null or between 0 and 1",
+        )
+    for name in ("segment_count", "fallback_segment_count", "low_confidence_count"):
+        _require_nonnegative_int(diagnostics[name], f"{field_name}.{name}")
+    max_temperature = diagnostics["max_temperature"]
+    if (
+        not isinstance(max_temperature, (int, float))
+        or isinstance(max_temperature, bool)
+        or not math.isfinite(max_temperature)
+        or not 0 <= max_temperature <= 1
+    ):
+        raise ProtocolValidationError(
+            ErrorCode.PROTOCOL_INVALID_MESSAGE,
+            f"{field_name}.max_temperature must be between 0 and 1",
+        )
+    segments = diagnostics["segments"]
+    if not isinstance(segments, Sequence) or isinstance(
+        segments, (str, bytes, bytearray)
+    ):
+        raise ProtocolValidationError(
+            ErrorCode.PROTOCOL_INVALID_MESSAGE,
+            f"{field_name}.segments must be an array",
+        )
+    allowed_reasons = {
+        "fallback_temperature",
+        "low_log_probability",
+        "high_compression_ratio",
+        "silence_conflict",
+    }
+    for index, item in enumerate(segments):
+        segment_name = f"{field_name}.segments[{index}]"
+        segment = _require_object(item, segment_name)
+        _require_fields(
+            segment,
+            required={
+                "index",
+                "start",
+                "end",
+                "text",
+                "temperature",
+                "avg_logprob",
+                "compression_ratio",
+                "no_speech_prob",
+                "reasons",
+            },
+            field_name=segment_name,
+        )
+        _require_nonnegative_int(segment["index"], f"{segment_name}.index")
+        if not isinstance(segment["text"], str) or len(segment["text"]) > 160:
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{segment_name}.text must contain at most 160 characters",
+            )
+        for name in (
+            "start",
+            "end",
+            "temperature",
+            "avg_logprob",
+            "compression_ratio",
+            "no_speech_prob",
+        ):
+            number = segment[name]
+            if number is not None and (
+                not isinstance(number, (int, float))
+                or isinstance(number, bool)
+                or not math.isfinite(number)
+            ):
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    f"{segment_name}.{name} must be null or finite",
+                )
+        for name in ("start", "end", "temperature", "compression_ratio", "no_speech_prob"):
+            number = segment[name]
+            if number is not None and number < 0:
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    f"{segment_name}.{name} must be non-negative",
+                )
+        for name in ("temperature", "no_speech_prob"):
+            number = segment[name]
+            if number is not None and number > 1:
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    f"{segment_name}.{name} must not exceed 1",
+                )
+        if (
+            segment["start"] is not None
+            and segment["end"] is not None
+            and segment["end"] < segment["start"]
+        ):
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{segment_name}.end cannot precede start",
+            )
+        reasons = segment["reasons"]
+        if (
+            not isinstance(reasons, Sequence)
+            or isinstance(reasons, (str, bytes, bytearray))
+            or not reasons
+            or not all(reason in allowed_reasons for reason in reasons)
+        ):
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{segment_name}.reasons contains unsupported values",
+            )
+    if diagnostics["low_confidence_count"] != len(segments):
+        raise ProtocolValidationError(
+            ErrorCode.PROTOCOL_INVALID_MESSAGE,
+            f"{field_name}.low_confidence_count must match segments",
+        )
+    if "recognition_strategy" in diagnostics and diagnostics[
+        "recognition_strategy"
+    ] not in _RECOGNITION_STRATEGIES:
+        raise ProtocolValidationError(
+            ErrorCode.PROTOCOL_INVALID_MESSAGE,
+            f"{field_name}.recognition_strategy is unsupported",
+        )
+    if "language_regions" in diagnostics:
+        _validate_language_regions(
+            diagnostics["language_regions"], f"{field_name}.language_regions"
+        )
+    if "detail_candidates" in diagnostics:
+        _validate_detail_candidates(
+            diagnostics["detail_candidates"], f"{field_name}.detail_candidates"
+        )
+    for name in (
+        "secondary_pass_count",
+        "replaced_region_count",
+        "review_region_count",
+        "rejected_region_count",
+    ):
+        if name in diagnostics:
+            _require_nonnegative_int(diagnostics[name], f"{field_name}.{name}")
+    if "hotword_audit" in diagnostics:
+        _validate_hotword_audit(
+            diagnostics["hotword_audit"], f"{field_name}.hotword_audit"
+        )
+
+
+def _validate_language_regions(value: Any, field_name: str) -> None:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        raise ProtocolValidationError(
+            ErrorCode.PROTOCOL_INVALID_MESSAGE,
+            f"{field_name} must be an array",
+        )
+    for index, item in enumerate(value):
+        name = f"{field_name}[{index}]"
+        region = _require_object(item, name)
+        _require_fields(
+            region,
+            required={
+                "start",
+                "end",
+                "top_language",
+                "top_probability",
+                "english_probability",
+                "chinese_probability",
+                "primary_text",
+                "candidate_text",
+                "decision",
+                "reason",
+            },
+            field_name=name,
+        )
+        for number_name in (
+            "start",
+            "end",
+            "top_probability",
+            "english_probability",
+            "chinese_probability",
+        ):
+            number = region[number_name]
+            if (
+                not isinstance(number, (int, float))
+                or isinstance(number, bool)
+                or not math.isfinite(number)
+                or number < 0
+            ):
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    f"{name}.{number_name} must be a non-negative finite number",
+                )
+        if region["end"] <= region["start"]:
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{name}.end must be after start",
+            )
+        for probability_name in (
+            "top_probability",
+            "english_probability",
+            "chinese_probability",
+        ):
+            if region[probability_name] > 1:
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    f"{name}.{probability_name} must not exceed 1",
+                )
+        _require_nonempty_string(
+            region["top_language"],
+            f"{name}.top_language",
+            code=ErrorCode.PROTOCOL_INVALID_MESSAGE,
+        )
+        for text_name in ("primary_text", "candidate_text"):
+            if not isinstance(region[text_name], str) or len(region[text_name]) > 160:
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    f"{name}.{text_name} must contain at most 160 characters",
+                )
+        if region["decision"] not in {"primary", "replaced", "review", "rejected"}:
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{name}.decision is unsupported",
+            )
+        if region["reason"] is not None and (
+            not isinstance(region["reason"], str) or not region["reason"]
+        ):
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{name}.reason must be null or non-empty",
+            )
+
+
+def _validate_detail_candidates(value: Any, field_name: str) -> None:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        raise ProtocolValidationError(
+            ErrorCode.PROTOCOL_INVALID_MESSAGE,
+            f"{field_name} must be an array",
+        )
+    for index, item in enumerate(value):
+        name = f"{field_name}[{index}]"
+        candidate = _require_object(item, name)
+        _require_fields(
+            candidate,
+            required={
+                "start",
+                "end",
+                "chinese_probability",
+                "primary_text",
+                "candidate_text",
+                "decision",
+                "reason",
+                "primary_word_probability",
+                "candidate_word_probability",
+                "primary_log_probability",
+                "candidate_log_probability",
+                "recovered_hotwords",
+            },
+            field_name=name,
+        )
+        for number_name in ("start", "end", "chinese_probability"):
+            number = candidate[number_name]
+            if (
+                not isinstance(number, (int, float))
+                or isinstance(number, bool)
+                or not math.isfinite(number)
+                or number < 0
+            ):
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    f"{name}.{number_name} must be a non-negative finite number",
+                )
+        if candidate["end"] <= candidate["start"]:
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{name}.end must be after start",
+            )
+        if candidate["chinese_probability"] > 1:
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{name}.chinese_probability must not exceed 1",
+            )
+        for text_name in ("primary_text", "candidate_text"):
+            if (
+                not isinstance(candidate[text_name], str)
+                or len(candidate[text_name]) > 160
+            ):
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    f"{name}.{text_name} must contain at most 160 characters",
+                )
+        if candidate["decision"] not in {"replaced", "review", "rejected"}:
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{name}.decision is unsupported",
+            )
+        if candidate["reason"] is not None and (
+            not isinstance(candidate["reason"], str) or not candidate["reason"]
+        ):
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{name}.reason must be null or non-empty",
+            )
+        for probability_name in (
+            "primary_word_probability",
+            "candidate_word_probability",
+        ):
+            probability = candidate[probability_name]
+            if probability is not None and (
+                not isinstance(probability, (int, float))
+                or isinstance(probability, bool)
+                or not math.isfinite(probability)
+                or not 0 <= probability <= 1
+            ):
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    f"{name}.{probability_name} must be null or between 0 and 1",
+                )
+        for log_name in ("primary_log_probability", "candidate_log_probability"):
+            number = candidate[log_name]
+            if number is not None and (
+                not isinstance(number, (int, float))
+                or isinstance(number, bool)
+                or not math.isfinite(number)
+            ):
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    f"{name}.{log_name} must be null or finite",
+                )
+        terms = candidate["recovered_hotwords"]
+        if (
+            not isinstance(terms, Sequence)
+            or isinstance(terms, (str, bytes, bytearray))
+            or len(terms) > 20
+            or not all(isinstance(term, str) and term for term in terms)
+        ):
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{name}.recovered_hotwords must contain at most 20 terms",
+            )
+
+
+def _validate_hotword_audit(value: Any, field_name: str) -> None:
+    audit = _require_object(value, field_name)
+    _require_fields(
+        audit,
+        required={
+            "term_count",
+            "matched_count",
+            "missing_count",
+            "matched_terms",
+            "missing_terms",
+            "omitted_term_count",
+        },
+        field_name=field_name,
+    )
+    for name in (
+        "term_count",
+        "matched_count",
+        "missing_count",
+        "omitted_term_count",
+    ):
+        _require_nonnegative_int(audit[name], f"{field_name}.{name}")
+    for name in ("matched_terms", "missing_terms"):
+        terms = audit[name]
+        if (
+            not isinstance(terms, Sequence)
+            or isinstance(terms, (str, bytes, bytearray))
+            or not all(isinstance(term, str) and term for term in terms)
+            or len(terms) > 20
+        ):
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                f"{field_name}.{name} must contain at most 20 terms",
+            )
+
+
 def _require_nonempty_string(
     value: Any,
     field_name: str,
@@ -279,11 +726,13 @@ def _require_nonnegative_int(value: Any, field_name: str) -> int:
     return value
 
 
-def _validate_parameter_overrides(value: Any) -> None:
+def _validate_parameter_overrides(
+    value: Any, base_preset_id: str, model_id: str
+) -> None:
     overrides = _require_object(
         value, "params.profile.overrides", code=ErrorCode.REQUEST_INVALID
     )
-    unknown = set(overrides) - set(_PARAMETER_RULES)
+    unknown = set(overrides) - set(_PARAMETER_RULES) - _SPECIAL_PARAMETER_NAMES
     if unknown:
         raise ProtocolValidationError(
             ErrorCode.REQUEST_INVALID,
@@ -291,6 +740,34 @@ def _validate_parameter_overrides(value: Any) -> None:
             data={"unsupported": sorted(unknown)},
         )
     for name, parameter_value in overrides.items():
+        if name == "task":
+            if parameter_value not in {"transcribe", "translate"} or (
+                parameter_value == "translate"
+                and (
+                    base_preset_id not in {"en_v1", "en_v2"}
+                    or model_id == "large-v3-turbo"
+                )
+            ):
+                raise ProtocolValidationError(
+                    ErrorCode.REQUEST_INVALID,
+                    "invalid override for task",
+                )
+            continue
+        if name in {"initial_prompt", "hotwords"}:
+            if (
+                not isinstance(parameter_value, str)
+                or not parameter_value.strip()
+                or len(parameter_value) > 4000
+                or any(
+                    ord(character) < 0x20 and character not in {"\n", "\t"}
+                    for character in parameter_value
+                )
+            ):
+                raise ProtocolValidationError(
+                    ErrorCode.REQUEST_INVALID,
+                    f"invalid override for {name}",
+                )
+            continue
         expected_type, minimum, maximum = _PARAMETER_RULES[name]
         if expected_type is bool:
             valid_type = type(parameter_value) is bool
@@ -394,7 +871,7 @@ def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
     _require_fields(
         params,
         required={"inputs", "profile", "output"},
-        optional={"model_id", "hardware"},
+        optional={"model_id", "hardware", "recognition_strategy"},
         field_name="params",
         code=ErrorCode.REQUEST_INVALID,
     )
@@ -445,7 +922,29 @@ def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
             ErrorCode.REQUEST_INVALID,
             "params.profile.base_preset_id is unsupported",
         )
-    _validate_parameter_overrides(profile["overrides"])
+    _validate_parameter_overrides(
+        profile["overrides"],
+        str(profile["base_preset_id"]),
+        str(params.get("model_id") or "large-v3-turbo"),
+    )
+    recognition_strategy = params.get("recognition_strategy", "stable_primary")
+    if recognition_strategy not in _RECOGNITION_STRATEGIES:
+        raise ProtocolValidationError(
+            ErrorCode.REQUEST_INVALID,
+            "params.recognition_strategy is unsupported",
+        )
+    if (
+        recognition_strategy != "stable_primary"
+        and (
+            profile["base_preset_id"] not in {"cn", "cn2"}
+            or params.get("model_id", "large-v3-turbo")
+            not in {"large-v3", "large-v3-turbo"}
+        )
+    ):
+        raise ProtocolValidationError(
+            ErrorCode.REQUEST_INVALID,
+            "enhanced recognition is only supported by V3/Turbo cn and cn2",
+        )
 
     output = _require_object(
         params["output"], "params.output", code=ErrorCode.REQUEST_INVALID
@@ -536,6 +1035,18 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
             _require_nonempty_string(params["model_id"], "params.model_id")
         if "hardware" in params:
             _validate_hardware_preference(params["hardware"], "params.hardware")
+    elif method is CommandMethod.MEDIA_INSPECT:
+        _require_fields(
+            params,
+            required={"paths"},
+            field_name="params",
+            code=ErrorCode.REQUEST_INVALID,
+        )
+        if not _require_path_array(params["paths"], "params.paths"):
+            raise ProtocolValidationError(
+                ErrorCode.REQUEST_INVALID,
+                "params.paths must contain at least one media path",
+            )
     elif method is CommandMethod.TRANSCRIPTION_CANCEL:
         _require_fields(
             params,
@@ -625,7 +1136,14 @@ def _validate_event_data(event: EventCode, value: Any) -> FrozenJson:
         _require_fields(
             data,
             required={"position", "input_count", "effective_parameters"},
-            optional={"model_id", "hardware"},
+            optional={
+                "model_id",
+                "hardware",
+                "recognition_strategy",
+                "media_paths",
+                "media_durations_seconds",
+                "skipped_media",
+            },
             field_name="data",
         )
         if "model_id" in data and data["model_id"] not in _MODEL_IDS:
@@ -633,12 +1151,45 @@ def _validate_event_data(event: EventCode, value: Any) -> FrozenJson:
                 ErrorCode.PROTOCOL_INVALID_MESSAGE,
                 "data.model_id is unsupported",
             )
+        if (
+            "recognition_strategy" in data
+            and data["recognition_strategy"] not in _RECOGNITION_STRATEGIES
+        ):
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                "data.recognition_strategy is unsupported",
+            )
         _require_nonnegative_int(data["position"], "data.position")
         if type(data["input_count"]) is not int or data["input_count"] <= 0:
             raise ProtocolValidationError(
                 ErrorCode.PROTOCOL_INVALID_MESSAGE,
                 "data.input_count must be a positive integer",
             )
+        if "media_paths" in data:
+            _require_path_array(data["media_paths"], "data.media_paths")
+        if "media_durations_seconds" in data:
+            durations = data["media_durations_seconds"]
+            if not isinstance(durations, list) or not all(
+                item is None
+                or (
+                    isinstance(item, (int, float))
+                    and not isinstance(item, bool)
+                    and math.isfinite(item)
+                    and item >= 0
+                )
+                for item in durations
+            ):
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    "data.media_durations_seconds must contain nonnegative numbers or null",
+                )
+            if "media_paths" not in data or len(durations) != len(data["media_paths"]):
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    "data.media_durations_seconds must align with data.media_paths",
+                )
+        if "skipped_media" in data:
+            _require_conflict_groups(data["skipped_media"], "data.skipped_media")
         _require_object(data["effective_parameters"], "data.effective_parameters")
         if "hardware" in data:
             hardware = _require_object(data["hardware"], "data.hardware")
@@ -663,7 +1214,16 @@ def _validate_event_data(event: EventCode, value: Any) -> FrozenJson:
         _require_fields(
             data,
             required={"stage", "current", "total"},
-            optional={"input_path"},
+            optional={
+                "input_path",
+                "media_index",
+                "media_progress_percent",
+                "media_elapsed_seconds",
+                "task_elapsed_seconds",
+                "media_status",
+                "output_paths",
+                "quality_diagnostics",
+            },
             field_name="data",
         )
         try:
@@ -686,10 +1246,58 @@ def _validate_event_data(event: EventCode, value: Any) -> FrozenJson:
                 "data.input_path",
                 code=ErrorCode.PROTOCOL_INVALID_MESSAGE,
             )
+        if "media_index" in data:
+            media_index = _require_nonnegative_int(data["media_index"], "data.media_index")
+            if media_index == 0 or media_index > total:
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    "data.media_index must identify a media item",
+                )
+        for name in ("media_elapsed_seconds", "task_elapsed_seconds"):
+            if name in data and (
+                not isinstance(data[name], (int, float))
+                or isinstance(data[name], bool)
+                or data[name] < 0
+            ):
+                raise ProtocolValidationError(
+                    ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                    f"data.{name} must be non-negative",
+                )
+        if "media_progress_percent" in data and (
+            not isinstance(data["media_progress_percent"], (int, float))
+            or isinstance(data["media_progress_percent"], bool)
+            or not 0 <= data["media_progress_percent"] <= 100
+        ):
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                "data.media_progress_percent must be between 0 and 100",
+            )
+        if "media_status" in data and (
+            not isinstance(data["media_status"], str)
+            or data["media_status"]
+            not in {"pending", "running", "completed", "failed", "skipped"}
+        ):
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                "data.media_status is unsupported",
+            )
+        if "output_paths" in data and (
+            not isinstance(data["output_paths"], list)
+            or not all(isinstance(path, str) and path for path in data["output_paths"])
+        ):
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                "data.output_paths must be an array of non-empty paths",
+            )
+        if "quality_diagnostics" in data:
+            _validate_quality_diagnostics(
+                data["quality_diagnostics"], "data.quality_diagnostics"
+            )
     elif event is EventCode.TASK_COMPLETED:
         _require_fields(
             data,
             required={"success_count", "failure_count", "outputs"},
+            optional={"skipped_media"},
             field_name="data",
         )
         _require_nonnegative_int(data["success_count"], "data.success_count")
@@ -701,6 +1309,8 @@ def _validate_event_data(event: EventCode, value: Any) -> FrozenJson:
                 ErrorCode.PROTOCOL_INVALID_MESSAGE,
                 "data.outputs must be an array of non-empty paths",
             )
+        if "skipped_media" in data:
+            _require_conflict_groups(data["skipped_media"], "data.skipped_media")
     elif event is EventCode.TASK_FAILED:
         _require_fields(
             data,

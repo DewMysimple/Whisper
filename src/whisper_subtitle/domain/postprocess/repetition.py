@@ -6,6 +6,15 @@ import re
 
 
 _INNER_REPETITION_PATTERN = re.compile(r"([\u4e00-\u9fa5]{2,6})\1{2,}")
+_PHRASE_REPETITION_PATTERN = re.compile(
+    r"(?P<phrase>[\u3400-\u9fff]{4,32})"
+    r"(?:[\s，,。.!！？?；;：:、]*?(?P=phrase)){2,}"
+)
+_ENGLISH_PHRASE_REPETITION_PATTERN = re.compile(
+    r"(?P<phrase>\b[\w’'-]+(?:\s+[\w’'-]+){1,7})"
+    r"(?:[\s,.!?;:]+(?P=phrase)){2,}",
+    re.IGNORECASE,
+)
 
 
 def clean_inner_repetition(text: str) -> str:
@@ -16,6 +25,18 @@ def clean_inner_repetition(text: str) -> str:
     while previous != text:
         previous = text
         text = _INNER_REPETITION_PATTERN.sub(r"\1", text)
+    return text
+
+
+def clean_phrase_repetition(text: str) -> str:
+    """Collapse exact long Chinese or English phrase loops repeated 3+ times."""
+    if not text:
+        return text
+    previous = None
+    while previous != text:
+        previous = text
+        text = _PHRASE_REPETITION_PATTERN.sub(r"\g<phrase>", text)
+        text = _ENGLISH_PHRASE_REPETITION_PATTERN.sub(r"\g<phrase>", text)
     return text
 
 

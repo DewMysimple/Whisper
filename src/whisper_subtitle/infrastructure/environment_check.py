@@ -9,7 +9,7 @@ from collections.abc import Callable
 from ..paths import AppPaths, get_app_paths
 
 
-REQUIRED_MODULES = ("psutil", "faster_whisper", "ctranslate2")
+REQUIRED_MODULES = ("psutil", "faster_whisper", "ctranslate2", "opencc")
 WORKER_REQUIRED_MODULES = REQUIRED_MODULES
 
 

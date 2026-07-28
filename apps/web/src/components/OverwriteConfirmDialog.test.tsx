@@ -20,7 +20,11 @@ describe('OverwriteConfirmDialog', () => {
       ],
       pendingOverwrite: {
         source: 'workspace',
+        mode: 'overwrite',
+        finishAction: 'none',
         paths: ['D:\\Text\\lesson.txt', 'D:\\Markdown\\lesson.md'],
+        conflicts: [],
+        mediaPaths: ['D:\\Media\\lesson.wav'],
         draft: {
           inputs: [
             {

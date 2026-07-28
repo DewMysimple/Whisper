@@ -2,7 +2,7 @@ import { Captions, Check, Sparkles } from 'lucide-react';
 
 import { SUBTITLE_PRESETS } from '../data/subtitlePresets';
 import { useWorkspace } from '../state/workspace';
-import { InferenceParameterEditor, SubtitleParameterEditor } from './ProfileParameterEditor';
+import { SubtitleParameterEditor } from './ProfileParameterEditor';
 
 export function SubtitleProfilePanel() {
   const profileMode = useWorkspace((state) => state.profileMode);
@@ -67,12 +67,7 @@ export function SubtitleProfilePanel() {
         ))}
       </div>
 
-      {active && (
-        <>
-          <InferenceParameterEditor onRestore={restorePreset} />
-          <SubtitleParameterEditor onRestore={restorePreset} />
-        </>
-      )}
+      {active && <SubtitleParameterEditor onRestore={restorePreset} />}
     </section>
   );
 }

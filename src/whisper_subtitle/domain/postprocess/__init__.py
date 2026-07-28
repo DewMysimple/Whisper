@@ -2,7 +2,8 @@
 
 from .chinese import ensure_chinese_punctuation
 from .english import ensure_proper_case, ensure_punctuation
-from .repetition import clean_inner_repetition, clean_repetition
+from .multilingual import normalize_mixed_punctuation, sanitize_and_simplify
+from .repetition import clean_inner_repetition, clean_phrase_repetition, clean_repetition
 from .segments import (
     merge_chinese_segments_to_sentences,
     merge_english_segments_to_sentences,
@@ -22,6 +23,7 @@ __all__ = [
     "STRATEGY_LABELS",
     "apply_strategy",
     "clean_inner_repetition",
+    "clean_phrase_repetition",
     "clean_repetition",
     "ensure_chinese_punctuation",
     "ensure_proper_case",
@@ -30,4 +32,6 @@ __all__ = [
     "merge_chinese_segments_to_sentences",
     "merge_english_segments_to_sentences",
     "merge_segments_to_sentences",
+    "normalize_mixed_punctuation",
+    "sanitize_and_simplify",
 ]

@@ -22,6 +22,7 @@ for distribution in (
     "huggingface-hub",
     "nvidia-ml-py",
     "nvidia-cublas-cu12",
+    "opencc",
 ):
     try:
         datas += copy_metadata(distribution)
@@ -35,6 +36,7 @@ for package in (
     "onnxruntime",
     "tokenizers",
     "nvidia.cublas",
+    "opencc",
 ):
     package_datas, package_binaries, package_hiddenimports = collect_all(package)
     datas += package_datas

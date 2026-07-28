@@ -12,8 +12,9 @@ import { useEffect } from 'react';
 
 import type { ModelId } from '../contracts/desktop';
 import { MODEL_PRESENTATIONS } from '../data/models';
+import { VISIBLE_MODEL_IDS } from '../data/models';
 import { useWorkspace } from '../state/workspace';
-import { HardwareOptimizationPanel } from './HardwareOptimizationPanel';
+import { InferenceParameterEditor } from './ProfileParameterEditor';
 
 function formatBytes(value: number | null): string {
   if (value === null) return '未安装';
@@ -33,7 +34,10 @@ export function ModelSwitchView() {
   const openModelDirectory = useWorkspace((state) => state.openModelDirectory);
   const selectModel = useWorkspace((state) => state.selectModel);
   const busy = tasks.some((task) => task.status === 'queued' || task.status === 'running');
-  const installedCount = localModels.filter((item) => item.installed).length;
+  const visibleModels = VISIBLE_MODEL_IDS.map((id) =>
+    localModels.find((descriptor) => descriptor.id === id),
+  ).filter((descriptor): descriptor is NonNullable<typeof descriptor> => descriptor !== undefined);
+  const installedCount = visibleModels.filter((item) => item.installed).length;
   const loadedLabel = model.modelId ? MODEL_PRESENTATIONS[model.modelId].label : '尚未加载';
   const selectedLabel = MODEL_PRESENTATIONS[selectedModelId].label;
 
@@ -71,17 +75,17 @@ export function ModelSwitchView() {
             <dt>新任务默认</dt>
             <dd>{selectedLabel}</dd>
             <small>
-              {pendingModelId
-                ? '当前队列结束后生效'
-                : busy
-                  ? '新提交任务将冻结此模型'
+              {busy
+                ? '任务执行期间已锁定'
+                : pendingModelId
+                  ? '当前队列结束后生效'
                   : '空闲状态，可立即预加载'}
             </small>
           </div>
           <div>
             <dt>本地库存</dt>
-            <dd>{installedCount} / 6</dd>
-            <small>仅识别完整 CTranslate2 模型</small>
+            <dd>{installedCount} / 2</dd>
+            <small>V3 系列本地 CTranslate2 模型</small>
           </div>
         </dl>
       </section>
@@ -114,15 +118,20 @@ export function ModelSwitchView() {
         </div>
 
         <div className="model-card-grid" aria-busy={modelsLoading}>
-          {localModels.map((descriptor) => {
+          {visibleModels.map((descriptor) => {
             const presentation = MODEL_PRESENTATIONS[descriptor.id];
             const selected = selectedModelId === descriptor.id;
             const loaded = model.state === 'ready' && model.modelId === descriptor.id;
             const loading = model.state === 'loading' && model.modelId === descriptor.id;
             return (
-              <article
+              <button
+                aria-pressed={selected}
                 className={`model-card ${selected ? 'is-selected' : ''} ${loaded ? 'is-loaded' : ''} ${descriptor.installed ? '' : 'is-missing'}`}
+                disabled={busy || !descriptor.installed || modelSwitching || loading}
                 key={descriptor.id}
+                onClick={() => void selectModel(descriptor.id as ModelId)}
+                title={busy ? '任务执行期间不可切换模型' : undefined}
+                type="button"
               >
                 <div className="model-card-topline">
                   <span>{presentation.tier}</span>
@@ -166,13 +175,7 @@ export function ModelSwitchView() {
                   <span title={descriptor.path ?? descriptor.detail}>
                     {descriptor.installed ? '已完整安装' : descriptor.detail}
                   </span>
-                  <button
-                    aria-pressed={selected}
-                    className="model-select-button"
-                    disabled={!descriptor.installed || modelSwitching || loading}
-                    onClick={() => void selectModel(descriptor.id as ModelId)}
-                    type="button"
-                  >
+                  <span className="model-card-state">
                     {loading ? (
                       <>
                         <LoaderCircle className="spin" size={15} /> 加载中
@@ -186,16 +189,54 @@ export function ModelSwitchView() {
                     ) : selected ? (
                       '新任务默认'
                     ) : (
-                      '设为转录模型'
+                      '待选择'
                     )}
-                  </button>
+                  </span>
                 </div>
-              </article>
+              </button>
             );
           })}
+          <article className="model-card model-card-placeholder" aria-disabled="true">
+            <div className="model-card-topline">
+              <span>扩展位</span>
+              <em>未来开放</em>
+            </div>
+            <div className="model-card-title">
+              <div>
+                <h3>待自定义</h3>
+                <code>custom-model</code>
+              </div>
+              <span className="model-install-dot is-missing" />
+            </div>
+            <p>预留给后续自定义本地模型注册功能；当前版本不会读取或加载外部目录。</p>
+            <dl className="model-card-metrics">
+              <div>
+                <dt>
+                  <Gauge size={14} /> 状态
+                </dt>
+                <dd>尚未开放</dd>
+              </div>
+              <div>
+                <dt>
+                  <Sparkles size={14} /> 能力
+                </dt>
+                <dd>仅作占位</dd>
+              </div>
+              <div>
+                <dt>
+                  <HardDrive size={14} /> 本地占用
+                </dt>
+                <dd>—</dd>
+              </div>
+            </dl>
+            <div className="model-card-footer">
+              <span>本批次不注册自定义模型</span>
+              <span className="model-card-state">不可选择</span>
+            </div>
+          </article>
         </div>
       </section>
-      <HardwareOptimizationPanel />
+      <InferenceParameterEditor />
     </div>
   );
 }

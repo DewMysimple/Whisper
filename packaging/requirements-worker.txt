@@ -3,3 +3,4 @@ ctranslate2==4.8.1
 psutil==7.2.2
 nvidia-ml-py==13.610.43
 nvidia-cublas-cu12==12.9.2.10
+opencc==1.4.1

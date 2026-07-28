@@ -23,6 +23,8 @@ EN_PROMPT = (
     "Ensure each sentence is complete and ends with a period, exclamation mark, or question mark."
 )
 
+MODEL_CALIBRATED_IDS = frozenset({"large-v3", "large-v3-turbo"})
+
 POSTPROCESS_STRATEGIES = STRATEGY_LABELS
 
 DISPLAY_KEYS = (
@@ -33,10 +35,15 @@ DISPLAY_KEYS = (
     "patience",
     "length_penalty",
     "temperature",
+    "repetition_penalty",
+    "no_repeat_ngram_size",
     "compression_ratio_threshold",
     "log_prob_threshold",
     "no_speech_threshold",
     "condition_on_previous_text",
+    "prompt_reset_on_temperature",
+    "initial_prompt",
+    "hotwords",
     "word_timestamps",
     "vad_filter",
     "min_silence_duration_ms",
@@ -53,10 +60,13 @@ EDITABLE_PARAMETER_RULES = MappingProxyType(
         "patience": (float, 0, 5),
         "length_penalty": (float, 0, 2),
         "temperature": (float, 0, 1),
+        "repetition_penalty": (float, 1, 2),
+        "no_repeat_ngram_size": (int, 0, 10),
         "compression_ratio_threshold": (float, 0, 10),
         "log_prob_threshold": (float, -10, 0),
         "no_speech_threshold": (float, 0, 1),
         "condition_on_previous_text": (bool, 0, 1),
+        "prompt_reset_on_temperature": (float, 0, 1),
         "min_silence_duration_ms": (int, 0, 10000),
     }
 )
@@ -80,11 +90,15 @@ def _params(
         "patience": 1.5,
         "length_penalty": 1.0,
         "temperature": 0.0,
+        "repetition_penalty": 1.0,
+        "no_repeat_ngram_size": 0,
         "compression_ratio_threshold": compression_ratio_threshold,
         "log_prob_threshold": log_prob_threshold,
         "no_speech_threshold": no_speech_threshold,
         "condition_on_previous_text": condition_on_previous_text,
+        "prompt_reset_on_temperature": 0.5,
         "initial_prompt": initial_prompt,
+        "hotwords": None,
         "word_timestamps": False,
         "vad_filter": True,
         "vad_parameters": {
@@ -174,11 +188,15 @@ _PARAMETER_TYPES = {
     "patience": float,
     "length_penalty": float,
     "temperature": float,
+    "repetition_penalty": float,
+    "no_repeat_ngram_size": int,
     "compression_ratio_threshold": float,
     "log_prob_threshold": float,
     "no_speech_threshold": float,
     "condition_on_previous_text": bool,
+    "prompt_reset_on_temperature": float,
     "initial_prompt": str,
+    "hotwords": type(None),
     "word_timestamps": bool,
     "vad_filter": bool,
     "vad_parameters": Mapping,
@@ -269,17 +287,71 @@ def canonical_preset_id(value: str) -> str:
 def derive_preset(
     base_preset_id: str,
     overrides: Mapping[str, Any],
+    *,
+    model_id: str | None = None,
 ) -> Preset:
     """Create a validated task-local preset without mutating the registry."""
     base = get_preset_by_id(base_preset_id)
     if not isinstance(overrides, Mapping):
         raise TypeError("overrides must be a mapping")
-    unknown = set(overrides) - set(EDITABLE_PARAMETER_RULES)
+    text_override_keys = {"initial_prompt", "hotwords"}
+    task_override_keys = {"task"}
+    unknown = set(overrides) - (
+        set(EDITABLE_PARAMETER_RULES) | text_override_keys | task_override_keys
+    )
     if unknown:
         raise ValueError(f"unsupported parameter overrides: {sorted(unknown)}")
 
     params = base.transcription_options()
+    if model_id in MODEL_CALIBRATED_IDS:
+        # Detect a stable primary language from multiple windows. faster-whisper
+        # 1.2.1's `multilingual=True` chooses one language token independently
+        # for every 30-second window; real mixed Chinese/English validation showed
+        # that it can translate a whole mixed window or even jump to Korean.
+        # Stable automatic detection keeps preset language out of recognition
+        # while avoiding those false per-window switches.
+        params["language"] = None
+        params["multilingual"] = False
+        params["language_detection_segments"] = 5
+        # 1.0 forces the detector to inspect all configured windows and choose
+        # their majority instead of accepting one locally confident mixed window.
+        params["language_detection_threshold"] = 1.0
+        # Language-specific prompts were empirically found to reintroduce
+        # translation-style bias on mixed Chinese/English recordings even with
+        # multilingual decoding enabled. Leave the decoder prompt empty so the
+        # preset controls formatting only.
+        params["initial_prompt"] = None
+        # faster-whisper only retries failed decoding thresholds when more than
+        # one temperature is supplied. Turbo is deliberately capped at 0.6 to
+        # avoid high-temperature inventions observed in noisy mixed-language
+        # recordings; full V3 retains the canonical complete fallback ladder.
+        params["temperature"] = (
+            [0.0, 0.2, 0.4, 0.6]
+            if model_id == "large-v3-turbo"
+            else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+        )
+        if base.postprocess_strategy.endswith("anti_hallucination"):
+            params["log_prob_threshold"] = -1.0
+            params["no_speech_threshold"] = 0.6
+
+    if "task" in overrides:
+        task = overrides["task"]
+        if task not in {"transcribe", "translate"}:
+            raise ValueError(f"invalid override for task: {task!r}")
+        if task == "translate" and base.format_language != "en":
+            raise ValueError("translate is only supported by English presets")
+        if task == "translate" and model_id == "large-v3-turbo":
+            raise ValueError(
+                "large-v3-turbo is not trained for translation; use large-v3"
+            )
+        params["task"] = task
+
+    for name in text_override_keys.intersection(overrides):
+        params[name] = _normalize_prompt_override(name, overrides[name])
+
     for name, value in overrides.items():
+        if name in text_override_keys or name in task_override_keys:
+            continue
         expected_type, minimum, maximum = EDITABLE_PARAMETER_RULES[name]
         if expected_type is bool:
             valid_type = type(value) is bool
@@ -304,6 +376,17 @@ def derive_preset(
         params=params,
         postprocess_strategy=base.postprocess_strategy,
     )
+
+
+def _normalize_prompt_override(name: str, value: Any) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"invalid override for {name}: {value!r}")
+    normalized = value.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized or len(normalized) > 4000:
+        raise ValueError(f"invalid override for {name}: text length is outside 1..4000")
+    if any(ord(character) < 0x20 and character not in {"\n", "\t"} for character in normalized):
+        raise ValueError(f"invalid override for {name}: text contains control characters")
+    return normalized
 
 
 def get_postprocess_label(preset: Preset) -> str:

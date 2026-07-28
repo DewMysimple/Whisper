@@ -19,6 +19,9 @@ from whisper_subtitle.domain.subtitles import (
 )
 from whisper_subtitle.infrastructure.output_store import OutputPlan
 
+BROKEN_APOSTROPHE_SENTINEL = ",\n        \"'\": "
+CONTRACTIONS = "don't couldn't it's I'll John's don’t couldn’t"
+
 
 def test_formats_standard_comma_timestamps_without_losing_hours():
     assert format_srt_timestamp(0) == "00:00:00,000"
@@ -126,8 +129,8 @@ def test_english_word_wrapping_spills_into_another_cue_without_losing_text():
 
     assert len(cues) == 2
     assert cues[0].lines == ("This is a", "sentence with")
-    assert cues[1].lines == ("several words。",)
-    assert " ".join(line for cue in cues for line in cue.lines) == f"{source}。"
+    assert cues[1].lines == ("several words.",)
+    assert " ".join(line for cue in cues for line in cue.lines) == f"{source}."
     assert cues[0].start == 0.0
     assert cues[-1].end == 4.0
     assert all(len(cue.lines) <= 2 for cue in cues)
@@ -147,6 +150,61 @@ def test_single_long_token_is_hard_split_across_valid_cues_without_truncation():
     assert cues[-1].end == 6.0
     assert all(len(cue.lines) <= 2 for cue in cues)
     assert all(len(line) <= 12 for cue in cues for line in cue.lines)
+
+
+@pytest.mark.parametrize(
+    "strategy_id",
+    [
+        "english_standard",
+        "english_anti_hallucination",
+        "chinese_standard",
+        "chinese_anti_hallucination",
+    ],
+)
+def test_fallback_srt_preserves_ascii_and_curly_apostrophes(strategy_id):
+    document = build_srt_document(
+        [{"start": 0.0, "end": 4.0, "text": CONTRACTIONS}],
+        strategy_id,
+        SubtitleOptions(max_characters_per_line=84, max_lines_per_cue=1),
+    )
+
+    assert BROKEN_APOSTROPHE_SENTINEL not in document
+    folded = document.casefold()
+    assert all(token.casefold() in folded for token in CONTRACTIONS.split())
+
+
+@pytest.mark.parametrize(
+    "strategy_id",
+    [
+        "english_standard",
+        "english_anti_hallucination",
+        "chinese_standard",
+        "chinese_anti_hallucination",
+    ],
+)
+def test_word_timed_srt_preserves_ascii_and_curly_apostrophes(strategy_id):
+    words = CONTRACTIONS.split()
+    segment = SimpleNamespace(
+        words=[
+            SimpleNamespace(
+                word=(" " if index else "") + word,
+                start=index * 0.4,
+                end=index * 0.4 + 0.3,
+            )
+            for index, word in enumerate(words)
+        ]
+    )
+
+    document = build_srt_document(
+        [{"start": 0.0, "end": 4.0, "text": CONTRACTIONS}],
+        strategy_id,
+        SubtitleOptions(max_characters_per_line=84, max_lines_per_cue=1),
+        word_segments=[segment],
+    )
+
+    assert BROKEN_APOSTROPHE_SENTINEL not in document
+    folded = document.casefold()
+    assert all(token.casefold() in folded for token in words)
 
 
 def test_rejects_incoherent_subtitle_duration_options():

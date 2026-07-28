@@ -71,6 +71,18 @@ def test_strategy_chains_compose_language_normalization_and_repetition_steps():
     assert apply_strategy("chinese_standard", ["你好,世界"]) == ["你好，世界。"]
 
 
+def test_all_strategies_simplify_chinese_remove_replacement_chars_and_preserve_mixed_language():
+    source = "我錄了一些事情�。Baby, are you busy? 謝謝。"
+
+    for strategy_id in STRATEGIES:
+        result = apply_strategy(strategy_id, [source])[0]
+        assert "錄" not in result
+        assert "謝" not in result
+        assert "�" not in result
+        assert "Baby, are you busy?" in result
+        assert "我录了一些事情。" in result
+
+
 def test_each_preset_selects_an_existing_complete_strategy_chain():
     assert {preset.postprocess_strategy for preset in PRESETS} == set(STRATEGIES)
     assert all(get_strategy(preset.postprocess_strategy) for preset in PRESETS)

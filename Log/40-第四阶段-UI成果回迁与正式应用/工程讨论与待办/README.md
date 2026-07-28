@@ -12,7 +12,9 @@
 | 迁移策略与不同步根因 | Rules Updated / UI Fix Not Authorized | [HTML 抽离策略与 UI 不同步根因](讨论-HTML抽离策略与UI不同步根因-2026-07-18.md) |
 | 转录核心审计与优化设想 | Deferred / Not Authorized | [转录核心是否重写与优化设想](讨论-转录核心是否重写与优化设想-2026-07-18.md) |
 | 软件内联网下载模型 | Deferred / Not Authorized | [软件内联网下载模型](讨论-软件内联网下载模型-2026-07-22.md) |
+| Qwen3-ASR 通义模型正式接入 | Deferred / Not Authorized | [Qwen3-ASR 通义模型正式接入](讨论-Qwen3-ASR通义模型正式接入-2026-07-26.md) |
 | 正式工程瘦身审计 | Deferred / Not Authorized | [正式工程瘦身审计与暂缓决定](讨论-正式工程瘦身审计与暂缓决定-2026-07-22.md) |
+| 开发者模式与可视化 UI 调节 | Deferred / Not Authorized | [开发者模式与可视化 UI 调节分支](待办-开发者模式与可视化UI调节分支.md) |
 | 未执行 UI 设想 | Deferred / Not Authorized | [自定义一体化标题栏](待办-自定义一体化标题栏.md) |
 | 尺寸分析与取消方案 | Deferred / 1950 × 1330 Rejected | [窗口最小尺寸与屏幕兼容性](待办-窗口最小尺寸与屏幕兼容性.md) |
 

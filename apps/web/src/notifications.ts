@@ -5,7 +5,7 @@ import { isTauriRuntime } from './bridge/tauriDesktopBridge';
 
 export interface TaskFinishedNotice {
   status: 'completed' | 'failed' | 'cancelled';
-  title: string;
+  elapsed: string;
   detail: string;
 }
 
@@ -24,8 +24,27 @@ export async function notifyTaskFinished(notice: TaskFinishedNotice): Promise<bo
   try {
     await invoke('show_app_notification', {
       status: notice.status,
-      title: notice.title,
+      title: `总耗时 ${notice.elapsed}`,
       detail: notice.detail,
+    });
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+export async function notifyPowerCountdown(elapsed: string): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  try {
+    await getCurrentWindow().requestUserAttention(UserAttentionType.Critical);
+  } catch {
+    // The visible in-app countdown remains available when attention is denied.
+  }
+  try {
+    await invoke('show_app_notification', {
+      status: 'power',
+      title: `总耗时 ${elapsed} · 60 秒后关机`,
+      detail: '点击通知返回 WhisperSubtitle，可取消本次关机。',
     });
     return true;
   } catch {

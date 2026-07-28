@@ -10,7 +10,10 @@ import type {
   PerformanceSample,
   OutputPathStatus,
   OutputPreview,
+  PowerActionStatus,
+  PowerCapabilities,
   TaskSnapshot,
+  StartTranscriptionOptions,
   TranscriptionDraft,
   Unlisten,
 } from '../contracts/desktop';
@@ -50,6 +53,12 @@ export class MockDesktopBridge implements DesktopBridge {
   private readonly taskTimers = new Map<string, ReturnType<typeof setInterval>>();
   private performanceTimer: ReturnType<typeof setInterval> | undefined;
   private taskSequence = 3;
+  private powerStatus: PowerActionStatus = {
+    state: 'idle',
+    action: null,
+    executeAtEpochMs: null,
+    error: null,
+  };
 
   async selectFiles(): Promise<InputSource[]> {
     return structuredClone(SAMPLE_FILES);
@@ -61,6 +70,10 @@ export class MockDesktopBridge implements DesktopBridge {
 
   async selectOutputDirectory(): Promise<string | null> {
     return 'D:\\字幕项目\\2026-07';
+  }
+
+  async readClipboardText(): Promise<string> {
+    return '"C:\\Media\\剪贴板课程 01.mp4"\r\n"C:\\Media\\剪贴板课程 02.wav"';
   }
 
   async inspectPaths(paths: string[], origin: InputOrigin): Promise<InputSource[]> {
@@ -82,6 +95,10 @@ export class MockDesktopBridge implements DesktopBridge {
     void path;
   }
 
+  async openOutputDirectory(path: string): Promise<void> {
+    void path;
+  }
+
   async readOutputPreview(path: string): Promise<OutputPreview> {
     return {
       path,
@@ -97,6 +114,10 @@ export class MockDesktopBridge implements DesktopBridge {
   async exportWorkerLogs(content: string): Promise<string | null> {
     void content;
     return 'C:\\Users\\Mock\\Desktop\\WhisperSubtitle-WorkerLog-20260722-020000.txt';
+  }
+
+  async clearWorkerLogs(): Promise<void> {
+    this.emit({ type: 'worker.logs_cleared' });
   }
 
   async getHostStatus(): Promise<HostStatus> {
@@ -169,14 +190,46 @@ export class MockDesktopBridge implements DesktopBridge {
     });
   }
 
-  async startTranscription(draft: TranscriptionDraft): Promise<{ taskId: string }> {
+  async getPowerCapabilities(): Promise<PowerCapabilities> {
+    return { shutdown: true };
+  }
+
+  async getPowerActionStatus(): Promise<PowerActionStatus> {
+    return this.powerStatus;
+  }
+
+  async cancelPowerAction(): Promise<PowerActionStatus> {
+    this.powerStatus = {
+      state: 'idle',
+      action: null,
+      executeAtEpochMs: null,
+      error: null,
+    };
+    this.emit({ type: 'power.action', status: this.powerStatus });
+    return this.powerStatus;
+  }
+
+  async startTranscription(
+    draft: TranscriptionDraft,
+    options: StartTranscriptionOptions = {},
+  ): Promise<{ taskId: string }> {
+    void options;
     const taskId = `mock-task-${this.taskSequence++}`;
+    const mediaPaths = draft.inputs.flatMap((input) =>
+      input.kind === 'directory'
+        ? Array.from(
+            { length: input.mediaCount ?? 1 },
+            (_, index) => `${input.path}\\mock-${index + 1}.mp4`,
+          )
+        : [input.path],
+    );
     const task: TaskSnapshot = {
       id: taskId,
       title: this.createTaskTitle(draft.inputs),
       sourceCount: draft.inputs.reduce((total, input) => total + (input.mediaCount ?? 1), 0),
       presetId: draft.basePresetId,
       modelId: draft.modelId,
+      recognitionStrategy: draft.recognitionStrategy ?? 'stable_primary',
       isCustom: Object.keys(draft.overrides).length > 0,
       status: 'queued',
       progress: 0,
@@ -193,6 +246,15 @@ export class MockDesktopBridge implements DesktopBridge {
             : draft.hardware.cudaComputeType,
         cpuThreads: draft.hardware.mode === 'cpu' ? draft.hardware.cpuThreads : 0,
       },
+      mediaPaths,
+      processingCount: mediaPaths.length,
+      mediaStates: mediaPaths.map((path) => ({
+        path,
+        status: 'pending',
+        progress: 0,
+        stage: '等待处理',
+        elapsedSeconds: 0,
+      })),
     };
 
     this.emit({ type: 'task.queued', task });
@@ -223,6 +285,13 @@ export class MockDesktopBridge implements DesktopBridge {
         progress,
         stage: progress < 18 ? '准备模型' : progress < 88 ? 'GPU 转录中' : '整理输出',
         elapsed,
+        inputPath: mediaPaths[0],
+        mediaIndex: 1,
+        mediaTotal: mediaPaths.length,
+        mediaProgress: Math.min(100, Math.round((progress / 88) * 100)),
+        mediaElapsedSeconds: seconds,
+        taskElapsedSeconds: seconds,
+        mediaStatus: 'running',
       });
     }, 650);
     this.taskTimers.set(taskId, timer);

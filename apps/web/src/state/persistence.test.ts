@@ -29,8 +29,11 @@ const preferences: WorkspacePreferences = {
   },
   selectedPresetId: 'en_v1',
   profileMode: 'transcript',
+  recognitionStrategy: 'stable_primary',
+  recognitionStrategyProfiles: {},
   parameters: { ...getPreset('en_v1').parameters },
   overrides: {},
+  parameterProfiles: {},
   subtitleParameters: { ...getSubtitlePreset('en_v1').subtitleParameters },
   subtitleOverrides: {},
   output: {
@@ -82,6 +85,94 @@ describe('desktop workspace persistence', () => {
         }),
       ),
     ).toThrow(/字段或参数范围/);
+  });
+
+  it('migrates a hidden legacy default model to Turbo without rewriting task history', () => {
+    const legacy = {
+      schemaVersion: 1,
+      preferences: {
+        ...preferences,
+        selectedModelId: 'medium',
+        parameterProfiles: undefined,
+        overrides: { beam_size: 8 },
+        parameters: { ...preferences.parameters, beam_size: 8 },
+      },
+      tasks: [{ ...runningTask, status: 'completed', modelId: 'medium' }],
+    };
+    localStorage.setItem('whisper-subtitle.desktop-state.v1', JSON.stringify(legacy));
+
+    const restored = loadWorkspaceState();
+    expect(restored?.preferences.selectedModelId).toBe('large-v3-turbo');
+    expect(restored?.preferences.parameters.beam_size).toBe(8);
+    expect(restored?.preferences.parameterProfiles['large-v3-turbo:en_v1']?.beam_size).toBe(8);
+    expect(restored?.tasks[0]?.modelId).toBe('medium');
+  });
+
+  it('migrates an unsupported Turbo translation profile back to transcription', () => {
+    const legacy = {
+      schemaVersion: 1,
+      preferences: {
+        ...preferences,
+        selectedModelId: 'large-v3-turbo',
+        parameters: { ...preferences.parameters, task: 'translate' },
+        overrides: { task: 'translate' },
+        parameterProfiles: {
+          'large-v3-turbo:en_v1': { task: 'translate' },
+        },
+      },
+      tasks: [],
+    };
+    localStorage.setItem('whisper-subtitle.desktop-state.v1', JSON.stringify(legacy));
+
+    const restored = loadWorkspaceState();
+    expect(restored?.preferences.parameters.task).toBe('transcribe');
+    expect(restored?.preferences.parameterProfiles['large-v3-turbo:en_v1']?.task).toBeUndefined();
+  });
+
+  it('persists model-preset recognition strategy and normalizes unsupported presets', () => {
+    const mixed = {
+      ...preferences,
+      selectedPresetId: 'cn2' as const,
+      recognitionStrategy: 'mixed_zh_en' as const,
+      recognitionStrategyProfiles: {
+        'large-v3-turbo:cn2': 'mixed_zh_en' as const,
+      },
+    };
+    expect(importPreferences(exportPreferences(mixed))).toEqual(
+      expect.objectContaining({
+        selectedPresetId: 'cn2',
+        recognitionStrategy: 'mixed_zh_en',
+        recognitionStrategyProfiles: {
+          'large-v3-turbo:cn2': 'mixed_zh_en',
+        },
+      }),
+    );
+
+    const invalid = JSON.parse(exportPreferences(mixed));
+    invalid.preferences.selectedPresetId = 'en_v2';
+    invalid.preferences.recognitionStrategy = 'mixed_zh_en';
+    invalid.preferences.recognitionStrategyProfiles = {
+      'large-v3-turbo:en_v2': 'mixed_zh_en',
+    };
+    const restored = importPreferences(JSON.stringify(invalid));
+    expect(restored.recognitionStrategy).toBe('stable_primary');
+    expect(restored.recognitionStrategyProfiles).toEqual({});
+
+    const detail = {
+      ...mixed,
+      recognitionStrategy: 'zh_detail_review' as const,
+      recognitionStrategyProfiles: {
+        'large-v3-turbo:cn2': 'zh_detail_review' as const,
+      },
+    };
+    expect(importPreferences(exportPreferences(detail))).toEqual(
+      expect.objectContaining({
+        recognitionStrategy: 'zh_detail_review',
+        recognitionStrategyProfiles: {
+          'large-v3-turbo:cn2': 'zh_detail_review',
+        },
+      }),
+    );
   });
 
   it('migrates old version-one appearance fields and keeps the orange default restorable', () => {

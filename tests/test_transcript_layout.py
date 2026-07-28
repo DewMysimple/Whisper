@@ -4,11 +4,30 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from whisper_subtitle.domain.transcript_layout import (
     HARD_LINE_UNITS,
     build_transcript_document,
     build_transcript_units,
     display_units,
+)
+
+BROKEN_APOSTROPHE_SENTINEL = ",\n        \"'\": "
+CONTRACTIONS = (
+    "don't",
+    "couldn't",
+    "doesn't",
+    "can't",
+    "won't",
+    "it's",
+    "I'm",
+    "I'll",
+    "you're",
+    "we're",
+    "John's",
+    "don’t",
+    "couldn’t",
 )
 
 
@@ -112,3 +131,28 @@ def test_anti_hallucination_keeps_timing_and_paragraph_after_removed_duplicates(
     assert document.units[0].end == 1.5
     assert document.units[0].paragraph_break_after is True
     assert document.markdown_content == "谢谢观看。\n\n新的内容。\n"
+
+
+@pytest.mark.parametrize(
+    ("language", "strategy_id"),
+    [
+        ("zh", "chinese_standard"),
+        ("zh", "chinese_anti_hallucination"),
+        ("en", "english_standard"),
+        ("en", "english_anti_hallucination"),
+    ],
+)
+def test_all_presets_preserve_ascii_and_curly_apostrophes_in_txt_and_markdown(
+    language, strategy_id
+):
+    source = " ".join(CONTRACTIONS) + "."
+    document = build_transcript_document(
+        [segment(source, 0.0, 4.0)],
+        language,
+        strategy_id,
+    )
+
+    for rendered in (document.txt_content, document.markdown_content):
+        assert BROKEN_APOSTROPHE_SENTINEL not in rendered
+        folded = rendered.casefold()
+        assert all(contraction.casefold() in folded for contraction in CONTRACTIONS)

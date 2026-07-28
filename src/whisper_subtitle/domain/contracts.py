@@ -9,6 +9,11 @@ from types import MappingProxyType
 from typing import Any
 
 
+RECOGNITION_STRATEGIES = frozenset(
+    {"stable_primary", "mixed_zh_en", "zh_detail_review"}
+)
+
+
 def _freeze(value: Any) -> Any:
     if isinstance(value, Mapping):
         return MappingProxyType({key: _freeze(item) for key, item in value.items()})
@@ -62,6 +67,11 @@ class Preset:
         """Return an independent mutable copy for an inference engine call."""
         return _thaw(self.params)
 
+    @property
+    def format_language(self) -> str:
+        """Return the output formatting language without constraining recognition."""
+        return "zh" if self.postprocess_strategy.startswith("chinese_") else "en"
+
 
 @dataclass(frozen=True, slots=True)
 class TranscriptionRequest:
@@ -71,6 +81,7 @@ class TranscriptionRequest:
     preset_id: str
     output_dir: Path | None = None
     desktop: bool = False
+    recognition_strategy: str = "stable_primary"
 
     def __post_init__(self) -> None:
         _require_nonempty(self.preset_id, "preset_id")
@@ -79,6 +90,15 @@ class TranscriptionRequest:
             object.__setattr__(self, "output_dir", Path(self.output_dir))
         if type(self.desktop) is not bool:
             raise TypeError("desktop must be bool")
+        if self.recognition_strategy not in RECOGNITION_STRATEGIES:
+            raise ValueError("recognition_strategy is unsupported")
+        if self.recognition_strategy != "stable_primary" and self.preset_id not in {
+            "cn",
+            "cn2",
+        }:
+            raise ValueError(
+                "enhanced recognition is only supported by cn and cn2"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +139,11 @@ class ProgressEvent:
     total: int | None = None
     preset_id: str | None = None
     input_path: Path | None = None
+    media_progress_percent: float | None = None
+    media_elapsed_seconds: float | None = None
+    media_status: str | None = None
+    output_paths: tuple[Path, ...] = field(default_factory=tuple)
+    quality_diagnostics: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         _require_nonempty(self.stage, "stage")
@@ -131,6 +156,39 @@ class ProgressEvent:
             raise ValueError("current cannot exceed total")
         if self.input_path is not None:
             object.__setattr__(self, "input_path", Path(self.input_path))
+        if self.media_progress_percent is not None and (
+            not isinstance(self.media_progress_percent, (int, float))
+            or not 0 <= self.media_progress_percent <= 100
+        ):
+            raise ValueError("media_progress_percent must be between 0 and 100")
+        if self.media_elapsed_seconds is not None and (
+            not isinstance(self.media_elapsed_seconds, (int, float))
+            or self.media_elapsed_seconds < 0
+        ):
+            raise ValueError("media_elapsed_seconds must be non-negative")
+        if self.media_status is not None and self.media_status not in {
+            "pending",
+            "running",
+            "completed",
+            "failed",
+            "skipped",
+        }:
+            raise ValueError("media_status is unsupported")
+        if isinstance(self.output_paths, (str, bytes)):
+            raise TypeError("output_paths must be a sequence of paths")
+        object.__setattr__(
+            self,
+            "output_paths",
+            tuple(Path(path) for path in self.output_paths),
+        )
+        if self.quality_diagnostics is not None:
+            if not isinstance(self.quality_diagnostics, Mapping):
+                raise TypeError("quality_diagnostics must be a mapping")
+            object.__setattr__(
+                self,
+                "quality_diagnostics",
+                _freeze(self.quality_diagnostics),
+            )
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,11 +1,17 @@
-import { RotateCcw, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, RotateCcw, SlidersHorizontal, Sparkles } from 'lucide-react';
 
 import type { EditableParameters, SubtitleParameters } from '../contracts/desktop';
+import { MODEL_PRESENTATIONS } from '../data/models';
+import { PRESETS, modelProfileSummary } from '../data/presets';
 import { useWorkspace } from '../state/workspace';
 import { HelpTip } from './HelpTip';
 
-const INFERENCE_FIELDS: Array<{
-  key: Exclude<keyof EditableParameters, 'condition_on_previous_text'>;
+type NumericParameterKey = {
+  [K in keyof EditableParameters]: EditableParameters[K] extends number ? K : never;
+}[keyof EditableParameters];
+
+const BASIC_FIELDS: Array<{
+  key: NumericParameterKey;
   label: string;
   min: number;
   max: number;
@@ -50,15 +56,6 @@ const INFERENCE_FIELDS: Array<{
     risk: '文本',
   },
   {
-    key: 'temperature',
-    label: 'Temperature',
-    min: 0,
-    max: 1,
-    step: 0.1,
-    help: '提高随机性；稳定转录建议保持原值。',
-    risk: '高风险',
-  },
-  {
     key: 'compression_ratio_threshold',
     label: 'Compression ratio',
     min: 0,
@@ -93,6 +90,44 @@ const INFERENCE_FIELDS: Array<{
     step: 50,
     help: '决定 VAD 切分语音段所需静音长度。',
     risk: '毫秒',
+  },
+];
+
+const ADVANCED_FIELDS: Array<{
+  key: NumericParameterKey;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  help: string;
+  risk: string;
+}> = [
+  {
+    key: 'repetition_penalty',
+    label: 'Repetition penalty',
+    min: 1,
+    max: 2,
+    step: 0.05,
+    help: '大于 1 时降低重复 token 的分数；过高可能漏字。',
+    risk: '重复控制',
+  },
+  {
+    key: 'no_repeat_ngram_size',
+    label: 'No-repeat N-gram',
+    min: 0,
+    max: 10,
+    step: 1,
+    help: '禁止重复指定长度的词组；0 表示关闭。',
+    risk: '高风险',
+  },
+  {
+    key: 'prompt_reset_on_temperature',
+    label: 'Prompt reset temperature',
+    min: 0,
+    max: 1,
+    step: 0.1,
+    help: '使用前文上下文时，达到该温度后清空前文提示。',
+    risk: '上下文',
   },
 ];
 
@@ -161,46 +196,227 @@ const SUBTITLE_FIELDS: Array<{
   },
 ];
 
-export function InferenceParameterEditor({ onRestore }: { onRestore: () => void }) {
+function NumericFields({ fields }: { fields: typeof BASIC_FIELDS }) {
+  const parameters = useWorkspace((state) => state.parameters);
+  const setParameter = useWorkspace((state) => state.setParameter);
+  return (
+    <div className="parameter-grid inference-parameter-grid">
+      {fields.map((field) => (
+        <label className="parameter-field" key={field.key}>
+          <span>
+            {field.label} <em>{field.risk}</em>
+          </span>
+          <input
+            aria-label={field.label}
+            max={field.max}
+            min={field.min}
+            onChange={(event) => setParameter(field.key, Number(event.target.value))}
+            step={field.step}
+            type="number"
+            value={parameters[field.key]}
+          />
+          <small>{field.help}</small>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+export function InferenceParameterEditor() {
   const parameters = useWorkspace((state) => state.parameters);
   const overrides = useWorkspace((state) => state.overrides);
+  const selectedModelId = useWorkspace((state) => state.selectedModelId);
+  const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
   const setParameter = useWorkspace((state) => state.setParameter);
-  const isCustom = Object.keys(overrides).length > 0;
+  const setTemperatureMode = useWorkspace((state) => state.setTemperatureMode);
+  const recognitionStrategy = useWorkspace((state) => state.recognitionStrategy);
+  const setRecognitionStrategy = useWorkspace((state) => state.setRecognitionStrategy);
+  const restorePreset = useWorkspace((state) => state.restorePreset);
+  const setActiveView = useWorkspace((state) => state.setActiveView);
+  const chineseMode = selectedPresetId === 'cn' || selectedPresetId === 'cn2';
+  const isCustom = Object.keys(overrides).length > 0 || recognitionStrategy !== 'stable_primary';
+  const temperatureMode = Object.prototype.hasOwnProperty.call(overrides, 'temperature')
+    ? 'fixed'
+    : 'model';
+  const preset = PRESETS.find((item) => item.id === selectedPresetId)!;
+  const englishMode = selectedPresetId === 'en_v1' || selectedPresetId === 'en_v2';
+  const translationAvailable = englishMode && selectedModelId === 'large-v3';
+  const hotwordCount = parameters.hotwords
+    .split(/[\n,，;；]+/)
+    .map((item) => item.trim())
+    .filter(Boolean).length;
 
   return (
-    <>
+    <section
+      className="panel inference-parameter-editor model-parameter-panel"
+      aria-labelledby="model-parameter-title"
+    >
       <div className="parameter-heading">
         <div className="parameter-heading-copy">
           <SlidersHorizontal size={17} />
-          <strong>识别参数</strong>
+          <div>
+            <p className="step-label">MODEL × PRESET PROFILE</p>
+            <h2 id="model-parameter-title">当前模型参数</h2>
+          </div>
           <HelpTip id="inference-parameter-help" label="查看识别参数说明">
-            所有可由正式 Worker 安全覆盖的推理参数都会在任务入队时冻结。
+            参数按模型与识别模式分别保存，并在任务入队时冻结。修改不会影响已经运行或排队的任务。
           </HelpTip>
         </div>
-        {isCustom && (
-          <button className="quiet-button" onClick={onRestore} type="button">
-            <RotateCcw size={14} /> 恢复 preset
+        <div className="parameter-heading-actions">
+          <button className="quiet-button" onClick={() => setActiveView('workspace')} type="button">
+            <ArrowLeft size={14} /> 更换识别模式
           </button>
-        )}
+          {isCustom && (
+            <button className="quiet-button" onClick={restorePreset} type="button">
+              <RotateCcw size={14} /> 恢复当前组合
+            </button>
+          )}
+        </div>
       </div>
-      <div className="parameter-grid inference-parameter-grid">
-        {INFERENCE_FIELDS.map((field) => (
-          <label className="parameter-field" key={field.key}>
+
+      <div className="parameter-profile-identity">
+        <div>
+          <small>推理模型</small>
+          <strong>{MODEL_PRESENTATIONS[selectedModelId].label}</strong>
+        </div>
+        <div>
+          <small>识别模式</small>
+          <strong>{preset.label}</strong>
+        </div>
+        <div>
+          <small>参数状态</small>
+          <strong>{isCustom ? '派生自定义' : '正式默认'}</strong>
+        </div>
+        <span className={isCustom ? 'is-custom' : ''}>
+          <Sparkles size={14} /> {modelProfileSummary(selectedModelId)}
+        </span>
+      </div>
+
+      <div className="parameter-section">
+        <div className="parameter-section-heading">
+          <div>
+            <strong>任务与基础解码</strong>
+            <small>控制本地模型如何生成候选文本。</small>
+          </div>
+        </div>
+        {chineseMode && (
+          <div className="recognition-strategy-control">
+            <div>
+              <strong>识别策略</strong>
+              <small>增强模式会增加耗时，只在证据充分时改写正文。</small>
+            </div>
+            <div
+              className="parameter-segmented recognition-strategy-segmented"
+              role="group"
+              aria-label="识别策略"
+            >
+              <button
+                aria-pressed={recognitionStrategy === 'stable_primary'}
+                className={recognitionStrategy === 'stable_primary' ? 'is-active' : ''}
+                onClick={() => setRecognitionStrategy('stable_primary')}
+                type="button"
+              >
+                稳定主语言
+              </button>
+              <button
+                aria-pressed={recognitionStrategy === 'mixed_zh_en'}
+                className={recognitionStrategy === 'mixed_zh_en' ? 'is-active' : ''}
+                onClick={() => setRecognitionStrategy('mixed_zh_en')}
+                type="button"
+              >
+                复杂中英混合
+              </button>
+              <button
+                aria-pressed={recognitionStrategy === 'zh_detail_review'}
+                className={recognitionStrategy === 'zh_detail_review' ? 'is-active' : ''}
+                onClick={() => setRecognitionStrategy('zh_detail_review')}
+                type="button"
+              >
+                中文细节增强
+              </button>
+            </div>
+            <small>
+              {recognitionStrategy === 'mixed_zh_en'
+                ? '先完成稳定中文识别，再对短语音块做本地语言侦测与英文复识别；不确定候选只进入复核记录。'
+                : recognitionStrategy === 'zh_detail_review'
+                  ? '耗时显著增加；Hotwords 仅作识别提示。局部候选不确定时不会写入正文，只进入复核记录。'
+                  : '整段使用稳定主语言策略，保持当前速度和既有结果。'}
+            </small>
+          </div>
+        )}
+        <div className="parameter-task-row">
+          <label className="parameter-field">
             <span>
-              {field.label} <em>{field.risk}</em>
+              任务类型{' '}
+              <em>
+                {translationAvailable
+                  ? '本地执行'
+                  : selectedModelId === 'large-v3-turbo'
+                    ? 'Turbo 仅转录'
+                    : '中文模式锁定'}
+              </em>
             </span>
-            <input
-              aria-label={field.label}
-              max={field.max}
-              min={field.min}
-              onChange={(event) => setParameter(field.key, Number(event.target.value))}
-              step={field.step}
-              type="number"
-              value={parameters[field.key]}
-            />
-            <small>{field.help}</small>
+            <select
+              aria-label="任务类型"
+              disabled={!translationAvailable}
+              onChange={(event) =>
+                setParameter('task', event.target.value as EditableParameters['task'])
+              }
+              value={parameters.task}
+            >
+              <option value="transcribe">原声转录</option>
+              <option value="translate">翻译为英语</option>
+            </select>
+            <small>
+              {translationAvailable
+                ? 'Large V3 在本机执行语音翻译，只输出英语，不调用联网服务。'
+                : selectedModelId === 'large-v3-turbo'
+                  ? '官方 Turbo 模型未针对翻译任务训练，即使请求 translate 也会返回原语言，因此此处固定为原声转录。'
+                  : '中文模式固定保留原始语音语言。'}
+            </small>
           </label>
-        ))}
+          <div className="temperature-control">
+            <span>
+              Temperature <em>{temperatureMode === 'model' ? '模型回退' : '固定值'}</em>
+            </span>
+            <div className="parameter-segmented" role="group" aria-label="温度策略">
+              <button
+                aria-pressed={temperatureMode === 'model'}
+                className={temperatureMode === 'model' ? 'is-active' : ''}
+                onClick={() => setTemperatureMode('model')}
+                type="button"
+              >
+                模型回退
+              </button>
+              <button
+                aria-pressed={temperatureMode === 'fixed'}
+                className={temperatureMode === 'fixed' ? 'is-active' : ''}
+                onClick={() => setTemperatureMode('fixed')}
+                type="button"
+              >
+                固定温度
+              </button>
+            </div>
+            <input
+              aria-label="固定温度"
+              disabled={temperatureMode === 'model'}
+              max={1}
+              min={0}
+              onChange={(event) => setParameter('temperature', Number(event.target.value))}
+              step={0.1}
+              type="number"
+              value={parameters.temperature}
+            />
+            <small>
+              {temperatureMode === 'model'
+                ? selectedModelId === 'large-v3'
+                  ? 'Large V3 使用 0–1.0 完整回退阶梯。'
+                  : 'Large V3 Turbo 使用 0–0.6 稳定回退阶梯。'
+                : '固定值会替代整条模型温度回退阶梯。'}
+            </small>
+          </div>
+        </div>
+        <NumericFields fields={BASIC_FIELDS} />
         <label className="toggle-field">
           <span>
             <strong>使用前文上下文</strong>
@@ -213,7 +429,68 @@ export function InferenceParameterEditor({ onRestore }: { onRestore: () => void 
           />
         </label>
       </div>
-    </>
+
+      <details className="parameter-advanced">
+        <summary>
+          <span>
+            <strong>重复控制与上下文</strong>
+            <small>高级参数 · 默认折叠</small>
+          </span>
+        </summary>
+        <NumericFields fields={ADVANCED_FIELDS} />
+      </details>
+
+      <div className="parameter-section parameter-guidance">
+        <div className="parameter-section-heading">
+          <div>
+            <strong>提示引导</strong>
+            <small>只提供上下文线索，不保证模型按指定词语输出。</small>
+          </div>
+        </div>
+        <div className="parameter-text-grid">
+          <label className="parameter-field">
+            <span>
+              初始提示词 <em>{Array.from(parameters.initial_prompt).length} / 4000</em>
+            </span>
+            <textarea
+              maxLength={4000}
+              onChange={(event) => setParameter('initial_prompt', event.target.value)}
+              placeholder="例如：本期讨论 CTranslate2 与 WebView2 的部署方式。"
+              rows={5}
+              value={parameters.initial_prompt}
+            />
+            <small>仅提示第一个解码窗口；它不是系统指令。</small>
+          </label>
+          <label className="parameter-field">
+            <span>
+              术语提示（Hotwords）{' '}
+              <em>
+                {hotwordCount > 0 ? `已启用 ${hotwordCount} 个词条 · ` : ''}
+                {Array.from(parameters.hotwords).length} / 4000
+              </em>
+            </span>
+            <textarea
+              maxLength={4000}
+              onChange={(event) => setParameter('hotwords', event.target.value)}
+              placeholder={'WhisperSubtitle\nCTranslate2\nWebView2'}
+              rows={5}
+              value={parameters.hotwords}
+            />
+            <small>可按行填写专名；属于识别提示，不执行强制替换。</small>
+          </label>
+        </div>
+      </div>
+
+      <div className="parameter-readonly" aria-label="模型校准只读参数">
+        <strong>第 26 次校准策略</strong>
+        <span>主语言自动检测</span>
+        <span>检测窗口 5</span>
+        <span>检测阈值 1.0</span>
+        <span>逐窗口多语言关闭</span>
+        <span>VAD 开启</span>
+        <span>字幕任务使用词级时间戳</span>
+      </div>
+    </section>
   );
 }
 

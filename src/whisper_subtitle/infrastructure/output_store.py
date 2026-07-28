@@ -19,6 +19,7 @@ class OutputPlan:
     primary_md: Path | None = None
     backup_md: Path | None = None
     primary_srt: Path | None = None
+    primary_srt_txt: Path | None = None
     desktop_txt: Path | None = None
     desktop_md: Path | None = None
 
@@ -32,6 +33,7 @@ class OutputPlan:
             self.primary_md,
             self.backup_md,
             self.primary_srt,
+            self.primary_srt_txt,
         ):
             if path is not None and path not in paths:
                 paths.append(path)
@@ -46,12 +48,37 @@ class OutputPlan:
         return paths[0]
 
 
+@dataclass(frozen=True, slots=True)
+class OutputConflict:
+    """Conflicting destinations grouped by their source media."""
+
+    media_path: Path
+    paths: tuple[Path, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class OutputSelection:
+    """Media and output plans retained after applying a conflict policy."""
+
+    media_paths: tuple[Path, ...]
+    plans: tuple[OutputPlan, ...]
+    skipped: tuple[OutputConflict, ...] = ()
+
+
 class OutputConflictError(FileExistsError):
     """Raised when a configured output policy cannot reserve destinations."""
 
-    def __init__(self, paths: Iterable[Path | str]) -> None:
+    def __init__(
+        self,
+        paths: Iterable[Path | str],
+        *,
+        conflicts: Iterable[OutputConflict] = (),
+        media_paths: Iterable[Path | str] = (),
+    ) -> None:
         unique = tuple(dict.fromkeys(Path(path) for path in paths))
         self.paths = unique
+        self.conflicts = tuple(conflicts)
+        self.media_paths = tuple(Path(path) for path in media_paths)
         rendered = ", ".join(str(path) for path in unique)
         super().__init__(f"output destination conflict: {rendered}")
 
@@ -144,8 +171,10 @@ def _configured_plan(media: Path, policy: Mapping[str, object]) -> OutputPlan:
         if srt_directory is None:
             srt_directory = media.parent / "SRT"
         primary_srt = srt_directory / f"{media.stem}.srt"
+        primary_srt_txt = srt_directory / f"{media.stem}.txt"
     else:
         primary_srt = None
+        primary_srt_txt = None
 
     preserve_source_txt = policy.get("preserve_source_txt")
     preserve_source_markdown = policy.get("preserve_source_markdown", False)
@@ -173,6 +202,7 @@ def _configured_plan(media: Path, policy: Mapping[str, object]) -> OutputPlan:
         primary_md=primary_md,
         backup_md=backup_md,
         primary_srt=primary_srt,
+        primary_srt_txt=primary_srt_txt,
     )
 
 
@@ -190,6 +220,7 @@ def _suffixed_plan(plan: OutputPlan, index: int) -> OutputPlan:
         primary_md=_suffixed_path(plan.primary_md, index),
         backup_md=_suffixed_path(plan.backup_md, index),
         primary_srt=_suffixed_path(plan.primary_srt, index),
+        primary_srt_txt=_suffixed_path(plan.primary_srt_txt, index),
     )
 
 
@@ -200,17 +231,35 @@ def build_configurable_output_plans(
     reserved_paths: Iterable[Path | str] = (),
 ) -> tuple[OutputPlan, ...]:
     """Plan every task output before inference and apply an explicit conflict rule."""
+    return select_configurable_outputs(
+        media_paths,
+        policy,
+        reserved_paths=reserved_paths,
+    ).plans
+
+
+def select_configurable_outputs(
+    media_paths: Sequence[Path | str],
+    policy: Mapping[str, object],
+    *,
+    reserved_paths: Iterable[Path | str] = (),
+) -> OutputSelection:
+    """Plan outputs and optionally skip whole media items with conflicts."""
     conflict_policy = policy.get("conflict_policy")
-    if conflict_policy not in {"overwrite", "fail", "auto_rename"}:
+    if conflict_policy not in {"overwrite", "fail", "auto_rename", "skip"}:
         raise ValueError(f"unsupported conflict policy: {conflict_policy!r}")
 
     reserved: set[str] = {
         str(Path(path).resolve(strict=False)).casefold() for path in reserved_paths
     }
-    plans = []
+    plans: list[OutputPlan] = []
+    selected_media: list[Path] = []
     conflicts: list[Path] = []
+    conflict_groups: list[OutputConflict] = []
+    skipped: list[OutputConflict] = []
     for value in media_paths:
-        base = _configured_plan(Path(value), policy)
+        media_path = Path(value)
+        base = _configured_plan(media_path, policy)
         candidate = base
         index = 1
         while True:
@@ -227,17 +276,29 @@ def build_configurable_output_plans(
                 break
             if conflict_policy == "fail":
                 conflicts.extend(conflicting_paths)
+                conflict_groups.append(OutputConflict(media_path, conflicting_paths))
+                break
+            if conflict_policy == "skip":
+                skipped.append(OutputConflict(media_path, conflicting_paths))
+                candidate = None
                 break
             index += 1
             candidate = _suffixed_plan(base, index)
+        if candidate is None:
+            continue
         reserved.update(
             str(path.resolve(strict=False)).casefold()
             for path in candidate.content_paths
         )
+        selected_media.append(media_path)
         plans.append(candidate)
     if conflicts:
-        raise OutputConflictError(conflicts)
-    return tuple(plans)
+        raise OutputConflictError(
+            conflicts,
+            conflicts=conflict_groups,
+            media_paths=media_paths,
+        )
+    return OutputSelection(tuple(selected_media), tuple(plans), tuple(skipped))
 
 
 def prepare_forced_output_directory(output: Path | str) -> Path | None:
@@ -303,10 +364,13 @@ def write_primary_outputs(
         if path is None:
             continue
         atomic_write_text(path, resolved_markdown)
-    if plan.primary_srt is not None:
+    if plan.primary_srt is not None or plan.primary_srt_txt is not None:
         if srt_content is None:
             raise ValueError("SRT output requires timestamped subtitle content")
-        atomic_write_text(plan.primary_srt, srt_content)
+        if plan.primary_srt is not None:
+            atomic_write_text(plan.primary_srt, srt_content)
+        if plan.primary_srt_txt is not None:
+            atomic_write_text(plan.primary_srt_txt, srt_content)
 
 
 def copy_utf8_text(source: Path | str, destination: Path | str) -> Path:
