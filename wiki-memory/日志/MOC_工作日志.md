@@ -17,6 +17,8 @@ supersedes: null
 | --- | --- | --- | --- | --- | --- |
 | 2026-08-24 | maintenance | - | archived | git-remote-configuration | [[日志/2026-08-24-配置GitHub远程仓库.md|配置 GitHub 远程仓库]] |
 | 2026-08-24 | discussion | - | archived | architecture-maintainability-review | [[日志/2026-08-24-架构维护性评估.md|WhisperSubtitle 架构维护性评估]] |
+| 2026-08-24 | maintenance | - | archived | architecture-maintenance-refactor-finalization | [[日志/2026-08-24-架构瘦身收口.md|WhisperSubtitle 架构瘦身收口]] |
+| 2026-08-24 | maintenance | - | archived | architecture-maintenance-refactor | [[日志/2026-08-24-架构瘦身实施.md|WhisperSubtitle 架构瘦身实施]] |
 | 2026-08-24 | maintenance | - | archived | git-remote-migration-and-snapshot | [[日志/2026-08-24-更换GitHub远程仓库并提交当前状态.md|更换 GitHub 远程仓库并提交当前状态]] |
 | 2026-08-23 | maintenance | - | archived | project-memory-rebuild | [[日志/2026-08-23-项目记忆重建.md|WhisperSubtitle 项目记忆重建]] |
 

@@ -1,129 +1,60 @@
 import type { ModelId, PresetDefinition, TranscriptionTask } from '../contracts/desktop';
+import { GENERATED_MODEL_PROFILES, GENERATED_PRESET_PARAMETERS } from './presetCatalog.generated';
 
-export const PRESETS: PresetDefinition[] = [
+type PresetPresentation = Omit<PresetDefinition, 'parameters'>;
+
+// Labels and summaries are UI copy. Parameters come from the generated
+// projection of src/whisper_subtitle/domain/presets.py.
+const PRESET_PRESENTATION: PresetPresentation[] = [
   {
     id: 'cn',
     label: '中文转录',
     language: '中文',
     summary: '自动识别主语言 · 中文断句与标点',
-    parameters: {
-      task: 'transcribe',
-      beam_size: 5,
-      best_of: 5,
-      patience: 1.5,
-      length_penalty: 1,
-      temperature: 0,
-      repetition_penalty: 1,
-      no_repeat_ngram_size: 0,
-      compression_ratio_threshold: 2.4,
-      log_prob_threshold: -1,
-      no_speech_threshold: 0.6,
-      condition_on_previous_text: true,
-      prompt_reset_on_temperature: 0.5,
-      initial_prompt: '',
-      hotwords: '',
-      min_silence_duration_ms: 300,
-    },
   },
   {
     id: 'cn2',
     label: '中文防幻觉',
     language: '中文',
     summary: '自动识别主语言 · 中文排版与循环清理',
-    parameters: {
-      task: 'transcribe',
-      beam_size: 5,
-      best_of: 5,
-      patience: 1.5,
-      length_penalty: 1,
-      temperature: 0,
-      repetition_penalty: 1,
-      no_repeat_ngram_size: 0,
-      compression_ratio_threshold: 2,
-      log_prob_threshold: -1.5,
-      no_speech_threshold: 0.8,
-      condition_on_previous_text: false,
-      prompt_reset_on_temperature: 0.5,
-      initial_prompt: '',
-      hotwords: '',
-      min_silence_duration_ms: 500,
-    },
   },
   {
     id: 'en_v1',
     label: '英文转录',
     language: 'English',
     summary: 'Auto-detect primary language · English formatting',
-    parameters: {
-      task: 'transcribe',
-      beam_size: 5,
-      best_of: 5,
-      patience: 1.5,
-      length_penalty: 1,
-      temperature: 0,
-      repetition_penalty: 1,
-      no_repeat_ngram_size: 0,
-      compression_ratio_threshold: 2.4,
-      log_prob_threshold: -1,
-      no_speech_threshold: 0.6,
-      condition_on_previous_text: true,
-      prompt_reset_on_temperature: 0.5,
-      initial_prompt: '',
-      hotwords: '',
-      min_silence_duration_ms: 300,
-    },
   },
   {
     id: 'en_v2',
     label: '英文防幻觉',
     language: 'English',
     summary: 'Auto-detect primary language · English anti-loop cleanup',
-    parameters: {
-      task: 'transcribe',
-      beam_size: 5,
-      best_of: 5,
-      patience: 1.5,
-      length_penalty: 1,
-      temperature: 0,
-      repetition_penalty: 1,
-      no_repeat_ngram_size: 0,
-      compression_ratio_threshold: 2,
-      log_prob_threshold: -1.5,
-      no_speech_threshold: 0.8,
-      condition_on_previous_text: false,
-      prompt_reset_on_temperature: 0.5,
-      initial_prompt: '',
-      hotwords: '',
-      min_silence_duration_ms: 500,
-    },
   },
 ];
 
+const DEFAULT_MODEL_ID: ModelId = 'large-v3-turbo';
+
+export const PRESETS: PresetDefinition[] = PRESET_PRESENTATION.map((preset) => ({
+  ...preset,
+  parameters: { ...GENERATED_PRESET_PARAMETERS[preset.id][DEFAULT_MODEL_ID] },
+}));
+
 export function getPreset(
   id: PresetDefinition['id'],
-  modelId: ModelId = 'large-v3-turbo',
+  modelId: ModelId = DEFAULT_MODEL_ID,
 ): PresetDefinition {
-  const preset = PRESETS.find((item) => item.id === id);
+  const preset = PRESET_PRESENTATION.find((item) => item.id === id);
   if (preset === undefined) throw new Error(`Unknown preset: ${id}`);
-  if (
-    (modelId === 'large-v3' || modelId === 'large-v3-turbo') &&
-    (id === 'cn2' || id === 'en_v2')
-  ) {
-    return {
-      ...preset,
-      parameters: {
-        ...preset.parameters,
-        log_prob_threshold: -1,
-        no_speech_threshold: 0.6,
-      },
-    };
-  }
-  return preset;
+  return { ...preset, parameters: { ...GENERATED_PRESET_PARAMETERS[id][modelId] } };
 }
 
 export function modelProfileSummary(modelId: ModelId): string {
-  if (modelId === 'large-v3') return 'Large-V3 质量优先 · 完整温度回退 0–1.0';
-  if (modelId === 'large-v3-turbo') return 'Large-V3-Turbo 稳定优先 · 温度回退上限 0.6';
+  const maximum = GENERATED_MODEL_PROFILES[modelId].temperatureFallbackMax;
+  if (maximum !== null) {
+    return modelId === 'large-v3'
+      ? `Large-V3 质量优先 · 完整温度回退 0–${maximum.toFixed(1)}`
+      : `Large-V3-Turbo 稳定优先 · 温度回退上限 ${maximum.toFixed(1)}`;
+  }
   return '旧版模型兼容参数';
 }
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gc
 import logging
 import os
 import platform
@@ -11,8 +10,6 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import contextmanager
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -30,11 +27,7 @@ from ..infrastructure.output_store import (
     select_configurable_outputs,
 )
 from ..infrastructure.performance import collect_performance_sample
-from ..infrastructure.whisper_engine import (
-    DEFAULT_MODEL_NAME,
-    FasterWhisperEngine,
-    ModelLocation,
-)
+from ..infrastructure.whisper_engine import DEFAULT_MODEL_NAME
 from ..protocol import (
     CommandMessage,
     CommandMethod,
@@ -44,36 +37,20 @@ from ..protocol import (
     EventMessage,
     TaskStage,
 )
-
-
-DEFAULT_MODEL_IDLE_TIMEOUT_SECONDS = 15 * 60.0
-
-MessageEmitter = Callable[[EventMessage | ErrorMessage], None]
-EnvironmentChecker = Callable[[], list[str]]
-RuntimeConfigurer = Callable[[], ModelLocation]
-HardwareProbe = Callable[[Mapping[str, object] | None], HardwareInfo]
-HardwareCapabilityLoader = Callable[[], Mapping[str, object]]
-EngineLoader = Callable[[HardwareInfo, ModelLocation, str], Any]
-TaskIdFactory = Callable[[], str]
-PerformanceSampler = Callable[[], Mapping[str, Any]]
-MediaDurationProbe = Callable[[Path], tuple[bool, float | None, str | None]]
-
-
-class WorkerCommandError(RuntimeError):
-    """A command failure that maps directly to a stable protocol error."""
-
-    def __init__(
-        self,
-        code: ErrorCode,
-        message: str,
-        *,
-        data: Mapping[str, Any] | None = None,
-        task_id: str | None = None,
-    ) -> None:
-        super().__init__(message)
-        self.code = code
-        self.data = dict(data or {})
-        self.task_id = task_id
+from .runtime_types import (
+    DEFAULT_MODEL_IDLE_TIMEOUT_SECONDS,
+    EngineLoader,
+    EnvironmentChecker,
+    HardwareCapabilityLoader,
+    HardwareProbe,
+    MediaDurationProbe,
+    MessageEmitter,
+    PerformanceSampler,
+    RuntimeConfigurer,
+    TaskIdFactory,
+    WorkerCommandError,
+    _default_engine_loader,
+)
 
 
 def _default_media_duration_probe(
@@ -166,271 +143,6 @@ def expand_input_sources(inputs: Sequence[Mapping[str, Any]]) -> tuple[Path, ...
     return tuple(media_paths)
 
 
-def _default_engine_loader(
-    hardware: HardwareInfo,
-    location: ModelLocation,
-    model_id: str,
-) -> FasterWhisperEngine:
-    return FasterWhisperEngine.load(
-        hardware,
-        location,
-        model_name=model_id,
-    )
-
-
-class ModelCache:
-    """Own one reusable model and release it after a configurable idle period."""
-
-    def __init__(
-        self,
-        emit: MessageEmitter,
-        *,
-        runtime_configurer: RuntimeConfigurer = configure_runtime,
-        hardware_detector: HardwareProbe | None = None,
-        hardware_capability_loader: HardwareCapabilityLoader | None = None,
-        engine_loader: EngineLoader = _default_engine_loader,
-        idle_timeout_seconds: float = DEFAULT_MODEL_IDLE_TIMEOUT_SECONDS,
-        logger: logging.Logger | None = None,
-    ) -> None:
-        if idle_timeout_seconds < 0:
-            raise ValueError("idle_timeout_seconds must be non-negative")
-        self._emit = emit
-        self._configure_runtime = runtime_configurer
-        self._detect_hardware = hardware_detector or HardwareDetector().detect
-        self._load_engine = engine_loader
-        self._idle_timeout = float(idle_timeout_seconds)
-        self._logger = logger or logging.getLogger(__name__)
-        self._lock = threading.RLock()
-        self._timer: threading.Timer | None = None
-        self._engine: Any | None = None
-        self._hardware: HardwareInfo | None = None
-        self._model_id: str | None = None
-        self._active_users = 0
-
-    @property
-    def model_id(self) -> str | None:
-        with self._lock:
-            return self._model_id
-
-    @property
-    def loaded(self) -> bool:
-        with self._lock:
-            return self._engine is not None
-
-    @property
-    def active_users(self) -> int:
-        with self._lock:
-            return self._active_users
-
-    def _cancel_timer_locked(self) -> None:
-        if self._timer is not None:
-            self._timer.cancel()
-            self._timer = None
-
-    def _schedule_idle_release_locked(self) -> None:
-        self._cancel_timer_locked()
-        if self._engine is None or self._active_users or self._idle_timeout == 0:
-            if self._engine is not None and not self._active_users and self._idle_timeout == 0:
-                self._release_locked("zero idle timeout")
-            return
-        timer = threading.Timer(self._idle_timeout, self._release_if_idle)
-        timer.daemon = True
-        self._timer = timer
-        timer.start()
-
-    def _release_if_idle(self) -> None:
-        with self._lock:
-            self._timer = None
-            if self._active_users == 0:
-                self._release_locked("idle timeout")
-
-    def _release_locked(self, reason: str) -> bool:
-        if self._engine is None:
-            return False
-        model_id = self._model_id
-        self._engine = None
-        self._hardware = None
-        self._model_id = None
-        gc.collect()
-        self._logger.info("released model %s (%s)", model_id, reason)
-        return True
-
-    @property
-    def hardware(self) -> HardwareInfo | None:
-        with self._lock:
-            return self._hardware
-
-    def _resolve_hardware(
-        self, preference: Mapping[str, object] | None
-    ) -> HardwareInfo:
-        try:
-            return self._detect_hardware(preference)
-        except TypeError:
-            # Keep injected version-one probes used by older hosts/tests compatible.
-            return self._detect_hardware()  # type: ignore[call-arg]
-
-    def _ensure_loaded_locked(
-        self,
-        model_id: str,
-        *,
-        hardware_preference: Mapping[str, object] | None = None,
-        request_id: str | None = None,
-    ) -> tuple[Any, HardwareInfo, bool]:
-        try:
-            resolved_hardware = self._resolve_hardware(hardware_preference)
-        except Exception as exc:
-            raise WorkerCommandError(
-                ErrorCode.MODEL_LOAD_FAILED,
-                str(exc) or type(exc).__name__,
-                data={"model_id": model_id, "exception": type(exc).__name__},
-            ) from exc
-        if (
-            self._engine is not None
-            and self._model_id == model_id
-            and self._hardware == resolved_hardware
-        ):
-            return self._engine, self._hardware, False
-        if self._active_users:
-            raise WorkerCommandError(
-                ErrorCode.WORKER_BUSY,
-                "cannot replace the model while a task is using it",
-            )
-        self._cancel_timer_locked()
-        self._release_locked("model replacement")
-        self._emit(
-            EventMessage(
-                EventCode.MODEL_LOADING,
-                {"model_id": model_id},
-                request_id=request_id,
-                message="正在加载模型",
-            )
-        )
-        try:
-            location = self._configure_runtime()
-            hardware = resolved_hardware
-            engine = self._load_engine(hardware, location, model_id)
-        except Exception as exc:
-            raise WorkerCommandError(
-                ErrorCode.MODEL_LOAD_FAILED,
-                str(exc) or type(exc).__name__,
-                data={"model_id": model_id, "exception": type(exc).__name__},
-            ) from exc
-        self._engine = engine
-        self._hardware = hardware
-        self._model_id = model_id
-        self._emit(
-            EventMessage(
-                EventCode.MODEL_READY,
-                {
-                    "model_id": model_id,
-                    "device": hardware.device,
-                    "compute_type": hardware.compute_type,
-                    "device_index": hardware.device_index,
-                    "cpu_threads": hardware.cpu_threads,
-                },
-                request_id=request_id,
-                message="模型已就绪",
-            )
-        )
-        return engine, hardware, True
-
-    def load(
-        self,
-        model_id: str,
-        *,
-        hardware_preference: Mapping[str, object] | None = None,
-        request_id: str | None = None,
-    ) -> bool:
-        with self._lock:
-            _engine, _hardware, loaded_new = self._ensure_loaded_locked(
-                model_id,
-                hardware_preference=hardware_preference,
-                request_id=request_id,
-            )
-            self._schedule_idle_release_locked()
-            return loaded_new
-
-    def validate(
-        self,
-        model_id: str,
-        hardware_preference: Mapping[str, object] | None = None,
-    ) -> HardwareInfo:
-        """Verify a local model exists without importing CTranslate2."""
-        try:
-            resolved_hardware = self._resolve_hardware(hardware_preference)
-            if self.loaded and self.model_id == model_id and self.hardware == resolved_hardware:
-                return resolved_hardware
-            location = self._configure_runtime()
-            require_model = getattr(location, "require_model", None)
-            if require_model is not None:
-                require_model(model_id)
-        except Exception as exc:
-            raise WorkerCommandError(
-                ErrorCode.MODEL_LOAD_FAILED,
-                str(exc) or type(exc).__name__,
-                data={"model_id": model_id, "exception": type(exc).__name__},
-            ) from exc
-        return resolved_hardware
-
-    @contextmanager
-    def acquire(
-        self,
-        model_id: str,
-        *,
-        hardware_preference: Mapping[str, object] | None = None,
-        request_id: str | None = None,
-    ):
-        with self._lock:
-            engine, hardware, _loaded_new = self._ensure_loaded_locked(
-                model_id,
-                hardware_preference=hardware_preference,
-                request_id=request_id,
-            )
-            self._cancel_timer_locked()
-            self._active_users += 1
-        try:
-            yield engine, hardware
-        finally:
-            with self._lock:
-                self._active_users -= 1
-                self._schedule_idle_release_locked()
-
-    def unload(self, *, reason: str = "explicit request") -> bool:
-        with self._lock:
-            if self._active_users:
-                raise WorkerCommandError(
-                    ErrorCode.WORKER_BUSY,
-                    "cannot unload the model while a task is running",
-                )
-            self._cancel_timer_locked()
-            return self._release_locked(reason)
-
-    def close(self) -> None:
-        with self._lock:
-            self._cancel_timer_locked()
-            self._release_locked("worker shutdown")
-
-
-@dataclass(slots=True)
-class WorkerTask:
-    task_id: str
-    request_id: str
-    inputs: tuple[Mapping[str, Any], ...]
-    model_id: str
-    hardware_preference: Mapping[str, object]
-    hardware: HardwareInfo
-    preset: Preset
-    media_paths: tuple[Path, ...]
-    media_durations_seconds: tuple[float | None, ...]
-    output_plans: tuple[OutputPlan, ...]
-    subtitle_options: Mapping[str, Any] | None = None
-    skipped_media: tuple[OutputConflict, ...] = ()
-    recognition_strategy: str = "stable_primary"
-    cancel: threading.Event = field(default_factory=threading.Event)
-    state: str = "queued"
-    started_at_monotonic: float | None = None
-
-
 _PROGRESS_STAGE_MAP = {
     "file_started": TaskStage.TRANSCRIPTION_RUNNING,
     "segment_progress": TaskStage.TRANSCRIPTION_RUNNING,
@@ -450,6 +162,11 @@ _PROGRESS_STAGE_MAP = {
     "output_written": TaskStage.OUTPUT_WRITING,
     "desktop_output_written": TaskStage.OUTPUT_WRITING,
 }
+
+
+from .model_cache import ModelCache
+from .task import WorkerTask
+from .task_execution import execute_task
 
 
 class WorkerRuntime:
@@ -987,134 +704,9 @@ class WorkerRuntime:
             )
         )
 
+
     def _execute_task(self, task: WorkerTask) -> None:
-        task.state = "running"
-        task.started_at_monotonic = time.monotonic()
-        try:
-            self._emit_progress(
-                task,
-                TaskStage.INPUT_VALIDATING,
-                0,
-                len(task.inputs),
-                message="正在校验输入",
-            )
-            if task.cancel.is_set():
-                raise TranscriptionCancelled()
-            media_paths = task.media_paths
-            self._emit_progress(
-                task,
-                TaskStage.INPUT_DISCOVERING,
-                0,
-                len(media_paths),
-                message="输入展开完成",
-            )
-            plans = task.output_plans
-            if task.cancel.is_set():
-                raise TranscriptionCancelled()
-            self._emit_progress(
-                task,
-                TaskStage.MODEL_LOADING,
-                0,
-                len(media_paths),
-                message="正在准备模型",
-            )
-            with self._model_cache.acquire(
-                task.model_id,
-                hardware_preference=task.hardware_preference,
-                request_id=task.request_id,
-            ) as (engine, _hardware):
-                service = TranscriptionService(
-                    progress=self._progress_adapter(task),
-                    cancelled=task.cancel.is_set,
-                )
-                success_count = 0
-                failure_count = 0
-                outputs: list[str] = []
-                for current, (media_path, plan) in enumerate(
-                    zip(media_paths, plans), start=1
-                ):
-                    if task.cancel.is_set():
-                        raise TranscriptionCancelled()
-                    request = TranscriptionRequest(
-                        media_path,
-                        task.preset.id,
-                        recognition_strategy=task.recognition_strategy,
-                    )
-                    try:
-                        result = service.transcribe_file(
-                            request,
-                            engine,
-                            current=current,
-                            total=len(media_paths),
-                            preset=task.preset,
-                            output_plan=plan,
-                            subtitle_options=(
-                                dict(task.subtitle_options)
-                                if task.subtitle_options is not None
-                                else None
-                            ),
-                            model_id=task.model_id,
-                        )
-                    except TranscriptionCancelled:
-                        raise
-                    except Exception:
-                        failure_count += 1
-                        self._logger.exception("task %s failed for %s", task.task_id, media_path)
-                        self._emit_progress(
-                            task,
-                            TaskStage.TRANSCRIPTION_RUNNING,
-                            current,
-                            len(media_paths),
-                            input_path=media_path,
-                            message="当前媒体处理失败，继续队列中的其他媒体",
-                            media_status="failed",
-                        )
-                        continue
-                    success_count += 1
-                    outputs.extend(str(path) for path in plan.content_paths)
-                    if not result.success:
-                        failure_count += 1
-                        success_count -= 1
-            if task.cancel.is_set():
-                raise TranscriptionCancelled()
-            self._emit_progress(
-                task,
-                TaskStage.TASK_FINALIZING,
-                len(media_paths),
-                len(media_paths),
-                message="正在汇总任务结果",
-            )
-            task.state = "completed"
-            self._emit(
-                EventMessage(
-                    EventCode.TASK_COMPLETED,
-                    {
-                        "success_count": success_count,
-                        "failure_count": failure_count,
-                        "outputs": list(dict.fromkeys(outputs)),
-                        "skipped_media": [
-                            {
-                                "input_path": str(conflict.media_path),
-                                "paths": [str(path) for path in conflict.paths],
-                            }
-                            for conflict in task.skipped_media
-                        ],
-                    },
-                    task_id=task.task_id,
-                    message="任务完成",
-                )
-            )
-        except TranscriptionCancelled:
-            self._emit_cancelled(task, "shutdown" if self._stopping else "user")
-        except WorkerCommandError as exc:
-            self._emit_failed(task, exc.code, exc, details=exc.data)
-        except OutputConflictError as exc:
-            self._emit_failed(task, ErrorCode.OUTPUT_FAILED, exc)
-        except (OSError, ValueError, TypeError) as exc:
-            self._emit_failed(task, ErrorCode.OUTPUT_FAILED, exc)
-        except Exception as exc:
-            self._logger.exception("unhandled task failure for %s", task.task_id)
-            self._emit_failed(task, ErrorCode.TRANSCRIPTION_FAILED, exc)
+        execute_task(self, task)
 
     def _dispatch_loop(self) -> None:
         while True:

@@ -35,7 +35,8 @@ Tauri Host 是 WebView 与 Worker 之间唯一的运行时边界：前端不能�
 ```text
 src/whisper_subtitle/
 ├── application/
-│   └── transcribe.py          # 唯一转录用例与批处理编排
+│   ├── transcribe.py          # 唯一转录用例与批处理编排
+│   └── recognition_passes.py  # 混合语言/中文细节复核阶段
 ├── domain/
 │   ├── contracts.py           # Preset、请求、结果、进度事件
 │   ├── presets.py             # 四 preset 的唯一注册表
@@ -52,9 +53,15 @@ src/whisper_subtitle/
 ├── presentation/
 │   └── console.py             # 文本/JSONL 进度适配
 ├── protocol/
-│   └── desktop_ipc.py         # v1 command/event/error、解析与生命周期校验
+│   ├── desktop_ipc.py         # v1 command/event/error、解析与生命周期
+│   ├── desktop_ipc_validation.py # 公共字段与事件结构校验
+│   └── desktop_ipc_quality.py # 质量诊断结构校验
 ├── worker/
-│   ├── runtime.py             # 任务队列、模型缓存、取消和输入/输出适配
+│   ├── runtime.py             # 常驻生命周期、队列和命令分发
+│   ├── task_execution.py      # 单任务执行与输入/输出适配
+│   ├── runtime_types.py       # Worker 共享类型、错误和默认引擎加载器
+│   ├── model_cache.py         # 模型复用与空闲释放
+│   ├── task.py                # 队列任务快照
 │   └── stdio.py               # UTF-8 stdin/stdout JSON-lines 传输
 ├── resources/                 # 可安装包资源
 ├── bootstrap.py               # 模型缓存等进程配置
@@ -64,6 +71,7 @@ src/whisper_subtitle/
 
 apps/
 ├── web/                       # React WebView、持久化工作台、趋势与 typed bridge
+│   └── src/bridge/             # Tauri 调用、Worker 解码与事件归并
 └── desktop/src-tauri/         # Tauri Host、协议校验、受限预览与 Worker 监管
 ```
 
@@ -99,7 +107,7 @@ CLI 或 Desktop IPC 输入
   → ProgressEvent / BatchResult
 ```
 
-CLI 和 Worker 共用同一 `TranscriptionService`；四个 preset 只改变注册表参数和后处理策略。
+CLI 和 Worker 共用同一 `TranscriptionService`；四个 preset 只改变注册表参数和后处理策略。`domain/presets.py` 是参数事实源，Web 参数编辑器消费由 `scripts/generate_preset_catalog.py` 生成的 TypeScript 投影。
 
 Worker 流程为：
 
@@ -111,6 +119,8 @@ Desktop IPC command
   → TranscriptionService + 可选取消检查点
   → Desktop IPC task events / command.completed / error
 ```
+
+Web 工作台的事件归并位于 `apps/web/src/state/workspaceEvents.ts`，任务状态纯函数位于 `workspaceTaskState.ts`；外观偏好、性能指标、草稿归一化和持久化分别位于 `state/appearancePreferences.ts`、`state/performanceMetrics.ts`、`state/workspaceDraft.ts`、`state/workspacePersistence.ts`。Tauri Worker 的字段解码位于 `bridge/tauriWorkerDecoder.ts`，任务事件到桌面事件的归并位于 `bridge/tauriWorkerEvents.ts`，正式 bridge 只负责 Tauri invoke、订阅、轮询和生命周期。Rust Host 的模型目录、媒体辅助、日志诊断和启动 draft 校验分别位于 `worker_host/models.rs`、`worker_host/media.rs`、`worker_host/logs.rs`、`worker_host/validation.rs`；Rust Desktop IPC 的质量诊断校验位于 `protocol_quality.rs`。
 
 ## 运行与发布边界
 

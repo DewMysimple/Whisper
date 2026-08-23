@@ -1,5 +1,6 @@
 mod power;
 mod protocol;
+mod protocol_quality;
 #[cfg(windows)]
 mod windows_notification;
 mod worker_host;

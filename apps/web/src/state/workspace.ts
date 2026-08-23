@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 
 import { desktopBridge } from '../bridge';
-import { notifyPowerCountdown, notifyTaskFinished } from '../notifications';
 import type {
   DesktopEvent,
   EditableParameters,
@@ -36,12 +35,10 @@ import {
   importPreferences,
   loadWorkspaceState,
   normalizeHexColor,
-  saveWorkspaceState,
   type AccentPreset,
   type MonoFontFamily,
   type ThemePreference,
   type UiFontFamily,
-  type WorkspacePreferences,
 } from './persistence';
 import {
   normalizePromptText,
@@ -54,7 +51,6 @@ import {
   type ParameterProfiles,
   type RecognitionStrategyProfiles,
 } from './parameterProfiles';
-import { appendPerformanceSample } from './performanceWindow';
 import {
   DEFAULT_HARDWARE_PREFERENCE,
   hardwarePreferenceSupported,
@@ -62,6 +58,20 @@ import {
 } from './hardware';
 import { parseWindowsClipboardPaths } from './clipboardPaths';
 import type { TaskDateRange } from './taskHistory';
+import { handleWorkspaceEvent } from './workspaceEvents';
+import { activeTaskId, canResumeTask, isAbnormalTask, taskOutputPaths } from './workspaceTaskState';
+import {
+  draftHasUnsupportedTranslation,
+  errorMessage,
+  isAllOutputsSkipped,
+  normalizeDraft,
+  normalizedTaskOverrides,
+  outputConflictDetails,
+  subtitleOverridesFor,
+} from './workspaceDraft';
+import { appearanceFromState, persistLater, preferencesFromState } from './workspacePersistence';
+
+export { canResumeTask, isAbnormalTask } from './workspaceTaskState';
 
 const INITIAL_PERFORMANCE: PerformanceSample = {
   source: desktopBridge.mode === 'mock' ? 'mock' : 'worker',
@@ -214,7 +224,7 @@ export interface PendingShutdownStart {
   draft: TranscriptionDraft;
 }
 
-interface WorkspaceState {
+export interface WorkspaceState {
   inputs: InputSource[];
   selectedModelId: ModelId;
   hardwarePreference: HardwarePreference;
@@ -1380,192 +1390,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
   },
   clearError: () => set({ lastError: null }),
-  handleEvent: (event) => {
-    if (event.type === 'inputs.added') {
-      set((state) => ({ inputs: mergeUniqueInputs(state.inputs, event.inputs) }));
-      return;
-    }
-    if (event.type === 'host.status') {
-      set({ hostStatus: event.status, lastError: event.status.error });
-      return;
-    }
-    if (event.type === 'worker.environment') {
-      set({ environment: event.environment });
-      return;
-    }
-    if (event.type === 'model.status') {
-      set({
-        model: event.model,
-        pendingModelId:
-          event.model.state === 'ready' && event.model.modelId === get().selectedModelId
-            ? null
-            : get().pendingModelId,
-        pendingHardware:
-          event.model.state === 'ready' &&
-          modelMatchesPreference(event.model, get().hardwarePreference, get().environment?.hardware)
-            ? false
-            : get().pendingHardware,
-      });
-      return;
-    }
-    if (event.type === 'worker.log') {
-      set((state) => ({ logs: [...state.logs, event.line] }));
-      return;
-    }
-    if (event.type === 'worker.logs_cleared') {
-      set({ logs: [] });
-      return;
-    }
-    if (event.type === 'worker.error') {
-      set({ lastError: event.message });
-      return;
-    }
-    if (event.type === 'performance.sample') {
-      set((state) => ({
-        performance: event.sample,
-        performanceHistory: appendPerformanceSample(state.performanceHistory, event.sample),
-      }));
-      return;
-    }
-    if (event.type === 'power.action') {
-      set({
-        powerActionStatus: event.status,
-        shutdownArmed: event.status.state === 'armed' || event.status.state === 'countdown',
-      });
-      return;
-    }
-    if (event.type === 'task.queued') {
-      set((state) => ({
-        tasks: [event.task, ...state.tasks],
-        monitoredTaskId: state.monitoredTaskId ?? event.task.id,
-      }));
-      persistLater(get);
-      return;
-    }
-    if (event.type === 'task.progress') {
-      set((state) => ({
-        monitoredTaskId: event.taskId,
-        taskWorkspaceMode: state.activeView === 'tasks' ? state.taskWorkspaceMode : 'monitor',
-        tasks: state.tasks.map((task) => {
-          if (task.id !== event.taskId || isTerminalTaskStatus(task.status)) return task;
-          const newOutputs = event.outputPaths ?? [];
-          return {
-            ...task,
-            status: 'running',
-            progress: event.progress,
-            stage: event.stage,
-            elapsed: event.elapsed,
-            activeInput: event.inputPath ?? task.activeInput,
-            currentMediaIndex: event.mediaIndex ?? task.currentMediaIndex,
-            processingCount: event.mediaTotal ?? task.processingCount,
-            taskElapsedSeconds: event.taskElapsedSeconds ?? task.taskElapsedSeconds,
-            mediaStates: limitTaskQualityDiagnostics(updateTaskMediaStates(task, event)),
-            outputs:
-              newOutputs.length > 0
-                ? [...new Set([...(task.outputs ?? []), ...newOutputs])]
-                : task.outputs,
-            outputAvailability: newOutputs.length > 0 ? 'available' : task.outputAvailability,
-          };
-        }),
-      }));
-      persistLater(get);
-      return;
-    }
-    const stateBeforeTerminal = get();
-    const finishedTask = stateBeforeTerminal.tasks.find((task) => task.id === event.taskId);
-    if (finishedTask === undefined || isTerminalTaskStatus(finishedTask.status)) return;
-    const partiallyFailed = event.type === 'task.completed' && (event.failureCount ?? 0) > 0;
-    const startsShutdownCountdown =
-      event.type === 'task.completed' &&
-      !partiallyFailed &&
-      stateBeforeTerminal.shutdownArmed &&
-      !stateBeforeTerminal.tasks.some(
-        (task) =>
-          task.id !== event.taskId && (task.status === 'queued' || task.status === 'running'),
-      );
-    set((state) => ({
-      tasks: state.tasks.map((task) => {
-        if (task.id !== event.taskId) return task;
-        if (event.type === 'task.completed') {
-          const partiallyFailed = (event.failureCount ?? 0) > 0;
-          return {
-            ...task,
-            status: partiallyFailed ? 'failed' : 'completed',
-            progress: 100,
-            stage: partiallyFailed ? '部分媒体处理失败' : '输出已生成',
-            elapsed: event.elapsed,
-            outputs: event.outputs,
-            skippedMedia: event.skippedMedia ?? task.skippedMedia,
-            outputAvailability: event.outputs.length > 0 ? 'available' : 'missing',
-            completedAt: new Date().toISOString(),
-            mediaStates: task.mediaStates?.map((media) =>
-              media.status === 'skipped' || media.status === 'failed'
-                ? media
-                : { ...media, status: 'completed', progress: 100, stage: '已完成' },
-            ),
-            errorCode: partiallyFailed ? 'transcription.partial_failure' : task.errorCode,
-          };
-        }
-        if (event.type === 'task.failed') {
-          return {
-            ...task,
-            status: 'failed',
-            stage: event.message,
-            errorCode: event.code,
-            completedAt: new Date().toISOString(),
-          };
-        }
-        return {
-          ...task,
-          status: 'cancelled',
-          stage: '已取消',
-          completedAt: new Date().toISOString(),
-        };
-      }),
-    }));
-    if (finishedTask !== undefined) {
-      if (startsShutdownCountdown) {
-        void notifyPowerCountdown(event.elapsed);
-      } else if (
-        event.type !== 'task.completed' ||
-        partiallyFailed ||
-        !stateBeforeTerminal.shutdownArmed
-      ) {
-        void notifyTaskFinished({
-          status:
-            event.type === 'task.completed' && !partiallyFailed
-              ? 'completed'
-              : event.type === 'task.failed' || partiallyFailed
-                ? 'failed'
-                : 'cancelled',
-          elapsed: event.type === 'task.completed' ? event.elapsed : finishedTask.elapsed,
-          detail:
-            event.type === 'task.completed' && !partiallyFailed
-              ? `已生成 ${event.outputs.length} 个输出文件`
-              : partiallyFailed
-                ? `${event.failureCount} 个媒体处理失败，已生成 ${event.outputs.length} 个输出文件`
-                : event.type === 'task.failed'
-                  ? event.message
-                  : '任务已取消',
-        });
-      }
-    }
-    persistLater(get);
-    if (
-      get().pendingModelId !== null &&
-      !get().tasks.some((task) => task.status === 'queued' || task.status === 'running')
-    ) {
-      const pending = get().pendingModelId;
-      if (pending !== null) void get().selectModel(pending);
-      return;
-    }
-    if (
-      get().pendingHardware &&
-      !get().tasks.some((task) => task.status === 'queued' || task.status === 'running')
-    ) {
-      void get().setHardwarePreference(get().hardwarePreference);
-    }
-  },
+  handleEvent: (event) => handleWorkspaceEvent(event, set, get, persistLater),
   initialize: () => {
     if (get().initialized) return () => undefined;
     if (desktopBridge.mode === 'tauri') {
@@ -1616,326 +1441,3 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     };
   },
 }));
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function outputConflictDetails(
-  error: unknown,
-): { paths: string[]; conflicts: OutputConflictGroup[]; mediaPaths: string[] } | null {
-  if (typeof error !== 'object' || error === null) return null;
-  const candidate = error as {
-    code?: unknown;
-    paths?: unknown;
-    conflicts?: unknown;
-    mediaPaths?: unknown;
-  };
-  if (candidate.code !== 'output.conflict' || !Array.isArray(candidate.paths)) return null;
-  const paths = candidate.paths.filter((item): item is string => typeof item === 'string');
-  if (paths.length === 0) return null;
-  const conflicts = Array.isArray(candidate.conflicts)
-    ? candidate.conflicts
-        .filter(
-          (item): item is { inputPath: string; paths: string[] } =>
-            typeof item === 'object' &&
-            item !== null &&
-            typeof (item as { inputPath?: unknown }).inputPath === 'string' &&
-            Array.isArray((item as { paths?: unknown }).paths),
-        )
-        .map((item) => ({
-          inputPath: item.inputPath,
-          paths: item.paths.filter((path): path is string => typeof path === 'string'),
-        }))
-    : [];
-  const mediaPaths = Array.isArray(candidate.mediaPaths)
-    ? candidate.mediaPaths.filter((item): item is string => typeof item === 'string')
-    : [];
-  return { paths, conflicts, mediaPaths };
-}
-
-function isAllOutputsSkipped(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { code?: unknown }).code === 'output.all_skipped'
-  );
-}
-
-function modelMatchesPreference(
-  model: ModelStatus,
-  preference: HardwarePreference,
-  capabilities: WorkerEnvironment['hardware'],
-): boolean {
-  if (model.state !== 'ready') return false;
-  const expectedDevice =
-    preference.mode === 'auto'
-      ? (capabilities?.gpus.length ?? 0) > 0
-        ? 'cuda'
-        : 'cpu'
-      : preference.mode;
-  if (model.device !== expectedDevice) return false;
-  if (expectedDevice === 'cuda') {
-    return (
-      model.deviceIndex === preference.gpuDeviceIndex &&
-      model.computeType === preference.cudaComputeType
-    );
-  }
-  return (
-    model.computeType === preference.cpuComputeType && model.cpuThreads === preference.cpuThreads
-  );
-}
-
-function isTerminalTaskStatus(status: TaskStatus): boolean {
-  return status === 'completed' || status === 'failed' || status === 'cancelled';
-}
-
-function activeTaskId(tasks: TaskSnapshot[]): string | null {
-  return (
-    tasks.find((task) => task.status === 'running')?.id ??
-    [...tasks].reverse().find((task) => task.status === 'queued')?.id ??
-    null
-  );
-}
-
-function taskOutputPaths(task: TaskSnapshot | undefined): string[] {
-  if (task === undefined) return [];
-  return [
-    ...new Set([
-      ...(task.outputs ?? []),
-      ...(task.mediaStates ?? []).flatMap((media) => media.outputPaths ?? []),
-    ]),
-  ];
-}
-
-export function canResumeTask(task: TaskSnapshot): boolean {
-  if (task.status !== 'failed' && task.status !== 'cancelled') return false;
-  const mediaStates = task.mediaStates ?? [];
-  const hasReliableCompletion = mediaStates.some(
-    (media) =>
-      (media.status === 'completed' || media.status === 'skipped') &&
-      (media.outputPaths?.length ?? 0) > 0,
-  );
-  const hasUnfinishedMedia = mediaStates.some(
-    (media) =>
-      media.status === 'pending' || media.status === 'running' || media.status === 'failed',
-  );
-  return task.draft !== undefined && hasReliableCompletion && hasUnfinishedMedia;
-}
-
-function updateTaskMediaStates(
-  task: TaskSnapshot,
-  event: Extract<DesktopEvent, { type: 'task.progress' }>,
-): TaskSnapshot['mediaStates'] {
-  const path = event.inputPath;
-  if (path === undefined) return task.mediaStates;
-  const current: NonNullable<TaskSnapshot['mediaStates']> =
-    task.mediaStates ??
-    (task.mediaPaths ?? []).map((mediaPath) => ({
-      path: mediaPath,
-      status: 'pending' as const,
-      progress: 0,
-      stage: '等待处理',
-      elapsedSeconds: 0,
-    }));
-  const normalizedPath = path.toLocaleLowerCase();
-  return current.map((media) => {
-    if (media.path.toLocaleLowerCase() === normalizedPath) {
-      return {
-        ...media,
-        status: event.mediaStatus ?? 'running',
-        progress: event.mediaProgress ?? media.progress,
-        stage: event.stage,
-        elapsedSeconds: event.mediaElapsedSeconds ?? media.elapsedSeconds,
-        outputPaths:
-          event.outputPaths !== undefined && event.outputPaths.length > 0
-            ? event.outputPaths
-            : media.outputPaths,
-        qualityDiagnostics: event.qualityDiagnostics ?? media.qualityDiagnostics,
-      };
-    }
-    if (
-      event.mediaIndex !== undefined &&
-      media.status === 'pending' &&
-      (task.mediaPaths ?? []).findIndex(
-        (candidate) => candidate.toLocaleLowerCase() === media.path.toLocaleLowerCase(),
-      ) <
-        event.mediaIndex - 1
-    ) {
-      return { ...media, status: 'completed', progress: 100, stage: '已完成' };
-    }
-    return media;
-  });
-}
-
-function limitTaskQualityDiagnostics(
-  mediaStates: TaskSnapshot['mediaStates'],
-): TaskSnapshot['mediaStates'] {
-  if (mediaStates === undefined) return undefined;
-  let remainingTaskSegments = 50;
-  let remainingTaskRegions = 50;
-  let remainingTaskDetailCandidates = 50;
-  return mediaStates.map((media) => {
-    const diagnostics = media.qualityDiagnostics;
-    if (diagnostics === undefined) return media;
-    const retainedCount = Math.min(12, remainingTaskSegments, diagnostics.segments.length);
-    const retainedRegionCount = Math.min(
-      12,
-      remainingTaskRegions,
-      diagnostics.languageRegions?.length ?? 0,
-    );
-    const retainedCandidateCount = Math.min(
-      12,
-      remainingTaskDetailCandidates,
-      diagnostics.detailCandidates?.length ?? 0,
-    );
-    remainingTaskSegments -= retainedCount;
-    remainingTaskRegions -= retainedRegionCount;
-    remainingTaskDetailCandidates -= retainedCandidateCount;
-    return {
-      ...media,
-      qualityDiagnostics: {
-        ...diagnostics,
-        segments: diagnostics.segments.slice(0, retainedCount),
-        languageRegions: diagnostics.languageRegions?.slice(0, retainedRegionCount),
-        detailCandidates: diagnostics.detailCandidates?.slice(0, retainedCandidateCount),
-        omittedSegmentCount: Math.max(0, diagnostics.lowConfidenceCount - retainedCount),
-      },
-    };
-  });
-}
-
-function subtitleOverridesFor(draft: TranscriptionDraft): Partial<SubtitleParameters> {
-  const defaults = getSubtitlePreset(draft.basePresetId).subtitleParameters;
-  return Object.fromEntries(
-    Object.entries(draft.subtitleParameters).filter(
-      ([key, value]) => defaults[key as keyof SubtitleParameters] !== value,
-    ),
-  ) as Partial<SubtitleParameters>;
-}
-
-export function isAbnormalTask(task: TaskSnapshot): boolean {
-  return (
-    task.status === 'failed' ||
-    task.status === 'cancelled' ||
-    (task.status === 'completed' && task.outputAvailability === 'missing')
-  );
-}
-
-function normalizeDraft(draft: TranscriptionDraft): TranscriptionDraft {
-  const legacy = draft as TranscriptionDraft & {
-    modelId?: ModelId;
-    profileMode?: ProfileMode;
-    subtitleParameters?: SubtitleParameters;
-    hardware?: HardwarePreference;
-    output: OutputPolicy & { srtEnabled?: boolean; preserveSourceMarkdown?: boolean };
-  };
-  const modelId = legacy.modelId ?? 'large-v3-turbo';
-  const baseParameters = getPreset(draft.basePresetId, modelId).parameters;
-  return {
-    ...structuredClone(draft),
-    modelId,
-    recognitionStrategy:
-      (legacy.recognitionStrategy === 'mixed_zh_en' ||
-        legacy.recognitionStrategy === 'zh_detail_review') &&
-      ['cn', 'cn2'].includes(draft.basePresetId) &&
-      ['large-v3', 'large-v3-turbo'].includes(modelId)
-        ? legacy.recognitionStrategy
-        : 'stable_primary',
-    hardware: legacy.hardware ?? { ...DEFAULT_HARDWARE_PREFERENCE },
-    profileMode: legacy.profileMode ?? 'transcript',
-    effectiveParameters: { ...baseParameters, ...draft.effectiveParameters },
-    subtitleParameters: {
-      ...getSubtitlePreset(draft.basePresetId).subtitleParameters,
-      ...legacy.subtitleParameters,
-    },
-    output: {
-      ...draft.output,
-      srtEnabled: legacy.output.srtEnabled ?? false,
-      preserveSourceMarkdown: legacy.output.preserveSourceMarkdown ?? false,
-      conflictPolicy:
-        legacy.output.conflictPolicy === 'auto_rename'
-          ? 'auto_rename'
-          : legacy.output.conflictPolicy === 'confirm_skip'
-            ? 'confirm_skip'
-            : 'confirm_overwrite',
-    },
-  };
-}
-
-function normalizedTaskOverrides(
-  overrides: Partial<EditableParameters>,
-): Partial<EditableParameters> {
-  const normalized = { ...overrides };
-  for (const key of ['initial_prompt', 'hotwords'] as const) {
-    const value = normalized[key];
-    if (typeof value !== 'string') continue;
-    const text = normalizePromptText(value).trim();
-    if (text.length === 0) delete normalized[key];
-    else normalized[key] = text;
-  }
-  return normalized;
-}
-
-function draftHasUnsupportedTranslation(draft: TranscriptionDraft): boolean {
-  const task = draft.overrides.task ?? draft.effectiveParameters.task;
-  return task === 'translate' && !translationTaskSupported(draft.modelId, draft.basePresetId);
-}
-
-let persistenceTimer: ReturnType<typeof setTimeout> | undefined;
-
-function preferencesFromState(state: WorkspaceState): WorkspacePreferences {
-  return {
-    theme: state.theme,
-    accentPreset: state.accentPreset,
-    customAccentColor: state.customAccentColor,
-    uiFontSize: state.uiFontSize,
-    logFontSize: state.logFontSize,
-    uiFontFamily: state.uiFontFamily,
-    monoFontFamily: state.monoFontFamily,
-    selectedModelId: state.selectedModelId,
-    hardwarePreference: state.hardwarePreference,
-    selectedPresetId: state.selectedPresetId,
-    profileMode: state.profileMode,
-    parameters: state.parameters,
-    overrides: state.overrides,
-    parameterProfiles: state.parameterProfiles,
-    recognitionStrategy: state.recognitionStrategy,
-    recognitionStrategyProfiles: state.recognitionStrategyProfiles,
-    subtitleParameters: state.subtitleParameters,
-    subtitleOverrides: state.subtitleOverrides,
-    output: state.output,
-  };
-}
-
-function appearanceFromState(
-  state: Pick<
-    WorkspaceState,
-    | 'theme'
-    | 'accentPreset'
-    | 'customAccentColor'
-    | 'uiFontSize'
-    | 'logFontSize'
-    | 'uiFontFamily'
-    | 'monoFontFamily'
-  >,
-) {
-  return {
-    theme: state.theme,
-    accentPreset: state.accentPreset,
-    customAccentColor: state.customAccentColor,
-    uiFontSize: state.uiFontSize,
-    logFontSize: state.logFontSize,
-    uiFontFamily: state.uiFontFamily,
-    monoFontFamily: state.monoFontFamily,
-  };
-}
-
-function persistLater(get: () => WorkspaceState): void {
-  if (desktopBridge.mode !== 'tauri') return;
-  if (persistenceTimer !== undefined) clearTimeout(persistenceTimer);
-  persistenceTimer = setTimeout(() => {
-    const state = get();
-    saveWorkspaceState(preferencesFromState(state), state.tasks);
-  }, 150);
-}

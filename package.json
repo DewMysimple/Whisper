@@ -9,7 +9,9 @@
   },
   "scripts": {
     "build": "corepack pnpm --filter @whisper-subtitle/web build",
-    "check": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test",
+    "check": "corepack pnpm check:preset-catalog && corepack pnpm format:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test",
+    "generate:preset-catalog": "python scripts/generate_preset_catalog.py",
+    "check:preset-catalog": "python scripts/generate_preset_catalog.py --check",
     "desktop:build": "corepack pnpm build && corepack pnpm --filter @whisper-subtitle/desktop tauri build --no-bundle",
     "desktop:dev": "corepack pnpm build && corepack pnpm --filter @whisper-subtitle/desktop tauri dev",
     "e2e": "corepack pnpm --filter @whisper-subtitle/web e2e",

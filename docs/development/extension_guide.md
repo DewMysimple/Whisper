@@ -6,9 +6,12 @@
 2. 为它设置唯一 `id`、CLI `cli_alias`、显示信息、推理参数和 `postprocess_strategy`。
 3. 若现有后处理链可复用，直接选择已有策略；无需创建脚本、应用服务或 GUI 分支。
 4. 在 `tests/test_registry.py`、`tests/test_presets.py` 增加注册表与参数差异断言。
-5. 增加固定输出并运行 benchmark/golden 门禁。
+5. 运行 `python scripts/generate_preset_catalog.py` 更新 Web 参数投影，并确保 `corepack pnpm check:preset-catalog` 通过。
+6. 增加固定输出并运行 benchmark/golden 门禁。
 
 CLI choices、GUI 列表、设置恢复和进程参数都从同一注册表派生。新增 preset 不应修改 `TranscriptionService` 主流程。
+
+显示标签和摘要可以在 `apps/web/src/data/presets.ts` 维护；推理参数不要在 TypeScript 中手工复制，统一从 Python 注册表生成。
 
 ## 新增后处理策略
 
