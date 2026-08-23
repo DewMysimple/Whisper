@@ -1,15 +1,15 @@
 import { Check, FileText, Sparkles } from 'lucide-react';
 
-import { modelProfileSummary, PRESETS } from '../data/presets';
+import { PRESETS } from '../data/presets';
 import { useWorkspace } from '../state/workspace';
 
 export function PresetPanel() {
   const profileMode = useWorkspace((state) => state.profileMode);
   const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
-  const selectedModelId = useWorkspace((state) => state.selectedModelId);
   const selectProfile = useWorkspace((state) => state.selectProfile);
   const overrides = useWorkspace((state) => state.overrides);
   const setActiveView = useWorkspace((state) => state.setActiveView);
+  const setModelWorkspaceTab = useWorkspace((state) => state.setModelWorkspaceTab);
   const active = profileMode === 'transcript';
   const isCustom = active && Object.keys(overrides).length > 0;
 
@@ -55,16 +55,18 @@ export function PresetPanel() {
         ))}
       </div>
 
-      <p className="preset-language-note">
-        中／英文版本只决定断句、标点和文本排版；Worker 固定使用原声转录，不调用翻译任务。
-        混合语言会先自动判断主语言，短时切换的保留能力取决于模型本身。
-        <span>{modelProfileSummary(selectedModelId)}</span>
-      </p>
       <div className="preset-parameter-link">
         <span>
           {isCustom ? '当前模型与模式使用自定义参数。' : '当前模型与模式使用正式默认参数。'}
         </span>
-        <button className="secondary-button" onClick={() => setActiveView('models')} type="button">
+        <button
+          className="secondary-button"
+          onClick={() => {
+            setActiveView('models');
+            setModelWorkspaceTab('parameters');
+          }}
+          type="button"
+        >
           查看并修改模型参数
         </button>
       </div>

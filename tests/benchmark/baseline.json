@@ -2,7 +2,7 @@
   "schema_version": 2,
   "generated_at": "2026-07-13T18:25:03+08:00",
   "input": {
-    "path": "Log/10-第一阶段-基础修复与模块化重构/阶段修复/执行2/baseline/regression_input.wav",
+    "path": "wiki-memory/历史归档/10-第一阶段-基础修复与模块化重构/阶段修复/执行2/baseline/regression_input.wav",
     "bytes": 383588,
     "sha256": "AAC601EEE806B2981CD4EE61EC8F6CCB520DCACE422E6ADFDFE60C05E765CB4E"
   },

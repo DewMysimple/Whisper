@@ -110,125 +110,150 @@ export function HardwareOptimizationPanel() {
         className={`hardware-control-grid ${busy ? 'is-locked' : ''}`}
         title={busy ? '任务执行期间不可更改硬件配置' : undefined}
       >
-        <fieldset className="hardware-device-control">
-          <legend>推理设备</legend>
-          <div className="hardware-segmented-control">
-            {(
-              [
-                ['auto', '自动'],
-                ['cuda', 'NVIDIA CUDA'],
-                ['cpu', 'CPU'],
-              ] as const
-            ).map(([mode, label]) => (
-              <button
-                aria-pressed={draft.mode === mode}
+        <div className="hardware-device-band">
+          <fieldset className="hardware-device-control">
+            <legend>推理设备</legend>
+            <div className="hardware-segmented-control">
+              {(
+                [
+                  ['auto', '自动'],
+                  ['cuda', 'NVIDIA CUDA'],
+                  ['cpu', 'CPU'],
+                ] as const
+              ).map(([mode, label]) => (
+                <button
+                  aria-pressed={draft.mode === mode}
+                  disabled={
+                    busy ||
+                    capabilities === undefined ||
+                    (mode === 'cuda' && capabilities.gpus.length === 0)
+                  }
+                  key={mode}
+                  onClick={() => patchDraft({ mode })}
+                  type="button"
+                >
+                  {draft.mode === mode && <Check size={14} />}
+                  {label}
+                </button>
+              ))}
+            </div>
+            <small>自动模式优先使用 CUDA；不可用时回退到 CPU。</small>
+          </fieldset>
+        </div>
+
+        <div className="hardware-config-columns">
+          <section className={`hardware-config-group ${draft.mode === 'cpu' ? 'is-muted' : ''}`}>
+            <div className="hardware-config-heading">
+              <Gauge size={17} />
+              <div>
+                <strong>GPU 推理</strong>
+                <small>{draft.mode === 'cpu' ? '当前未参与任务' : 'CUDA 设备与计算精度'}</small>
+              </div>
+            </div>
+            <label>
+              <span>CUDA 设备</span>
+              <select
+                aria-label="CUDA 设备"
                 disabled={
-                  busy ||
                   capabilities === undefined ||
-                  (mode === 'cuda' && capabilities.gpus.length === 0)
+                  capabilities.gpus.length <= 1 ||
+                  draft.mode === 'cpu' ||
+                  busy
                 }
-                key={mode}
-                onClick={() => patchDraft({ mode })}
-                type="button"
+                onChange={(event) => {
+                  const gpuDeviceIndex = Number(event.target.value);
+                  const gpu = capabilities?.gpus.find((item) => item.index === gpuDeviceIndex);
+                  const cudaComputeType = gpu?.computeTypes.includes('float16')
+                    ? 'float16'
+                    : gpu?.computeTypes.includes('int8_float16')
+                      ? 'int8_float16'
+                      : 'float32';
+                  patchDraft({ gpuDeviceIndex, cudaComputeType });
+                }}
+                value={draft.gpuDeviceIndex}
               >
-                {draft.mode === mode && <Check size={14} />}
-                {label}
-              </button>
-            ))}
-          </div>
-          <small>自动模式优先使用 CUDA；不可用时回退到 CPU。</small>
-        </fieldset>
+                {(capabilities?.gpus ?? []).map((gpu) => (
+                  <option key={gpu.index} value={gpu.index}>
+                    GPU {gpu.index} · {gpu.name}
+                  </option>
+                ))}
+              </select>
+              <small>{activeGpu?.name ?? '未检测到 CUDA 设备'}</small>
+            </label>
 
-        <label>
-          <span>CUDA 设备</span>
-          <select
-            aria-label="CUDA 设备"
-            disabled={
-              capabilities === undefined ||
-              capabilities.gpus.length <= 1 ||
-              draft.mode === 'cpu' ||
-              busy
-            }
-            onChange={(event) => {
-              const gpuDeviceIndex = Number(event.target.value);
-              const gpu = capabilities?.gpus.find((item) => item.index === gpuDeviceIndex);
-              const cudaComputeType = gpu?.computeTypes.includes('float16')
-                ? 'float16'
-                : gpu?.computeTypes.includes('int8_float16')
-                  ? 'int8_float16'
-                  : 'float32';
-              patchDraft({ gpuDeviceIndex, cudaComputeType });
-            }}
-            value={draft.gpuDeviceIndex}
-          >
-            {(capabilities?.gpus ?? []).map((gpu) => (
-              <option key={gpu.index} value={gpu.index}>
-                GPU {gpu.index} · {gpu.name}
-              </option>
-            ))}
-          </select>
-          <small>{activeGpu?.name ?? '未检测到 CUDA 设备'}</small>
-        </label>
+            <label>
+              <span>CUDA 计算精度</span>
+              <select
+                aria-label="CUDA 计算精度"
+                disabled={
+                  capabilities === undefined ||
+                  draft.mode === 'cpu' ||
+                  cudaOptions.length === 0 ||
+                  busy
+                }
+                onChange={(event) =>
+                  patchDraft({
+                    cudaComputeType: event.target.value as HardwarePreference['cudaComputeType'],
+                  })
+                }
+                value={draft.cudaComputeType}
+              >
+                {cudaOptions.map((type) => (
+                  <option key={type} value={type}>
+                    {CUDA_LABELS[type]}
+                  </option>
+                ))}
+              </select>
+              <small>INT8 + FP16 可能降低显存占用，不承诺固定速度提升。</small>
+            </label>
+          </section>
 
-        <label>
-          <span>CUDA 计算精度</span>
-          <select
-            aria-label="CUDA 计算精度"
-            disabled={
-              capabilities === undefined || draft.mode === 'cpu' || cudaOptions.length === 0 || busy
-            }
-            onChange={(event) =>
-              patchDraft({
-                cudaComputeType: event.target.value as HardwarePreference['cudaComputeType'],
-              })
-            }
-            value={draft.cudaComputeType}
-          >
-            {cudaOptions.map((type) => (
-              <option key={type} value={type}>
-                {CUDA_LABELS[type]}
-              </option>
-            ))}
-          </select>
-          <small>INT8 + FP16 可能降低显存占用，不承诺固定速度提升。</small>
-        </label>
+          <section className={`hardware-config-group ${draft.mode === 'cuda' ? 'is-muted' : ''}`}>
+            <div className="hardware-config-heading">
+              <Cpu size={17} />
+              <div>
+                <strong>CPU 推理</strong>
+                <small>{draft.mode === 'cuda' ? '当前未参与任务' : '兼容回退与线程上限'}</small>
+              </div>
+            </div>
+            <label>
+              <span>CPU 计算精度</span>
+              <select
+                aria-label="CPU 计算精度"
+                disabled={busy || capabilities === undefined || draft.mode === 'cuda'}
+                onChange={(event) =>
+                  patchDraft({
+                    cpuComputeType: event.target.value as HardwarePreference['cpuComputeType'],
+                  })
+                }
+                value={draft.cpuComputeType}
+              >
+                {cpuOptions.map((type) => (
+                  <option key={type} value={type}>
+                    {CPU_LABELS[type]}
+                  </option>
+                ))}
+              </select>
+              <small>CPU 模式默认使用 INT8；FP32 更占内存。</small>
+            </label>
 
-        <label>
-          <span>CPU 计算精度</span>
-          <select
-            aria-label="CPU 计算精度"
-            disabled={busy || capabilities === undefined || draft.mode === 'cuda'}
-            onChange={(event) =>
-              patchDraft({
-                cpuComputeType: event.target.value as HardwarePreference['cpuComputeType'],
-              })
-            }
-            value={draft.cpuComputeType}
-          >
-            {cpuOptions.map((type) => (
-              <option key={type} value={type}>
-                {CPU_LABELS[type]}
-              </option>
-            ))}
-          </select>
-          <small>CPU 模式默认使用 INT8；FP32 更占内存。</small>
-        </label>
-
-        <label className="hardware-thread-control">
-          <span>
-            CPU 推理线程 <output>{draft.cpuThreads}</output>
-          </span>
-          <input
-            aria-label="CPU 推理线程"
-            disabled={busy || capabilities === undefined || draft.mode === 'cuda'}
-            max={maxThreads}
-            min={1}
-            onChange={(event) => patchDraft({ cpuThreads: Number(event.target.value) })}
-            type="range"
-            value={Math.min(draft.cpuThreads, maxThreads)}
-          />
-          <small>上限使用本机物理核心数；默认 4 线程。</small>
-        </label>
+            <label className="hardware-thread-control">
+              <span>
+                CPU 推理线程 <output>{draft.cpuThreads}</output>
+              </span>
+              <input
+                aria-label="CPU 推理线程"
+                disabled={busy || capabilities === undefined || draft.mode === 'cuda'}
+                max={maxThreads}
+                min={1}
+                onChange={(event) => patchDraft({ cpuThreads: Number(event.target.value) })}
+                type="range"
+                value={Math.min(draft.cpuThreads, maxThreads)}
+              />
+              <small>上限使用本机物理核心数；默认 4 线程。</small>
+            </label>
+          </section>
+        </div>
       </div>
 
       <div className="hardware-optimizer-actions">

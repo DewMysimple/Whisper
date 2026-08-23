@@ -84,11 +84,11 @@ test('locks model and hardware changes while queued or running work exists', asy
   await page.getByRole('button', { name: '模型切换' }).click();
   await expect(page.getByRole('heading', { name: '当前推理模型' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '本地模型库' })).toBeVisible();
-  await expect(page.locator('.model-card')).toHaveCount(3);
+  await expect(page.locator('.model-card')).toHaveCount(2);
   await expect(page.getByText('1 / 2')).toBeVisible();
   await expect(page.getByRole('button', { name: '打开模型目录' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '当前模型参数' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '待自定义' })).toBeVisible();
+  await expect(page.getByText('自定义模型尚未开放')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '当前模型参数' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Tiny' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Medium' })).toHaveCount(0);
 
@@ -98,6 +98,8 @@ test('locks model and hardware changes while queued or running work exists', asy
   await expect(turboCard).toBeDisabled();
   await expect(turboCard).toHaveAttribute('title', '任务执行期间不可切换模型');
   await expect(page.getByText('任务执行期间已锁定')).toHaveCount(1);
+  await page.getByRole('tab', { name: /参数配置/ }).click();
+  await expect(page.getByRole('heading', { name: '当前模型参数' })).toBeVisible();
 
   await page.getByRole('button', { name: '硬件优化' }).click();
   await expect(page.getByRole('heading', { name: '硬件优化', level: 1 })).toBeVisible();
@@ -265,7 +267,7 @@ test('supports workspace navigation, theme and configuration export', async ({
       .locator('.preset-card')
       .first()
       .evaluate((element) => getComputedStyle(element).minHeight),
-  ).resolves.toBe('116px');
+  ).resolves.toBe('98px');
   await page.getByRole('button', { name: '查看并修改模型参数' }).click();
   await expect(
     page
@@ -352,7 +354,7 @@ test('supports workspace navigation, theme and configuration export', async ({
   await page.getByRole('button', { name: '偏好设置' }).click();
   await expect(page.getByRole('heading', { name: '桌面外观' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '本地运行环境' })).toBeVisible();
-  await expect(page.getByRole('radio', { name: '跟随系统' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: '跟随 Windows' })).toBeChecked();
   await expect(page.getByRole('group', { name: 'UI 字号' })).toContainText('14px');
   await expect(page.getByRole('group', { name: '日志字号' })).toContainText('12px');
   await expect(page.getByRole('button', { name: '橙色强调色' })).toHaveAttribute(
@@ -403,7 +405,7 @@ test('supports workspace navigation, theme and configuration export', async ({
       .locator('.preset-card')
       .first()
       .evaluate((element) => getComputedStyle(element).minHeight),
-  ).resolves.toBe('116px');
+  ).resolves.toBe('98px');
   await expect(
     page.locator('.output-panel').evaluate((element) => element.clientWidth),
   ).resolves.toBeGreaterThanOrEqual(330);
@@ -438,13 +440,13 @@ test('supports workspace navigation, theme and configuration export', async ({
       .locator('.task-summary-card strong')
       .first()
       .evaluate((element) => getComputedStyle(element).fontSize),
-  ).resolves.toBe('28px');
+  ).resolves.toBe('24px');
   await expect(
     page
       .locator('.task-summary-card')
       .first()
       .evaluate((element) => getComputedStyle(element).padding),
-  ).resolves.toBe('18px');
+  ).resolves.toBe('14px 18px');
   await page.getByRole('button', { name: '偏好设置' }).click();
   await page.getByRole('button', { name: '增大UI 字号' }).click();
   await page.getByRole('button', { name: '增大UI 字号' }).click();
@@ -465,7 +467,7 @@ test('supports workspace navigation, theme and configuration export', async ({
       .locator('.preset-card')
       .first()
       .evaluate((element) => getComputedStyle(element).minHeight),
-  ).resolves.toBe('116px');
+  ).resolves.toBe('98px');
   await expect(page.locator('.output-panel')).toBeVisible();
   await expect(page.locator('.launch-card')).toBeVisible();
   await page.getByRole('button', { name: '粘贴 Windows 路径' }).click();
@@ -518,13 +520,13 @@ test('supports workspace navigation, theme and configuration export', async ({
       .locator('.task-summary-card strong')
       .first()
       .evaluate((element) => getComputedStyle(element).fontSize),
-  ).resolves.toBe('30px');
+  ).resolves.toBe('26px');
   await expect(
     page
       .locator('.task-summary-card')
       .first()
       .evaluate((element) => getComputedStyle(element).padding),
-  ).resolves.toBe('18px');
+  ).resolves.toBe('14px 18px');
   await page.getByRole('searchbox', { name: '搜索任务' }).fill('Interview');
   await expect(page.getByText('Product Interview 06.mkv', { exact: true })).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -598,7 +600,7 @@ test('monitors the active task and manages dated history in a responsive grid', 
         (element) =>
           getComputedStyle(element).gridTemplateColumns.split(' ').filter(Boolean).length,
       ),
-  ).resolves.toBe(2);
+  ).resolves.toBe(1);
 
   await page.getByRole('button', { name: '全部日期' }).click();
   const calendar = page.getByRole('dialog', { name: '按任务日期筛选' });

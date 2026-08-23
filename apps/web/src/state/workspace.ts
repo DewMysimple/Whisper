@@ -198,6 +198,7 @@ export type TaskFilter = 'all' | TaskStatus;
 export type TaskWorkspaceMode = 'monitor' | 'history';
 export type WorkspaceViewId =
   'workspace' | 'models' | 'hardware' | 'performance' | 'tasks' | 'logs' | 'settings';
+export type ModelWorkspaceTab = 'library' | 'parameters';
 
 export interface PendingOverwrite {
   draft: TranscriptionDraft;
@@ -248,6 +249,7 @@ interface WorkspaceState {
   lastError: string | null;
   startingTask: boolean;
   activeView: WorkspaceViewId;
+  modelWorkspaceTab: ModelWorkspaceTab;
   theme: ThemePreference;
   accentPreset: AccentPreset;
   customAccentColor: string;
@@ -267,6 +269,7 @@ interface WorkspaceState {
   configText: string;
   initialized: boolean;
   setActiveView(view: WorkspaceState['activeView']): void;
+  setModelWorkspaceTab(tab: ModelWorkspaceTab): void;
   refreshModels(): Promise<void>;
   openModelDirectory(): Promise<void>;
   selectModel(modelId: ModelId): Promise<void>;
@@ -401,6 +404,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   lastError: null,
   startingTask: false,
   activeView: 'workspace',
+  modelWorkspaceTab: 'library',
   ...DEFAULT_APPEARANCE,
   selectedTaskId: null,
   outputPreview: null,
@@ -417,6 +421,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   setActiveView: (activeView) =>
     set((state) => ({
       activeView,
+      modelWorkspaceTab: activeView === 'models' ? 'library' : state.modelWorkspaceTab,
       taskWorkspaceMode:
         activeView === 'tasks'
           ? state.tasks.some((task) => task.status === 'queued' || task.status === 'running')
@@ -426,6 +431,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
               : 'history'
           : state.taskWorkspaceMode,
     })),
+  setModelWorkspaceTab: (modelWorkspaceTab) => set({ modelWorkspaceTab }),
   setFinishAction: (finishAction) => set({ finishAction }),
   cancelPowerAction: async () => {
     try {

@@ -228,19 +228,14 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                   {task.isCustom && <em>自定义</em>}
                 </div>
                 <div className="task-meta">
-                  <span>
+                  <span className="task-stage">
                     {task.outputAvailability === 'missing' ? '输出文件已丢失或移动' : task.stage}
                   </span>
-                  <span>·</span>
-                  <span>{task.elapsed}</span>
-                  <span>·</span>
-                  <span>{task.sourceCount} 个媒体文件</span>
-                  <span>·</span>
-                  <span>{formatDurationSummary(taskDurationSummary(task))}</span>
-                  <span>·</span>
+                  <span>耗时 {task.elapsed}</span>
+                  <span>{task.sourceCount} 个媒体</span>
+                  <span>总时长 {formatDurationSummary(taskDurationSummary(task))}</span>
                   <span>{getModelLabel(task.modelId)}</span>
-                  <span>·</span>
-                  <span>{formatTaskCreatedAt(task.createdAt)}</span>
+                  <time dateTime={task.createdAt}>{formatTaskCreatedAt(task.createdAt)}</time>
                 </div>
                 <div className="progress-track" aria-label={`任务进度 ${task.progress}%`}>
                   <span style={{ width: `${task.progress}%` }} />

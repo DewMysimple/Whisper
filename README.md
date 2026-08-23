@@ -27,4 +27,4 @@ python -m pytest -q
 python -m whisper_subtitle check
 ```
 
-架构、扩展方法和资料保留规则见 [docs/README.md](docs/README.md)。
+架构、扩展方法和资料保留规则见 [docs/README.md](docs/README.md)。项目 Agent 记忆从 [wiki-memory](wiki-memory/README.md) 开始；历史执行档案位于其 `历史归档/` 子目录。

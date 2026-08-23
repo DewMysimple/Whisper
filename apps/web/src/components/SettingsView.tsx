@@ -158,7 +158,7 @@ export function SettingsView() {
             <legend className="sr-only">主题</legend>
             {(
               [
-                ['system', '跟随系统'],
+                ['system', '跟随 Windows'],
                 ['light', '浅色'],
                 ['dark', '深色'],
               ] as const
@@ -180,6 +180,9 @@ export function SettingsView() {
               </label>
             ))}
           </fieldset>
+          {theme === 'system' && (
+            <p className="theme-choice-note">软件会跟随 Windows 的浅色或深色应用模式自动切换。</p>
+          )}
 
           <div className="accent-setting-row">
             <div className="accent-swatches" role="group" aria-label="强调色预设">

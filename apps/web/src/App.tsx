@@ -198,7 +198,7 @@ function TasksView() {
         <TaskMonitor />
       ) : (
         <>
-          <div className="task-summary" aria-label="任务概览">
+          <div className="task-summary task-summary-band" aria-label="任务概览">
             <div className="task-summary-card">
               <small>全部任务</small>
               <strong>{tasks.length}</strong>

@@ -53,6 +53,7 @@ describe('desktop workspace', () => {
     expect(screen.queryByRole('button', { name: '休眠' })).not.toBeInTheDocument();
     expect(screen.getByText(/^版本：/)).toBeInTheDocument();
     expect(screen.getByText(/^模型：/)).toBeInTheDocument();
+    expect(screen.queryByText(/中／英文版本只决定断句/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
     expect(await screen.findByText('P20-核心语法-整数类型.mp4')).toBeInTheDocument();
 
@@ -65,6 +66,10 @@ describe('desktop workspace', () => {
     await user.clear(beamSize);
     await user.type(beamSize, '6');
     expect(screen.getByText('派生自定义')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /模型选择/ }));
+    expect(screen.queryByRole('spinbutton', { name: 'Beam size' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /参数配置/ }));
+    expect(screen.getByRole('spinbutton', { name: 'Beam size' })).toHaveValue(6);
     await user.click(screen.getByRole('button', { name: '更换识别模式' }));
 
     await user.click(screen.getByText('Markdown'));
@@ -218,9 +223,12 @@ describe('desktop workspace', () => {
     await user.click(screen.getByRole('button', { name: '模型切换' }));
     expect(await screen.findByRole('heading', { name: '当前推理模型' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '本地模型库' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /模型选择/ })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('1 / 2')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Medium' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '待自定义' })).toBeInTheDocument();
+    expect(screen.getByText('自定义模型尚未开放')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '当前模型参数' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /参数配置/ }));
     expect(screen.getByRole('heading', { name: '当前模型参数' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '性能监控' }));
@@ -308,7 +316,8 @@ describe('desktop workspace', () => {
     expect(screen.queryByRole('heading', { name: 'Worker 日志' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /清除已结束历史/ })).not.toBeInTheDocument();
     expect(screen.getByText('网络端口')).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: '跟随系统' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '跟随 Windows' })).toBeChecked();
+    expect(screen.getByText(/跟随 Windows 的浅色或深色应用模式/)).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'UI 字号' })).toHaveTextContent('14px');
     expect(screen.getByRole('group', { name: '日志字号' })).toHaveTextContent('12px');
     await user.click(screen.getByRole('button', { name: '增大UI 字号' }));
@@ -349,6 +358,7 @@ describe('desktop workspace', () => {
     expect(within(subtitlePanel!).getByText('字幕自定义')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '模型切换' }));
+    await user.click(screen.getByRole('tab', { name: /参数配置/ }));
     expect(screen.getByRole('spinbutton', { name: 'Compression ratio' })).toHaveValue(2);
     expect(screen.getByRole('spinbutton', { name: 'Log probability' })).toHaveValue(-1);
     expect(screen.getByRole('spinbutton', { name: 'VAD 最短静音' })).toHaveValue(500);
