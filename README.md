@@ -1,30 +1,205 @@
 # WhisperSubtitle
 
-WhisperSubtitle 是一个面向 Windows 11 x64 和 NVIDIA GPU 的本地离线字幕转录工具，使用 Tauri 2 + React/TypeScript WebView2 桌面表现层与 faster-whisper/CTranslate2 Python Worker，提供统一 CLI、四种中英文推理 preset，以及 TXT、Markdown 和基于真实片段时间戳的 SRT 输出。
+WhisperSubtitle is a local, offline-first subtitle transcription application for Windows 11 x64. It combines a Tauri 2 desktop shell, a React/TypeScript workbench, and a persistent Python Worker powered by `faster-whisper`/CTranslate2.
 
-## 常用命令
+It is designed for people who want to transcribe their own audio and video files without uploading media to a web service. The application has no account system, no backend server, and no production localhost service. A compatible local Whisper model and NVIDIA runtime are external prerequisites for the packaged Windows workflow.
 
-```powershell
-# 环境检查
-python -m whisper_subtitle check
+> Current status: active development, version `0.1.0`. The repository contains the source and the reproducible Windows packaging pipeline; generated release directories are not committed.
 
-# 图形界面（当前唯一开发/验收入口）
-.\apps\desktop\src-tauri\target\release\whisper-subtitle-desktop.exe
+[中文说明](#中文说明) · [Architecture](#architecture) · [Installation](#installation) · [Development](#development) · [Documentation](#documentation)
 
-# 转录
-whisper-subtitle transcribe "input.wav" --preset cn
-whisper-subtitle transcribe "input.mp4" --preset en2 -o "output"
+## What it does
+
+- Transcribes a single media file or a folder from the command line or the desktop application.
+- Provides four shared Chinese/English presets, with the Python registry as the single source of truth.
+- Produces TXT, Markdown, and timestamp-based SRT output.
+- Keeps the inference model warm in a persistent Worker, with task queueing, cancellation, progress events, and idle model release.
+- Supports both an interactive Tauri desktop workflow and a headless JSON-lines Worker for controlled integration.
+- Performs bounded output previews and keeps the production WebView disconnected from arbitrary network endpoints.
+
+## Presets
+
+| CLI alias | Mode | Intended use |
+| --- | --- | --- |
+| `cn` | Chinese standard | Chinese speech with the standard context and post-processing strategy |
+| `cn2` | Chinese anti-hallucination | Chinese speech with stricter thresholds, disabled previous-text context, and repetition cleanup |
+| `en` | English standard | English speech with the standard context and post-processing strategy |
+| `en2` | English anti-hallucination | English speech with stricter thresholds and trailing hallucination cleanup |
+
+The default CLI preset is `en`. Desktop controls, generated Web settings, and Worker requests are derived from the same Python registry in `src/whisper_subtitle/domain/presets.py`.
+
+## Architecture
+
+```text
+React / TypeScript WebView
+          │ typed DesktopBridge
+          ▼
+Tauri 2 / Rust Host
+          │ validated Desktop IPC v1
+          ▼
+persistent Python Worker
+          │
+          ▼
+TranscriptionService → faster-whisper / CTranslate2 → TXT / Markdown / SRT
 ```
 
-可用 preset：`cn`、`cn2`、`en`、`en2`。模型默认从便携目录 `models/huggingface`、`WHISPER_SUBTITLE_MODEL_DIR`、`HF_HOME` 或用户缓存中解析。
+The runtime boundary is deliberate:
 
-当前工作区唯一用于桌面验收的入口是 `apps/desktop/src-tauri/target/release/whisper-subtitle-desktop.exe`，每轮正式 UI 更新后都必须重新构建该文件。`dist/release` 只在明确执行完整发布流程时重新生成；发布目录中的 EXE 必须与当时的验收版本哈希一致，不得作为独立的旧版本长期保留。安装版使用开始菜单/桌面快捷方式，便携版在完整发布后运行其目录中的同版 EXE。程序不打开浏览器，也不启动 localhost 服务。Python CLI 保留 `transcribe`、`check` 和 `worker`；原 PyQt5 `gui` 子命令与 VBS 启动器已在新架构批次 7 退役。
+- `apps/web` owns the desktop workbench, settings, task history, metrics, and presentation state.
+- `apps/desktop/src-tauri` owns the native window, exact Tauri commands, Worker lifecycle, and protocol validation.
+- `src/whisper_subtitle` owns presets, transcription orchestration, media discovery, model/runtime checks, post-processing, and output storage.
+- `contracts/desktop_ipc/v1` defines the cross-language Desktop IPC contract.
+- The production desktop loads local compiled assets and starts a controlled Worker process; it does not open a browser or listen on localhost.
 
-## 开发验证
+## Installation
+
+### Runtime prerequisites
+
+- Windows 11 x64
+- Python 3.10 or newer for source development
+- Node.js 24.x and Corepack/pnpm for the React/Tauri development toolchain
+- A compatible NVIDIA driver/GPU for the intended packaged workflow
+- A local Whisper model, normally `large-v3-turbo`
+
+### Set up the source tree
+
+From PowerShell:
 
 ```powershell
+git clone <repository-url>
+cd WhisperSubtitle
+
+py -3.10 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+
+corepack enable
+corepack pnpm install
+```
+
+The model is not stored in Git. Put a compatible local model in the supported model location, or point the application at one explicitly:
+
+```powershell
+$env:WHISPER_SUBTITLE_MODEL_DIR = "D:\models\large-v3-turbo"
+```
+
+The environment check reports missing Python packages, GPU/CUDA information, and model path problems before transcription starts:
+
+```powershell
+python -m whisper_subtitle check
+```
+
+## Usage
+
+### Command line
+
+```powershell
+# Transcribe one file using the Chinese anti-hallucination preset
+whisper-subtitle transcribe "D:\media\lecture.mp4" --preset cn2
+
+# Transcribe a folder and write results below a chosen output directory
+whisper-subtitle transcribe "D:\media\course" --preset en2 --output "D:\transcripts"
+
+# Emit machine-readable JSON-lines progress
+whisper-subtitle transcribe "D:\media\interview.wav" --preset en --progress jsonl
+
+# Also create the desktop-oriented Markdown output
+whisper-subtitle transcribe "D:\media\interview.wav" --preset en --desktop
+```
+
+The same commands can be invoked without installing the console script:
+
+```powershell
+python -m whisper_subtitle transcribe "input.mp4" --preset en2
+```
+
+By default, results are organized into `Text`, `Markdown`, and `SRT` directories beside the input media. A custom `--output` directory and the optional `--desktop` output are available for workflows that need a separate export location.
+
+### Desktop application
+
+Build the WebView assets and launch the Tauri development application:
+
+```powershell
+corepack pnpm desktop:dev
+```
+
+To build the local desktop executable without creating an installer:
+
+```powershell
+corepack pnpm desktop:build
+```
+
+The current desktop acceptance executable is:
+
+```text
+apps/desktop/src-tauri/target/release/whisper-subtitle-desktop.exe
+```
+
+## Development
+
+Useful commands from the repository root:
+
+```powershell
+# Frontend build
+corepack pnpm build
+
+# Full project checks: preset projection, formatting, lint, types, and tests
+corepack pnpm check
+
+# Python tests
 python -m pytest -q
-python -m whisper_subtitle check
+
+# Browser end-to-end tests
+corepack pnpm e2e
 ```
 
-架构、扩展方法和资料保留规则见 [docs/README.md](docs/README.md)。项目 Agent 记忆从 [wiki-memory](wiki-memory/README.md) 开始；历史执行档案位于其 `历史归档/` 子目录。
+The frontend's Vite/Playwright loopback server exists only for development and tests. It is not part of the production runtime. The Tauri host keeps `connect-src 'none'` in its production CSP, and the Worker communicates over controlled stdin/stdout JSON-lines rather than an HTTP endpoint.
+
+## Windows packaging
+
+The release pipeline can produce an offline current-user NSIS installer and a complete portable directory:
+
+```powershell
+corepack pnpm release:build
+```
+
+Release output is written under `dist/release/` and includes the desktop application, packaged Worker, direct model layout, distribution metadata, SHA-256 manifest, and Python SBOM. Target machines do not need Python, Node.js, or Rust, but they still need Windows 11, the required WebView2 runtime, a compatible NVIDIA driver, and the packaged model layout described in [packaging/README.md](packaging/README.md).
+
+## Repository layout
+
+```text
+src/whisper_subtitle/       Python domain, application, Worker, CLI, and infrastructure
+apps/web/                   React/TypeScript desktop workbench and browser tests
+apps/desktop/src-tauri/     Tauri 2 / Rust host and Worker supervisor
+contracts/                  Versioned Desktop IPC schemas
+tests/                      Python, protocol, architecture, UI, and integration tests
+docs/                       Current architecture, development, migration, and packaging docs
+packaging/                  Windows offline installer and portable-build scripts
+assets/                     Source assets copied into installable packages
+wiki-memory/                Current engineering memory and historical audit records
+```
+
+Local models, virtual environments, caches, generated build output, and local Agent/tool state are intentionally outside the product source boundary and are ignored or removable when no longer needed.
+
+## Documentation
+
+- [Current architecture](docs/architecture/current_architecture.md)
+- [Extension guide](docs/development/extension_guide.md)
+- [Windows packaging](packaging/README.md)
+- [Repository policy](docs/repository_policy.md)
+- [Project documentation index](docs/README.md)
+- [Engineering memory](wiki-memory/README.md)
+
+## 中文说明
+
+WhisperSubtitle 是面向 Windows 11 x64 的本地离线字幕转录工具。它使用 Tauri 2 + React/TypeScript 构建桌面界面，使用常驻 Python Worker 调用 `faster-whisper`/CTranslate2 推理，并输出 TXT、Markdown 和带真实片段时间戳的 SRT。
+
+它不是在线网页服务：媒体文件和转录结果留在本机，生产桌面不启动 localhost 服务，也不依赖账号或后端。运行时需要本地 Whisper 模型；目标发布环境还需要兼容的 NVIDIA 驱动/GPU。
+
+四种预设为：`cn` 中文标准、`cn2` 中文防幻觉、`en` 英文标准、`en2` 英文防幻觉。CLI、桌面界面和 Web 参数展示都从 `src/whisper_subtitle/domain/presets.py` 的同一注册表派生，避免界面参数与实际推理参数漂移。
+
+默认情况下，结果会写到输入媒体旁的 `Text`、`Markdown`、`SRT` 文件夹。开发者可以先运行 `python -m whisper_subtitle check` 检查依赖、CUDA 和模型路径，再使用 `corepack pnpm desktop:dev` 启动桌面开发环境。
+
+## License
+
+This repository currently does not include a license file. Redistribution and reuse are not granted unless the maintainer provides separate permission.
