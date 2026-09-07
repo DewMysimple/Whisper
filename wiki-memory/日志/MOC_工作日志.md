@@ -3,7 +3,7 @@ type: moc
 status: active
 kind: process
 importance: high
-updated: 2026-08-24
+updated: 2026-09-07
 topic: work-log-index
 source_logs: []
 supersedes: null
@@ -15,6 +15,8 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-07 | maintenance | - | archived | git-commit-push-convention | [[日志/2026-09-07-建立修改后提交推送约定.md|建立修改后提交推送约定]] |
+| 2026-09-07 | ui | - | active | transcription-workspace-spacing | [[日志/2026-09-07-修复转录工作台参数区间距.md|修复转录工作台参数区间距]] |
 | 2026-08-24 | maintenance | - | archived | git-remote-configuration | [[日志/2026-08-24-配置GitHub远程仓库.md|配置 GitHub 远程仓库]] |
 | 2026-08-24 | maintenance | - | active | repository-agent-state-cleanup | [[日志/2026-08-24-清理本地Agent工具状态.md|清理本地 Agent 工具状态]] |
 | 2026-08-24 | discussion | - | archived | architecture-maintainability-review | [[日志/2026-08-24-架构维护性评估.md|WhisperSubtitle 架构维护性评估]] |
