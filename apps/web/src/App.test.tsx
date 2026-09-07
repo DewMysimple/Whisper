@@ -61,7 +61,7 @@ describe('desktop workspace', () => {
     expect(await screen.findByText('七月产品会议')).toBeInTheDocument();
     expect(screen.getByLabelText('待转录媒体队列')).toHaveTextContent('共 8 个媒体文件');
 
-    await user.click(screen.getByRole('button', { name: '查看并修改模型参数' }));
+    await user.click(screen.getByRole('button', { name: /查看并修改当前模型与模式/ }));
     const beamSize = await screen.findByRole('spinbutton', { name: 'Beam size' });
     await user.clear(beamSize);
     await user.type(beamSize, '6');
@@ -119,7 +119,7 @@ describe('desktop workspace', () => {
     render(<App />);
     const presetPanel = screen.getByRole('heading', { name: '文本识别模式' }).closest('section');
     expect(presetPanel).not.toBeNull();
-    await user.click(screen.getByRole('button', { name: '查看并修改模型参数' }));
+    await user.click(screen.getByRole('button', { name: /查看并修改当前模型与模式/ }));
 
     const strategy = await screen.findByRole('group', { name: '识别策略' });
     await user.click(within(strategy).getByRole('button', { name: '中文细节增强' }));

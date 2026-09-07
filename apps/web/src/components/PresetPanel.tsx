@@ -55,21 +55,16 @@ export function PresetPanel() {
         ))}
       </div>
 
-      <div className="preset-parameter-link">
-        <span>
-          {isCustom ? '当前模型与模式使用自定义参数。' : '当前模型与模式使用正式默认参数。'}
-        </span>
-        <button
-          className="secondary-button"
-          onClick={() => {
-            setActiveView('models');
-            setModelWorkspaceTab('parameters');
-          }}
-          type="button"
-        >
-          查看并修改模型参数
-        </button>
-      </div>
+      <button
+        className="preset-parameter-link"
+        onClick={() => {
+          setActiveView('models');
+          setModelWorkspaceTab('parameters');
+        }}
+        type="button"
+      >
+        <span>查看并修改当前模型与模式使用{isCustom ? '自定义参数' : '正式默认参数'}</span>
+      </button>
     </section>
   );
 }

@@ -3,10 +3,11 @@ type: decision
 status: active
 kind: ui
 importance: high
-updated: 2026-08-23
+updated: 2026-09-07
 topic: ui-cross-stage-gate
 source_logs:
   - "[[日志/2026-08-23-项目记忆重建]]"
+  - "[[日志/2026-09-07-修复SRT切换碎片与参数入口]]"
 supersedes: null
 ---
 
@@ -25,7 +26,7 @@ supersedes: null
 
 ## 当前基线
 
-`UI-2026-07-28-R03` 是已记录的反向同步快照，但当前相关工程改动仍处于工作树状态；下一次正式 UI 修改编号为 32。
+`UI-2026-07-28-R03` 是已记录的反向同步快照；第 32 次正式 UI 修改已按用户截图差异完成并通过桌面验收，下一次正式 UI 修改编号为 33。
 
 ## 来源
 

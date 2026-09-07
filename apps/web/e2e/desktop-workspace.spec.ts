@@ -23,6 +23,13 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
     });
   const transcript = await measure();
   expect(transcript.source.height).toBeCloseTo(transcript.output.height, 1);
+  const parameterLink = page.locator(
+    '.preset-panel:not(.subtitle-profile-panel) .preset-parameter-link',
+  );
+  await expect(parameterLink).toHaveRole('button');
+  await expect(parameterLink.locator('button')).toHaveCount(0);
+  await expect(parameterLink).toContainText('查看并修改当前模型与模式使用正式默认参数');
+  await expect(parameterLink).toHaveCSS('justify-content', 'center');
 
   const intakeRatio = await page.evaluate(() => {
     const local = document.querySelector('.drop-zone')!.getBoundingClientRect();
@@ -39,6 +46,8 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   const subtitle = await measure();
   expect(subtitle.source.height).toBeCloseTo(subtitle.output.height, 1);
   expect(subtitle.preset.height).toBeCloseTo(subtitle.launch.height, 1);
+  expect(subtitle.preset.height).toBeCloseTo(transcript.preset.height, 1);
+  expect(subtitle.launch.height).toBeCloseTo(transcript.launch.height, 1);
   await expect(
     page.locator('.preset-panel:not(.subtitle-profile-panel) .inference-parameter-editor'),
   ).toHaveCount(0);
@@ -57,7 +66,7 @@ test('freezes the optional recognition strategies in the Chinese V3 profile', as
     .locator('.preset-panel:not(.subtitle-profile-panel) .preset-card')
     .filter({ hasText: '中文防幻觉' })
     .click();
-  await page.getByRole('button', { name: '查看并修改模型参数' }).click();
+  await page.getByRole('button', { name: /查看并修改当前模型与模式/ }).click();
   const strategy = page.getByRole('group', { name: '识别策略' });
   await expect(strategy).toBeVisible();
   await strategy.getByRole('button', { name: '复杂中英混合' }).click();
@@ -148,7 +157,7 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   await page.getByRole('button', { name: '添加文件夹' }).click();
   await expect(page.getByLabel('待转录媒体队列')).toContainText('共 8 个媒体文件');
 
-  await page.getByRole('button', { name: '查看并修改模型参数' }).click();
+  await page.getByRole('button', { name: /查看并修改当前模型与模式/ }).click();
   const beamSize = page.getByRole('spinbutton', { name: 'Beam size' });
   await beamSize.fill('6');
   await expect(page.getByText('派生自定义')).toBeVisible();
@@ -268,7 +277,7 @@ test('supports workspace navigation, theme and configuration export', async ({
       .first()
       .evaluate((element) => getComputedStyle(element).minHeight),
   ).resolves.toBe('98px');
-  await page.getByRole('button', { name: '查看并修改模型参数' }).click();
+  await page.getByRole('button', { name: /查看并修改当前模型与模式/ }).click();
   await expect(
     page
       .locator('.parameter-grid')
@@ -393,7 +402,7 @@ test('supports workspace navigation, theme and configuration export', async ({
     page.locator('html').evaluate((element) => element.style.getPropertyValue('--log-font-size')),
   ).resolves.toBe('12px');
   await page.getByRole('button', { name: '转录工作台' }).click();
-  await expect(page.getByRole('button', { name: '查看并修改模型参数' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /查看并修改当前模型与模式/ })).toBeVisible();
   await expect(
     page
       .locator('.preset-panel')
@@ -455,7 +464,7 @@ test('supports workspace navigation, theme and configuration export', async ({
   await page.getByRole('button', { name: '增大日志字号' }).click();
   await expect(page.getByRole('group', { name: '日志字号' })).toContainText('13px');
   await page.getByRole('button', { name: '转录工作台' }).click();
-  await expect(page.getByRole('button', { name: '查看并修改模型参数' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /查看并修改当前模型与模式/ })).toBeVisible();
   await expect(
     page
       .locator('.preset-panel')

@@ -6451,14 +6451,6 @@ button:active:not(:disabled) {
   height: 100%;
 }
 
-.workspace-grid[data-profile-mode='subtitle'] .preset-panel {
-  padding-bottom: calc(22px + var(--content-space-bump) + 3px);
-}
-
-.workspace-grid[data-profile-mode='subtitle'] .launch-card {
-  padding-bottom: 3px;
-}
-
 .directory-path-input {
   position: relative;
   display: grid;
@@ -8319,20 +8311,45 @@ button:active:not(:disabled) {
 
 .preset-parameter-link {
   display: flex;
+  width: 100%;
   min-width: 0;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 14px;
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 13px;
   background: color-mix(in srgb, var(--surface-raised) 78%, transparent);
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 90ms ease-out;
+}
+
+.preset-parameter-link:hover,
+.preset-parameter-link:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface-raised));
+}
+
+.preset-parameter-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 68%, white);
+  outline-offset: 3px;
+}
+
+.preset-parameter-link:active:not(:disabled) {
+  transform: scale(0.995);
 }
 
 .preset-parameter-link > span {
   color: var(--text-muted);
   font-size: max(11px, calc(var(--ui-font-size) - 2px));
   line-height: 1.45;
+  text-align: center;
 }
 
 .model-parameter-panel.inference-parameter-editor {
@@ -8533,7 +8550,7 @@ button:active:not(:disabled) {
 }
 
 .parameter-segmented button:active,
-.preset-parameter-link button:active,
+.preset-parameter-link:active:not(:disabled),
 .parameter-heading-actions button:active {
   transform: scale(0.97);
   transition: transform 100ms ease-out;
@@ -8628,7 +8645,6 @@ button:active:not(:disabled) {
     grid-template-columns: 1fr;
   }
 
-  .preset-parameter-link,
   .model-parameter-panel .parameter-heading,
   .parameter-heading-actions {
     align-items: stretch;
@@ -8646,13 +8662,13 @@ button:active:not(:disabled) {
 
 @media (prefers-reduced-motion: reduce) {
   .parameter-segmented button,
-  .preset-parameter-link button,
+  .preset-parameter-link,
   .parameter-heading-actions button {
     transition: none;
   }
 
   .parameter-segmented button:active,
-  .preset-parameter-link button:active,
+  .preset-parameter-link:active:not(:disabled),
   .parameter-heading-actions button:active {
     transform: none;
   }
@@ -8888,7 +8904,7 @@ output,
 .preset-parameter-link {
   min-height: 50px;
   margin-top: var(--space-3);
-  padding-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
 }
 
 .launch-card {
