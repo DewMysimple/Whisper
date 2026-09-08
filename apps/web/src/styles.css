@@ -5080,6 +5080,24 @@ textarea:focus {
   color: color-mix(in srgb, var(--accent) 70%, var(--text-muted));
 }
 
+.subtitle-parameter-field > .parameter-field-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.subtitle-parameter-field > .parameter-field-label > span {
+  min-width: 0;
+}
+
+.subtitle-parameter-field > .parameter-field-label > em {
+  flex: 0 0 auto;
+  margin-left: auto;
+  text-align: right;
+}
+
 .srt-format-summary {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

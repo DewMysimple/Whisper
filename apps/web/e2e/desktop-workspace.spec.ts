@@ -52,6 +52,19 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   expect(subtitle.preset.height).toBeCloseTo(transcript.preset.height, 1);
   expect(subtitle.launch.height).toBeCloseTo(transcript.launch.height, 1);
   await expect(
+    page.locator('.subtitle-parameter-field > .parameter-field-label').first(),
+  ).toHaveCSS('display', 'flex');
+  const subtitleUnitRightGaps = await page
+    .locator('.subtitle-parameter-field > .parameter-field-label')
+    .evaluateAll((labels) =>
+      labels.map((label) => {
+        const unit = label.querySelector('em');
+        if (!unit) return Number.POSITIVE_INFINITY;
+        return Math.abs(label.getBoundingClientRect().right - unit.getBoundingClientRect().right);
+      }),
+    );
+  expect(Math.max(...subtitleUnitRightGaps)).toBeLessThan(1);
+  await expect(
     page.locator('.preset-panel:not(.subtitle-profile-panel) .inference-parameter-editor'),
   ).toHaveCount(0);
   expect(subtitle.subtitlePanel.height).toBeGreaterThan(transcript.subtitlePanel.height);

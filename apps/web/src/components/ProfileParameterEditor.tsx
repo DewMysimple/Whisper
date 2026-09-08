@@ -512,8 +512,9 @@ export function SubtitleParameterEditor({ onRestore }: { onRestore: () => void }
       <div className="parameter-grid subtitle-parameter-grid">
         {SUBTITLE_FIELDS.map((field) => (
           <label className="parameter-field subtitle-parameter-field" key={field.key}>
-            <span>
-              {field.label} <em>{field.unit}</em>
+            <span className="parameter-field-label">
+              <span>{field.label}</span>
+              <em>{field.unit}</em>
             </span>
             <input
               aria-label={field.label}
