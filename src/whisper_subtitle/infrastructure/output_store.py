@@ -171,7 +171,7 @@ def _configured_plan(media: Path, policy: Mapping[str, object]) -> OutputPlan:
         if srt_directory is None:
             srt_directory = media.parent / "SRT"
         primary_srt = srt_directory / f"{media.stem}.srt"
-        primary_srt_txt = srt_directory / f"{media.stem}.txt"
+        primary_srt_txt = None
     else:
         primary_srt = None
         primary_srt_txt = None

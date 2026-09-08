@@ -39,6 +39,11 @@ export function LaunchCard() {
   const hasInvalidInput = inputs.some((input) => !input.valid);
   const needsOutputRoot = output.mode === 'custom' && output.rootDirectory === null;
   const hasOutputTarget = output.txtEnabled || output.markdownEnabled || output.srtEnabled;
+  const selectedOutputFormats =
+    profileMode === 'subtitle'
+      ? [output.srtEnabled ? 'SRT' : null, output.txtEnabled ? 'TXT' : null]
+      : [output.txtEnabled ? 'TXT' : null, output.markdownEnabled ? 'MD' : null];
+  const outputSummary = selectedOutputFormats.filter((format) => format !== null).join(' + ');
   const canStart =
     inputs.length > 0 &&
     !hasInvalidInput &&
@@ -112,8 +117,7 @@ export function LaunchCard() {
               <span>
                 版本：{preset.label}
                 {Object.keys(overrides).length > 0 ? '（自定义参数）' : ''} · 输出：
-                {profileMode === 'subtitle' ? 'SRT 字幕 + 时间戳 TXT' : 'TXT / MD 文本'} ·{' '}
-                {transcriptionTaskLabel(parameters.task)} ·{' '}
+                {outputSummary} · {transcriptionTaskLabel(parameters.task)} ·{' '}
                 {recognitionStrategy === 'mixed_zh_en'
                   ? '复杂中英混合'
                   : recognitionStrategy === 'zh_detail_review'
@@ -135,7 +139,7 @@ export function LaunchCard() {
           {startingTask
             ? '正在准备本地模型…'
             : profileMode === 'subtitle'
-              ? '开始生成 SRT 与时间戳 TXT'
+              ? `开始生成 ${outputSummary}`
               : '开始本地转录'}
           <ChevronRight size={17} />
         </button>
@@ -209,9 +213,7 @@ export function LaunchCard() {
         <dl>
           <div>
             <dt>当前工作区</dt>
-            <dd>
-              {profileMode === 'subtitle' ? 'SRT 字幕 + 时间戳 TXT' : 'TXT / Markdown 文本识别'}
-            </dd>
+            <dd>{profileMode === 'subtitle' ? outputSummary : 'TXT / Markdown 文本识别'}</dd>
           </div>
           <div>
             <dt>转录版本</dt>

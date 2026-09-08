@@ -346,7 +346,13 @@ describe('desktop workspace', () => {
     await user.click(within(subtitlePanel!).getByRole('button', { name: /中文防幻觉/ }));
 
     expect(within(subtitlePanel!).getByText('当前输出 SRT')).toBeInTheDocument();
-    expect(screen.getByLabelText('当前 SRT 输出摘要')).toHaveTextContent('SRT 字幕');
+    const srtOutput = screen.getByRole('checkbox', { name: '生成 SRT 格式' });
+    const txtOutput = screen.getByRole('checkbox', { name: '生成 TXT 格式' });
+    expect(srtOutput).toBeChecked();
+    expect(txtOutput).not.toBeChecked();
+    await user.click(txtOutput);
+    expect(srtOutput).toBeChecked();
+    expect(txtOutput).toBeChecked();
     expect(screen.getByRole('spinbutton', { name: '每行最多字符' })).toHaveValue(18);
     expect(screen.getByRole('spinbutton', { name: '每条最多行数' })).toHaveValue(1);
 

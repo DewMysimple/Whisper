@@ -716,7 +716,17 @@ test('creates an SRT task from the independent subtitle profile', async ({ page 
     .locator('xpath=ancestor::section');
   await subtitlePanel.getByRole('button', { name: /中文防幻觉/ }).click();
   await expect(subtitlePanel.getByText('当前输出 SRT')).toBeVisible();
-  await expect(page.getByLabel('当前 SRT 输出摘要')).toContainText('1 行 × 每行 18 字符');
+  await expect(page.locator('.output-format-copy')).toHaveCount(0);
+  await expect(page.locator('.output-format-list .output-format-option')).toHaveCount(2);
+  const srtOutput = page.getByRole('checkbox', { name: '生成 SRT 格式' });
+  const txtOutput = page.getByRole('checkbox', { name: '生成 TXT 格式' });
+  await expect(srtOutput).toBeChecked();
+  await expect(txtOutput).not.toBeChecked();
+  await txtOutput.check();
+  await expect(txtOutput).toBeChecked();
+  await expect(page.getByRole('button', { name: '开始生成 SRT + TXT' })).toHaveCount(1);
+  await txtOutput.uncheck();
+  await expect(page.getByRole('button', { name: '开始生成 SRT' })).toHaveCount(1);
   await expect(page.getByRole('spinbutton', { name: 'Compression ratio' })).toHaveCount(0);
   await expect(page.getByRole('spinbutton', { name: 'Log probability' })).toHaveCount(0);
   await expect(page.getByRole('spinbutton', { name: 'VAD 最短静音' })).toHaveCount(0);
@@ -726,8 +736,8 @@ test('creates an SRT task from the independent subtitle profile', async ({ page 
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('srt-profile-custom.png') });
 
   await page.getByRole('button', { name: '选择媒体文件' }).click();
-  await expect(page.getByRole('button', { name: /开始生成 SRT 与时间戳 TXT/ })).toBeEnabled();
-  await page.getByRole('button', { name: /开始生成 SRT 与时间戳 TXT/ }).click();
+  await expect(page.getByRole('button', { name: '开始生成 SRT' })).toBeEnabled();
+  await page.getByRole('button', { name: '开始生成 SRT' }).click();
   await expect(page.getByRole('heading', { name: '性能监控' })).toBeVisible();
   await expect(
     page.getByRole('button', { name: /任务监控与记录/ }).locator('.nav-count'),

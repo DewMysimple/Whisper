@@ -637,7 +637,7 @@ def test_worker_writes_custom_txt_lines_and_markdown_paragraphs(tmp_path):
     ) == markdown.read_text(encoding="utf-8")
 
 
-def test_worker_writes_timestamped_srt_from_existing_model_segments(tmp_path):
+def test_worker_writes_only_selected_srt_output(tmp_path):
     media = make_media(tmp_path / "input", "subtitle.wav")
     root = tmp_path / "outputs"
     policy = {
@@ -670,13 +670,53 @@ def test_worker_writes_timestamped_srt_from_existing_model_segments(tmp_path):
         "1\n00:00:00,000 --> 00:00:01,000\nWorker transcript.\n"
     )
     timestamped_txt = root / "subtitle.txt"
-    assert timestamped_txt.read_bytes() == srt.read_bytes()
+    assert not timestamped_txt.exists()
     completed = next(
         event
         for event in events
         if isinstance(event, EventMessage) and event.event is EventCode.TASK_COMPLETED
     )
-    assert set(completed.data["outputs"]) == {str(srt), str(timestamped_txt)}
+    assert completed.data["outputs"] == (str(srt),)
+
+
+def test_worker_writes_independent_srt_and_plain_txt_outputs(tmp_path):
+    media = make_media(tmp_path / "input", "subtitle.wav")
+    root = tmp_path / "outputs"
+    policy = {
+        "mode": "custom",
+        "root_directory": str(root),
+        "txt": {"enabled": True},
+        "markdown": {"enabled": False},
+        "srt": {"enabled": True},
+        "subtitle": {
+            "max_characters_per_line": 42,
+            "max_lines_per_cue": 2,
+            "min_cue_duration_ms": 800,
+            "max_cue_duration_ms": 7000,
+            "max_characters_per_second": 20,
+            "cue_gap_ms": 80,
+        },
+        "preserve_source_txt": False,
+        "conflict_policy": "fail",
+    }
+    events = []
+    runtime = make_runtime(events, FakeEngine(), [], ["task-srt-txt"])
+    try:
+        runtime.handle_command(start_command("req-srt-txt", media, policy=policy))
+        assert runtime.wait_until_idle()
+    finally:
+        assert runtime.close(timeout=3)
+
+    srt = root / "subtitle.srt"
+    txt = root / "subtitle.txt"
+    assert srt.is_file()
+    assert txt.read_text(encoding="utf-8") == "Worker transcript.\n"
+    completed = next(
+        event
+        for event in events
+        if isinstance(event, EventMessage) and event.event is EventCode.TASK_COMPLETED
+    )
+    assert completed.data["outputs"] == (str(txt), str(srt))
 
 
 def test_output_conflict_fails_before_model_loading(tmp_path):

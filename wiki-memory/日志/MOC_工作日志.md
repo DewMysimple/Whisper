@@ -17,6 +17,7 @@ supersedes: null
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-08 | ui | - | archived | output-format-icon-controls | [[日志/2026-09-08-生成文件格式图标化.md|第 33 次修改（第 3 项）：生成文件格式图标化]] |
 | 2026-09-08 | ui | - | archived | remove-ui-help-prompts | [[日志/2026-09-08-删除界面问号与提示功能.md|第 33 次修改（第 1 项）：删除界面问号与提示功能]] |
+| 2026-09-08 | feature | - | archived | independent-srt-txt-output-selection | [[日志/2026-09-08-SRT输出格式独立选择.md|第 33 次修改（第 4 项）：SRT 输出格式独立选择]] |
 | 2026-09-08 | ui | - | archived | srt-parameter-unit-alignment | [[日志/2026-09-08-SRT参数单位右对齐.md|第 33 次修改（第 2 项）：SRT 参数单位右对齐]] |
 | 2026-09-07 | maintenance | - | archived | git-commit-push-convention | [[日志/2026-09-07-建立修改后提交推送约定.md|建立修改后提交推送约定]] |
 | 2026-09-07 | ui | - | active | transcription-workspace-spacing | [[日志/2026-09-07-修复转录工作台参数区间距.md|修复转录工作台参数区间距]] |

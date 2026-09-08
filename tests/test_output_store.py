@@ -319,7 +319,7 @@ def test_auto_rename_reserves_txt_and_markdown_with_one_suffix(tmp_path):
     assert plan.primary_md == root / "same (2).md"
 
 
-def test_srt_plan_pairs_subtitle_and_timestamped_txt_in_the_same_directory(tmp_path):
+def test_srt_plan_writes_only_the_subtitle_file_when_txt_is_disabled(tmp_path):
     media = tmp_path / "input" / "lesson.wav"
     media.parent.mkdir()
     media.write_bytes(b"fixture")
@@ -335,12 +335,12 @@ def test_srt_plan_pairs_subtitle_and_timestamped_txt_in_the_same_directory(tmp_p
     plan = output_store.build_configurable_output_plans([media], policy)[0]
 
     assert plan.primary_srt == media.parent / "SRT" / "lesson.srt"
-    assert plan.primary_srt_txt == media.parent / "SRT" / "lesson.txt"
+    assert plan.primary_srt_txt is None
     assert plan.primary_txt is None
     assert plan.backup_txt is None
 
 
-def test_srt_auto_rename_applies_one_suffix_to_both_companion_files(tmp_path):
+def test_srt_and_txt_targets_are_planned_independently(tmp_path):
     root = tmp_path / "output"
     root.mkdir()
     (root / "lesson.txt").write_text("existing", encoding="utf-8")
@@ -349,7 +349,7 @@ def test_srt_auto_rename_applies_one_suffix_to_both_companion_files(tmp_path):
     policy = {
         "mode": "custom",
         "root_directory": str(root),
-        "txt": {"enabled": False},
+        "txt": {"enabled": True},
         "markdown": {"enabled": False},
         "srt": {"enabled": True},
         "preserve_source_txt": False,
@@ -359,4 +359,5 @@ def test_srt_auto_rename_applies_one_suffix_to_both_companion_files(tmp_path):
     plan = output_store.build_configurable_output_plans([media], policy)[0]
 
     assert plan.primary_srt == root / "lesson (2).srt"
-    assert plan.primary_srt_txt == root / "lesson (2).txt"
+    assert plan.primary_srt_txt is None
+    assert plan.primary_txt == root / "lesson (2).txt"

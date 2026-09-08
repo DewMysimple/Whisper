@@ -5098,40 +5098,6 @@ textarea:focus {
   text-align: right;
 }
 
-.srt-format-summary {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  min-height: 74px;
-  padding: calc(11px + var(--content-space-bump));
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
-}
-
-.srt-format-summary span {
-  min-width: 0;
-}
-
-.srt-format-summary strong,
-.srt-format-summary small {
-  display: block;
-}
-
-.srt-format-summary small {
-  margin-top: 4px;
-  color: var(--text-muted);
-  line-height: 1.45;
-}
-
-.srt-format-summary em {
-  color: var(--success);
-  font-size: 0.78em;
-  font-style: normal;
-  font-weight: 700;
-}
-
 .file-badge.srt {
   color: var(--accent);
   background: var(--accent-soft);
@@ -5346,11 +5312,6 @@ textarea:focus {
   color: var(--accent);
 }
 
-.output-format-code.srt {
-  background: var(--blue-soft);
-  color: var(--blue);
-}
-
 .output-format-option input {
   min-height: 0;
   position: absolute;
@@ -5360,10 +5321,6 @@ textarea:focus {
   margin: 0;
   cursor: pointer;
   opacity: 0;
-}
-
-.output-format-check {
-  color: var(--green);
 }
 
 .output-copy-panel {

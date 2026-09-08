@@ -1,4 +1,4 @@
-import { Captions, Check, Copy, FolderOutput, Power, RotateCcw } from 'lucide-react';
+import { Copy, FolderOutput, Power, RotateCcw } from 'lucide-react';
 
 import { useWorkspace } from '../state/workspace';
 
@@ -10,17 +10,15 @@ export function OutputPanel() {
     (state) => state.restoreDefaultOutputDirectory,
   );
   const profileMode = useWorkspace((state) => state.profileMode);
-  const subtitleParameters = useWorkspace((state) => state.subtitleParameters);
   const finishAction = useWorkspace((state) => state.finishAction);
   const powerCapabilities = useWorkspace((state) => state.powerCapabilities);
   const setFinishAction = useWorkspace((state) => state.setFinishAction);
   const usesCustomLocation = output.mode === 'custom' && output.rootDirectory !== null;
-  const enabledDirectories =
-    profileMode === 'subtitle'
-      ? ['SRT']
-      : [output.txtEnabled ? 'Text' : null, output.markdownEnabled ? 'Markdown' : null].filter(
-          (directory): directory is string => directory !== null,
-        );
+  const enabledDirectories = [
+    profileMode === 'subtitle' && output.srtEnabled ? 'SRT' : null,
+    output.txtEnabled ? 'Text' : null,
+    profileMode === 'transcript' && output.markdownEnabled ? 'Markdown' : null,
+  ].filter((directory): directory is string => directory !== null);
   const directoryList = enabledDirectories.join('、');
   const locationDescription =
     directoryList.length === 0
@@ -78,7 +76,7 @@ export function OutputPanel() {
 
       <div className="output-section-heading output-format-heading">
         <strong>生成文件</strong>
-        <span>{profileMode === 'subtitle' ? '由 SRT 预设决定' : '至少选择一种格式'}</span>
+        <span>至少选择一种格式</span>
       </div>
       {profileMode === 'transcript' ? (
         <div className="output-format-list">
@@ -118,19 +116,34 @@ export function OutputPanel() {
           </label>
         </div>
       ) : (
-        <div className="output-format-option is-enabled is-fixed" aria-label="当前 SRT 输出摘要">
-          <span className="output-format-code srt">
-            <Captions size={16} />
-          </span>
-          <span className="output-format-copy">
-            <strong>SRT 字幕 + 时间戳 TXT</strong>
-            <small>
-              两个文件内容完全一致 · {subtitleParameters.max_lines_per_cue} 行 × 每行{' '}
-              {subtitleParameters.max_characters_per_line} 字符 ·{' '}
-              {subtitleParameters.max_characters_per_second} 字符/秒
-            </small>
-          </span>
-          <Check className="output-format-check" size={18} aria-label="已启用" />
+        <div className="output-format-list">
+          <label className={`output-format-option ${output.srtEnabled ? 'is-enabled' : ''}`}>
+            <span className="output-format-code" aria-hidden="true">
+              SRT
+            </span>
+            <input
+              aria-label="生成 SRT 格式"
+              checked={output.srtEnabled}
+              onChange={(event) => setOutput({ srtEnabled: event.target.checked })}
+              type="checkbox"
+            />
+          </label>
+          <label className={`output-format-option ${output.txtEnabled ? 'is-enabled' : ''}`}>
+            <span className="output-format-code" aria-hidden="true">
+              TXT
+            </span>
+            <input
+              aria-label="生成 TXT 格式"
+              checked={output.txtEnabled}
+              onChange={(event) =>
+                setOutput({
+                  txtEnabled: event.target.checked,
+                  preserveSourceTxt: event.target.checked ? output.preserveSourceTxt : false,
+                })
+              }
+              type="checkbox"
+            />
+          </label>
         </div>
       )}
 
