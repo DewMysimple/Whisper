@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-08 | ui | - | archived | output-format-icon-controls | [[日志/2026-09-08-生成文件格式图标化.md|第 33 次修改（第 3 项）：生成文件格式图标化]] |
 | 2026-09-08 | ui | - | archived | remove-ui-help-prompts | [[日志/2026-09-08-删除界面问号与提示功能.md|第 33 次修改（第 1 项）：删除界面问号与提示功能]] |
 | 2026-09-08 | ui | - | archived | srt-parameter-unit-alignment | [[日志/2026-09-08-SRT参数单位右对齐.md|第 33 次修改（第 2 项）：SRT 参数单位右对齐]] |
 | 2026-09-07 | maintenance | - | archived | git-commit-push-convention | [[日志/2026-09-07-建立修改后提交推送约定.md|建立修改后提交推送约定]] |

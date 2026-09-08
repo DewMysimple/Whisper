@@ -83,13 +83,11 @@ export function OutputPanel() {
       {profileMode === 'transcript' ? (
         <div className="output-format-list">
           <label className={`output-format-option ${output.txtEnabled ? 'is-enabled' : ''}`}>
-            <span className="output-format-code">TXT</span>
-            <span className="output-format-copy">
-              <strong>纯文本</strong>
-              <small>直接存入 Text 文件夹，适合编辑与后处理</small>
+            <span className="output-format-code" aria-hidden="true">
+              TXT
             </span>
             <input
-              aria-label="生成 TXT 纯文本"
+              aria-label="生成 TXT 格式"
               checked={output.txtEnabled}
               onChange={(event) =>
                 setOutput({
@@ -101,13 +99,11 @@ export function OutputPanel() {
             />
           </label>
           <label className={`output-format-option ${output.markdownEnabled ? 'is-enabled' : ''}`}>
-            <span className="output-format-code">MD</span>
-            <span className="output-format-copy">
-              <strong>Markdown</strong>
-              <small>直接存入 Markdown 文件夹，便于笔记软件使用</small>
+            <span className="output-format-code" aria-hidden="true">
+              MD
             </span>
             <input
-              aria-label="生成 Markdown 文本"
+              aria-label="生成 Markdown 格式"
               checked={output.markdownEnabled}
               onChange={(event) =>
                 setOutput({

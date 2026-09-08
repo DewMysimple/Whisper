@@ -5304,35 +5304,36 @@ textarea:focus {
 }
 
 .output-format-list {
-  display: grid;
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
 .output-format-option {
+  position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 11px 12px;
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--surface) 76%, var(--surface-raised));
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
   color: var(--text-muted);
 }
 
-.output-format-option.is-enabled {
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
-  background: color-mix(in srgb, var(--accent-soft) 36%, var(--surface));
+.output-format-option:focus-within .output-format-code {
+  outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  outline-offset: 2px;
 }
 
 .output-format-code {
   display: grid;
-  width: 34px;
-  height: 30px;
+  width: 56px;
+  height: 56px;
   place-items: center;
-  border-radius: 8px;
-  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 76%, var(--surface-raised));
   color: var(--text-muted);
   font-family: var(--mono);
   font-size: 9px;
@@ -5340,7 +5341,8 @@ textarea:focus {
 }
 
 .output-format-option.is-enabled .output-format-code {
-  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface));
   color: var(--accent);
 }
 
@@ -5349,32 +5351,15 @@ textarea:focus {
   color: var(--blue);
 }
 
-.output-format-copy {
-  min-width: 0;
-}
-
-.output-format-copy strong,
-.output-format-copy small {
-  display: block;
-}
-
-.output-format-copy strong {
-  color: var(--text);
-  font-size: 11px;
-}
-
-.output-format-copy small {
-  margin-top: 3px;
-  color: var(--text-muted);
-  font-size: 9px;
-  line-height: 1.4;
-}
-
 .output-format-option input {
-  width: 17px;
-  height: 17px;
   min-height: 0;
-  accent-color: var(--accent);
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  opacity: 0;
 }
 
 .output-format-check {
@@ -5486,7 +5471,6 @@ textarea:focus {
 
 .view-content .output-location-summary small,
 .view-content .output-path-value,
-.view-content .output-format-copy small,
 .view-content .output-format-code {
   font-size: calc(9px + var(--content-font-bump));
 }
@@ -5495,10 +5479,6 @@ textarea:focus {
 .view-content .output-location-reset {
   min-height: calc(36px + var(--content-control-bump));
   font-size: calc(10px + var(--content-font-bump));
-}
-
-.view-content .output-format-copy strong {
-  font-size: calc(11px + var(--content-font-bump));
 }
 
 .view-content .output-copy-heading strong {

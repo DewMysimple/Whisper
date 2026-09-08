@@ -179,7 +179,10 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   await expect(page.getByText('派生自定义')).toBeVisible();
   await page.getByRole('button', { name: '更换识别模式' }).click();
 
-  await page.getByText('Markdown', { exact: true }).click();
+  await expect(page.locator('.output-format-copy')).toHaveCount(0);
+  await expect(page.locator('.output-format-list .output-format-option')).toHaveCount(2);
+  await expect(page.getByRole('checkbox', { name: '生成 TXT 格式' })).toBeChecked();
+  await page.getByRole('checkbox', { name: '生成 Markdown 格式' }).check();
   await expect(page.getByText('跟随媒体')).toBeVisible();
   await page.getByRole('button', { name: '选择输出文件夹' }).click();
   await expect(page.getByText('D:\\字幕项目\\2026-07')).toBeVisible();

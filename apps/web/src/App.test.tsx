@@ -72,7 +72,7 @@ describe('desktop workspace', () => {
     expect(screen.getByRole('spinbutton', { name: 'Beam size' })).toHaveValue(6);
     await user.click(screen.getByRole('button', { name: '更换识别模式' }));
 
-    await user.click(screen.getByText('Markdown'));
+    await user.click(screen.getByRole('checkbox', { name: '生成 Markdown 格式' }));
     expect(screen.getByText('跟随媒体')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '选择输出文件夹' }));
     expect(screen.getByText('D:\\字幕项目\\2026-07')).toBeInTheDocument();
