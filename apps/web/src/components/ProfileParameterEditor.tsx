@@ -228,12 +228,9 @@ export function InferenceParameterEditor() {
   const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
   const setParameter = useWorkspace((state) => state.setParameter);
   const setTemperatureMode = useWorkspace((state) => state.setTemperatureMode);
-  const recognitionStrategy = useWorkspace((state) => state.recognitionStrategy);
-  const setRecognitionStrategy = useWorkspace((state) => state.setRecognitionStrategy);
   const restorePreset = useWorkspace((state) => state.restorePreset);
   const setActiveView = useWorkspace((state) => state.setActiveView);
-  const chineseMode = selectedPresetId === 'cn' || selectedPresetId === 'cn2';
-  const isCustom = Object.keys(overrides).length > 0 || recognitionStrategy !== 'stable_primary';
+  const isCustom = Object.keys(overrides).length > 0;
   const temperatureMode = Object.prototype.hasOwnProperty.call(overrides, 'temperature')
     ? 'fixed'
     : 'model';
@@ -295,51 +292,6 @@ export function InferenceParameterEditor() {
             <small>控制本地模型如何生成候选文本。</small>
           </div>
         </div>
-        {chineseMode && (
-          <div className="recognition-strategy-control">
-            <div>
-              <strong>识别策略</strong>
-              <small>增强模式会增加耗时，只在证据充分时改写正文。</small>
-            </div>
-            <div
-              className="parameter-segmented recognition-strategy-segmented"
-              role="group"
-              aria-label="识别策略"
-            >
-              <button
-                aria-pressed={recognitionStrategy === 'stable_primary'}
-                className={recognitionStrategy === 'stable_primary' ? 'is-active' : ''}
-                onClick={() => setRecognitionStrategy('stable_primary')}
-                type="button"
-              >
-                稳定主语言
-              </button>
-              <button
-                aria-pressed={recognitionStrategy === 'mixed_zh_en'}
-                className={recognitionStrategy === 'mixed_zh_en' ? 'is-active' : ''}
-                onClick={() => setRecognitionStrategy('mixed_zh_en')}
-                type="button"
-              >
-                复杂中英混合
-              </button>
-              <button
-                aria-pressed={recognitionStrategy === 'zh_detail_review'}
-                className={recognitionStrategy === 'zh_detail_review' ? 'is-active' : ''}
-                onClick={() => setRecognitionStrategy('zh_detail_review')}
-                type="button"
-              >
-                中文细节增强
-              </button>
-            </div>
-            <small>
-              {recognitionStrategy === 'mixed_zh_en'
-                ? '先完成稳定中文识别，再对短语音块做本地语言侦测与英文复识别；不确定候选只进入复核记录。'
-                : recognitionStrategy === 'zh_detail_review'
-                  ? '耗时显著增加；Hotwords 仅作识别提示。局部候选不确定时不会写入正文，只进入复核记录。'
-                  : '整段使用稳定主语言策略，保持当前速度和既有结果。'}
-            </small>
-          </div>
-        )}
         <div className="parameter-task-row">
           <label className="parameter-field">
             <span>

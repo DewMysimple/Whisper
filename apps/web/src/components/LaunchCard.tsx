@@ -32,7 +32,6 @@ export function LaunchCard() {
   const profileMode = useWorkspace((state) => state.profileMode);
   const activeView = useWorkspace((state) => state.activeView);
   const selectedModelId = useWorkspace((state) => state.selectedModelId);
-  const recognitionStrategy = useWorkspace((state) => state.recognitionStrategy);
   const pendingOverwrite = useWorkspace((state) => state.pendingOverwrite);
   const pendingShutdownStart = useWorkspace((state) => state.pendingShutdownStart);
   const [presetConfirmationOpen, setPresetConfirmationOpen] = useState(false);
@@ -118,12 +117,7 @@ export function LaunchCard() {
                 版本：{preset.label}
                 {Object.keys(overrides).length > 0 ? '（自定义参数）' : ''} · 输出：
                 {outputSummary} · {transcriptionTaskLabel(parameters.task)} ·{' '}
-                {recognitionStrategy === 'mixed_zh_en'
-                  ? '复杂中英混合'
-                  : recognitionStrategy === 'zh_detail_review'
-                    ? '中文细节增强'
-                    : '稳定主语言'}{' '}
-                · {formatDurationSummary(durationSummary)}
+                {formatDurationSummary(durationSummary)}
               </span>
               <span>模型：{getModelLabel(selectedModelId)} · 本地离线处理</span>
             </>

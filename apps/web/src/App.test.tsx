@@ -105,43 +105,19 @@ describe('desktop workspace', () => {
     scrollTo.mockRestore();
   });
 
-  it('persists the complex mixed-language strategy only for Chinese V3 profiles', async () => {
+  it('keeps retired recognition strategies out of parameter configuration', async () => {
     const user = userEvent.setup();
-    act(() => {
-      useWorkspace.setState({
-        activeView: 'workspace',
-        selectedModelId: 'large-v3-turbo',
-        selectedPresetId: 'cn2',
-        recognitionStrategy: 'stable_primary',
-        recognitionStrategyProfiles: {},
-      });
-    });
     render(<App />);
+    await user.click(screen.getByRole('button', { name: '转录工作台' }));
     const presetPanel = screen.getByRole('heading', { name: '文本识别模式' }).closest('section');
     expect(presetPanel).not.toBeNull();
+    await user.click(within(presetPanel!).getByRole('button', { name: /中文防幻觉/ }));
     await user.click(screen.getByRole('button', { name: /查看并修改当前模型与模式/ }));
 
-    const strategy = await screen.findByRole('group', { name: '识别策略' });
-    await user.click(within(strategy).getByRole('button', { name: '中文细节增强' }));
-    expect(useWorkspace.getState().recognitionStrategy).toBe('zh_detail_review');
-    expect(useWorkspace.getState().recognitionStrategyProfiles).toEqual({
-      'large-v3-turbo:cn2': 'zh_detail_review',
-    });
-
-    await user.click(screen.getByRole('button', { name: '更换识别模式' }));
-    expect(screen.getByText(/^版本：/)).toHaveTextContent('中文细节增强');
-    const restoredPresetPanel = screen
-      .getByRole('heading', { name: '文本识别模式' })
-      .closest('section');
-    await user.click(within(restoredPresetPanel!).getByRole('button', { name: /英文防幻觉/ }));
+    expect(screen.queryByRole('group', { name: '识别策略' })).not.toBeInTheDocument();
+    expect(screen.queryByText('复杂中英混合')).not.toBeInTheDocument();
+    expect(screen.queryByText('中文细节增强')).not.toBeInTheDocument();
     expect(useWorkspace.getState().recognitionStrategy).toBe('stable_primary');
-    act(() => {
-      useWorkspace.setState({
-        selectedPresetId: 'en_v1',
-        recognitionStrategy: 'stable_primary',
-        finishAction: 'none',
-      });
-    });
   });
 
   it('requires a separate shutdown confirmation after the standard preset warning', async () => {
@@ -149,9 +125,12 @@ describe('desktop workspace', () => {
     useWorkspace.setState({
       activeView: 'workspace',
       inputs: [],
+      selectedPresetId: 'en_v1',
       finishAction: 'none',
       pendingOverwrite: null,
       pendingShutdownStart: null,
+      shutdownArmed: false,
+      startingTask: false,
     });
     render(<App />);
     await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
@@ -197,6 +176,16 @@ describe('desktop workspace', () => {
 
   it('routes Ctrl+Enter through the standard preset confirmation', async () => {
     const user = userEvent.setup();
+    useWorkspace.setState({
+      activeView: 'workspace',
+      inputs: [],
+      selectedPresetId: 'en_v1',
+      finishAction: 'none',
+      pendingOverwrite: null,
+      pendingShutdownStart: null,
+      shutdownArmed: false,
+      startingTask: false,
+    });
     render(<App />);
     await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
 

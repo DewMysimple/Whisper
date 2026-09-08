@@ -17,8 +17,7 @@ import {
   isV3ModelId,
   parameterProfileKey,
   sanitizeProfileOverrides,
-  profileRecognitionStrategy,
-  withRecognitionStrategy,
+  DEFAULT_RECOGNITION_STRATEGY,
   translationTaskSupported,
   type ParameterProfiles,
   type RecognitionStrategyProfiles,
@@ -180,24 +179,6 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
     value.recognitionStrategyProfiles,
   );
   if (parsedRecognitionProfiles === null) return null;
-  let recognitionStrategyProfiles = parsedRecognitionProfiles;
-  if (
-    value.recognitionStrategyProfiles === undefined &&
-    (value.recognitionStrategy === 'mixed_zh_en' ||
-      value.recognitionStrategy === 'zh_detail_review')
-  ) {
-    recognitionStrategyProfiles = withRecognitionStrategy(
-      recognitionStrategyProfiles,
-      selectedModelId,
-      value.selectedPresetId,
-      value.recognitionStrategy,
-    );
-  }
-  const recognitionStrategy = profileRecognitionStrategy(
-    recognitionStrategyProfiles,
-    selectedModelId,
-    value.selectedPresetId,
-  );
   const parameterValue = isRecord(value.parameters) ? value.parameters : {};
   const importedParameterSnapshot = {
     ...getPreset(value.selectedPresetId, selectedModelId).parameters,
@@ -261,8 +242,8 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
     parameters,
     overrides: currentOverrides,
     parameterProfiles,
-    recognitionStrategy,
-    recognitionStrategyProfiles,
+    recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
+    recognitionStrategyProfiles: {},
     subtitleParameters,
     subtitleOverrides,
     output,
@@ -423,7 +404,6 @@ function parseParameterProfiles(value: unknown): ParameterProfiles | null {
 function parseRecognitionStrategyProfiles(value: unknown): RecognitionStrategyProfiles | null {
   if (value === undefined) return {};
   if (!isRecord(value)) return null;
-  const profiles: RecognitionStrategyProfiles = {};
   for (const [key, strategy] of Object.entries(value)) {
     if (!/^(large-v3|large-v3-turbo):(cn|cn2|en_v1|en_v2)$/.test(key)) return null;
     if (
@@ -432,11 +412,8 @@ function parseRecognitionStrategyProfiles(value: unknown): RecognitionStrategyPr
       strategy !== 'stable_primary'
     )
       return null;
-    if (/:(cn|cn2)$/.test(key) && (strategy === 'mixed_zh_en' || strategy === 'zh_detail_review')) {
-      profiles[key as keyof RecognitionStrategyProfiles] = strategy;
-    }
   }
-  return profiles;
+  return {};
 }
 
 function isPromptText(value: unknown): value is string {

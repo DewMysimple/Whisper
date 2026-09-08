@@ -822,6 +822,7 @@ describe('workspace terminal event notifications', () => {
           },
         ],
         modelId: 'large-v3-turbo',
+        recognitionStrategy: 'mixed_zh_en',
         hardware: {
           mode: 'auto',
           gpuDeviceIndex: 0,
@@ -877,6 +878,7 @@ describe('workspace terminal event notifications', () => {
       expect.arrayContaining([expect.objectContaining({ path: completedPath })]),
     );
     expect(start.mock.calls[0]?.[1]).toBeUndefined();
+    expect(start.mock.calls[0]?.[0].recognitionStrategy).toBe('stable_primary');
     expect(useWorkspace.getState()).toMatchObject({
       activeView: 'performance',
       finishAction: 'none',

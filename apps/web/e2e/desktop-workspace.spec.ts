@@ -109,30 +109,18 @@ test('uses the same subtle press feedback for selectable cards', async ({ page }
   await expect(markdownFormat.locator('.output-format-code')).toHaveCSS('outline-style', 'none');
 });
 
-test('freezes the optional recognition strategies in the Chinese V3 profile', async ({ page }) => {
+test('hides retired recognition strategies from parameter configuration', async ({ page }) => {
   await page
     .locator('.preset-panel:not(.subtitle-profile-panel) .preset-card')
     .filter({ hasText: '中文防幻觉' })
     .click();
   await page.getByRole('button', { name: /查看并修改当前模型与模式/ }).click();
-  const strategy = page.getByRole('group', { name: '识别策略' });
-  await expect(strategy).toBeVisible();
-  await strategy.getByRole('button', { name: '复杂中英混合' }).click();
-  await expect(strategy.getByRole('button', { name: '复杂中英混合' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await expect(page.getByText(/先完成稳定中文识别/)).toBeVisible();
-
-  await strategy.getByRole('button', { name: '中文细节增强' }).click();
-  await expect(strategy.getByRole('button', { name: '中文细节增强' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await expect(page.getByText(/耗时显著增加/)).toBeVisible();
-
+  await expect(page.getByRole('group', { name: '识别策略' })).toHaveCount(0);
+  await expect(page.getByText('复杂中英混合')).toHaveCount(0);
+  await expect(page.getByText('中文细节增强')).toHaveCount(0);
   await page.getByRole('button', { name: '更换识别模式' }).click();
-  await expect(page.locator('.launch-summary')).toContainText('中文细节增强');
+  await expect(page.locator('.launch-summary')).not.toContainText('复杂中英混合');
+  await expect(page.locator('.launch-summary')).not.toContainText('中文细节增强');
 });
 
 test('locks model and hardware changes while queued or running work exists', async ({

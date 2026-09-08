@@ -129,7 +129,7 @@ describe('desktop workspace persistence', () => {
     expect(restored?.preferences.parameterProfiles['large-v3-turbo:en_v1']?.task).toBeUndefined();
   });
 
-  it('persists model-preset recognition strategy and normalizes unsupported presets', () => {
+  it('removes retired recognition strategies while importing preferences', () => {
     const mixed = {
       ...preferences,
       selectedPresetId: 'cn2' as const,
@@ -141,10 +141,8 @@ describe('desktop workspace persistence', () => {
     expect(importPreferences(exportPreferences(mixed))).toEqual(
       expect.objectContaining({
         selectedPresetId: 'cn2',
-        recognitionStrategy: 'mixed_zh_en',
-        recognitionStrategyProfiles: {
-          'large-v3-turbo:cn2': 'mixed_zh_en',
-        },
+        recognitionStrategy: 'stable_primary',
+        recognitionStrategyProfiles: {},
       }),
     );
 
@@ -167,10 +165,8 @@ describe('desktop workspace persistence', () => {
     };
     expect(importPreferences(exportPreferences(detail))).toEqual(
       expect.objectContaining({
-        recognitionStrategy: 'zh_detail_review',
-        recognitionStrategyProfiles: {
-          'large-v3-turbo:cn2': 'zh_detail_review',
-        },
+        recognitionStrategy: 'stable_primary',
+        recognitionStrategyProfiles: {},
       }),
     );
   });

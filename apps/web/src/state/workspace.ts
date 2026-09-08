@@ -41,13 +41,12 @@ import {
   type UiFontFamily,
 } from './persistence';
 import {
+  DEFAULT_RECOGNITION_STRATEGY,
   normalizePromptText,
   profileOverrides,
   profileParameters,
-  profileRecognitionStrategy,
   translationTaskSupported,
   withProfileOverrides,
-  withRecognitionStrategy,
   type ParameterProfiles,
   type RecognitionStrategyProfiles,
 } from './parameterProfiles';
@@ -313,7 +312,6 @@ export interface WorkspaceState {
   selectProfile(mode: ProfileMode, id: PresetId): void;
   setParameter<K extends keyof EditableParameters>(key: K, value: EditableParameters[K]): void;
   setTemperatureMode(mode: 'model' | 'fixed'): void;
-  setRecognitionStrategy(strategy: RecognitionStrategy): void;
   setSubtitleParameter<K extends keyof SubtitleParameters>(
     key: K,
     value: SubtitleParameters[K],
@@ -362,7 +360,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   parameters: { ...getPreset('en_v1').parameters },
   overrides: {},
   parameterProfiles: {},
-  recognitionStrategy: 'stable_primary',
+  recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
   recognitionStrategyProfiles: {},
   subtitleParameters: { ...getSubtitlePreset('en_v1').subtitleParameters },
   subtitleOverrides: {},
@@ -487,11 +485,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       selectedModelId: modelId,
       parameters: profileParameters(state.parameterProfiles, modelId, state.selectedPresetId),
       overrides: profileOverrides(state.parameterProfiles, modelId, state.selectedPresetId),
-      recognitionStrategy: profileRecognitionStrategy(
-        state.recognitionStrategyProfiles,
-        modelId,
-        state.selectedPresetId,
-      ),
+      recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
       pendingModelId: null,
       lastError: null,
     });
@@ -505,11 +499,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         selectedModelId: previous,
         parameters: profileParameters(state.parameterProfiles, previous, state.selectedPresetId),
         overrides: profileOverrides(state.parameterProfiles, previous, state.selectedPresetId),
-        recognitionStrategy: profileRecognitionStrategy(
-          state.recognitionStrategyProfiles,
-          previous,
-          state.selectedPresetId,
-        ),
+        recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
         pendingModelId: null,
         lastError: errorMessage(error),
       });
@@ -714,11 +704,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       selectedPresetId: id,
       parameters: profileParameters(parameterProfiles, modelId, id),
       overrides: profileOverrides(parameterProfiles, modelId, id),
-      recognitionStrategy: profileRecognitionStrategy(
-        get().recognitionStrategyProfiles,
-        modelId,
-        id,
-      ),
+      recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
       subtitleParameters: { ...subtitleParameters },
       subtitleOverrides: {},
       output:
@@ -805,30 +791,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       queueMicrotask(() => persistLater(get));
       return { parameters, overrides, parameterProfiles };
     }),
-  setRecognitionStrategy: (recognitionStrategy) =>
-    set((state) => {
-      const supported =
-        ['large-v3', 'large-v3-turbo'].includes(state.selectedModelId) &&
-        ['cn', 'cn2'].includes(state.selectedPresetId);
-      if (!supported && recognitionStrategy !== 'stable_primary') {
-        return {
-          recognitionStrategy: 'stable_primary' as const,
-          lastError: '增强识别策略仅支持 Large V3/Turbo 的中文转录模式。',
-        };
-      }
-      const recognitionStrategyProfiles = withRecognitionStrategy(
-        state.recognitionStrategyProfiles,
-        state.selectedModelId,
-        state.selectedPresetId,
-        recognitionStrategy,
-      );
-      queueMicrotask(() => persistLater(get));
-      return {
-        recognitionStrategy,
-        recognitionStrategyProfiles,
-        lastError: null,
-      };
-    }),
   setSubtitleParameter: (key, value) =>
     set((state) => {
       const subtitleParameters = { ...state.subtitleParameters, [key]: value };
@@ -855,12 +817,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         {},
       ),
       recognitionStrategy: 'stable_primary',
-      recognitionStrategyProfiles: withRecognitionStrategy(
-        get().recognitionStrategyProfiles,
-        get().selectedModelId,
-        get().selectedPresetId,
-        'stable_primary',
-      ),
+      recognitionStrategyProfiles: {},
       subtitleParameters: { ...subtitle.subtitleParameters },
       subtitleOverrides: {},
     });
@@ -931,7 +888,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const draft: TranscriptionDraft = {
       inputs: state.inputs,
       modelId: state.selectedModelId,
-      recognitionStrategy: state.recognitionStrategy,
+      recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
       basePresetId: state.selectedPresetId,
       profileMode: state.profileMode,
       overrides: normalizedTaskOverrides(state.overrides),
@@ -1199,13 +1156,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         profileMode: retryDraftSnapshot.profileMode,
         parameters: { ...retryDraftSnapshot.effectiveParameters },
         overrides: { ...retryDraftSnapshot.overrides },
-        recognitionStrategy: retryDraftSnapshot.recognitionStrategy ?? 'stable_primary',
-        recognitionStrategyProfiles: withRecognitionStrategy(
-          get().recognitionStrategyProfiles,
-          retryDraftSnapshot.modelId,
-          retryDraftSnapshot.basePresetId,
-          retryDraftSnapshot.recognitionStrategy ?? 'stable_primary',
-        ),
+        recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
+        recognitionStrategyProfiles: {},
         parameterProfiles: withProfileOverrides(
           get().parameterProfiles,
           retryDraftSnapshot.modelId,

@@ -5,6 +5,7 @@ import {
   saveWorkspaceState,
   type WorkspacePreferences,
 } from './persistence';
+import { DEFAULT_RECOGNITION_STRATEGY } from './parameterProfiles';
 
 export function preferencesFromState(state: WorkspaceState): WorkspacePreferences {
   return {
@@ -22,8 +23,8 @@ export function preferencesFromState(state: WorkspaceState): WorkspacePreference
     parameters: state.parameters,
     overrides: state.overrides,
     parameterProfiles: state.parameterProfiles,
-    recognitionStrategy: state.recognitionStrategy,
-    recognitionStrategyProfiles: state.recognitionStrategyProfiles,
+    recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
+    recognitionStrategyProfiles: {},
     subtitleParameters: state.subtitleParameters,
     subtitleOverrides: state.subtitleOverrides,
     output: state.output,

@@ -11,7 +11,11 @@ import type {
 import { getPreset } from '../data/presets';
 import { getSubtitlePreset } from '../data/subtitlePresets';
 import { DEFAULT_HARDWARE_PREFERENCE } from './hardware';
-import { normalizePromptText, translationTaskSupported } from './parameterProfiles';
+import {
+  DEFAULT_RECOGNITION_STRATEGY,
+  normalizePromptText,
+  translationTaskSupported,
+} from './parameterProfiles';
 
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -80,13 +84,7 @@ export function normalizeDraft(draft: TranscriptionDraft): TranscriptionDraft {
   return {
     ...structuredClone(draft),
     modelId,
-    recognitionStrategy:
-      (legacy.recognitionStrategy === 'mixed_zh_en' ||
-        legacy.recognitionStrategy === 'zh_detail_review') &&
-      ['cn', 'cn2'].includes(draft.basePresetId) &&
-      ['large-v3', 'large-v3-turbo'].includes(modelId)
-        ? legacy.recognitionStrategy
-        : 'stable_primary',
+    recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
     hardware: legacy.hardware ?? { ...DEFAULT_HARDWARE_PREFERENCE },
     profileMode: legacy.profileMode ?? 'transcript',
     effectiveParameters: { ...baseParameters, ...draft.effectiveParameters },

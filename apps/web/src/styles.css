@@ -8262,34 +8262,6 @@ button:active:not(:disabled) {
   background: var(--canvas);
 }
 
-.recognition-strategy-control {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent-soft) 34%, var(--surface));
-}
-
-.recognition-strategy-control > div:first-child {
-  display: grid;
-  gap: 3px;
-}
-
-.recognition-strategy-control small {
-  color: var(--text-muted);
-  font-size: max(9px, calc(var(--ui-font-size) - 4px));
-  line-height: 1.45;
-}
-
-.recognition-strategy-segmented button {
-  min-width: 0;
-}
-
-.recognition-strategy-segmented {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .parameter-segmented button {
   min-height: 34px;
   border: 0;
@@ -8409,10 +8381,6 @@ button:active:not(:disabled) {
 
   .parameter-heading-actions button {
     width: 100%;
-  }
-
-  .recognition-strategy-segmented {
-    grid-template-columns: 1fr;
   }
 }
 

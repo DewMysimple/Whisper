@@ -8,6 +8,7 @@ import type {
 import { getPreset } from '../data/presets';
 
 export const V3_MODEL_IDS: readonly V3ModelId[] = ['large-v3', 'large-v3-turbo'];
+export const DEFAULT_RECOGNITION_STRATEGY: RecognitionStrategy = 'stable_primary';
 
 export type ParameterProfileKey = `${V3ModelId}:${PresetId}`;
 export type ParameterProfiles = Partial<Record<ParameterProfileKey, Partial<EditableParameters>>>;
@@ -47,34 +48,6 @@ export function profileParameters(
     ...getPreset(presetId, modelId).parameters,
     ...profileOverrides(profiles, modelId, presetId),
   };
-}
-
-export function profileRecognitionStrategy(
-  profiles: RecognitionStrategyProfiles,
-  modelId: ModelId,
-  presetId: PresetId,
-): RecognitionStrategy {
-  if (!isV3ModelId(modelId) || !['cn', 'cn2'].includes(presetId)) {
-    return 'stable_primary';
-  }
-  const strategy = profiles[parameterProfileKey(modelId, presetId)];
-  return strategy === 'mixed_zh_en' || strategy === 'zh_detail_review'
-    ? strategy
-    : 'stable_primary';
-}
-
-export function withRecognitionStrategy(
-  profiles: RecognitionStrategyProfiles,
-  modelId: ModelId,
-  presetId: PresetId,
-  strategy: RecognitionStrategy,
-): RecognitionStrategyProfiles {
-  if (!isV3ModelId(modelId) || !['cn', 'cn2'].includes(presetId)) return profiles;
-  const key = parameterProfileKey(modelId, presetId);
-  const next = { ...profiles };
-  if (strategy === 'stable_primary') delete next[key];
-  else next[key] = strategy;
-  return next;
 }
 
 export function withProfileOverrides(
