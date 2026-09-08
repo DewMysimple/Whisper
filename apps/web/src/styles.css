@@ -4611,10 +4611,6 @@ textarea:focus {
   font-size: calc(9px + var(--content-font-bump));
 }
 
-.view-content .input-hint {
-  font-size: calc(10px + var(--content-font-bump));
-}
-
 .view-content .mode-chip,
 .view-content .compatibility-chip,
 .view-content .status-badge {
