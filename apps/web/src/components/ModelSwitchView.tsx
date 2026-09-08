@@ -172,7 +172,6 @@ export function ModelSwitchView() {
                     disabled={busy || !descriptor.installed || modelSwitching || loading}
                     key={descriptor.id}
                     onClick={() => void selectModel(descriptor.id as ModelId)}
-                    title={busy ? '任务执行期间不可切换模型' : undefined}
                     type="button"
                   >
                     <div className="model-card-topline">
@@ -214,9 +213,7 @@ export function ModelSwitchView() {
                       </div>
                     </dl>
                     <div className="model-card-footer">
-                      <span title={descriptor.path ?? descriptor.detail}>
-                        {descriptor.installed ? '已完整安装' : descriptor.detail}
-                      </span>
+                      <span>{descriptor.installed ? '已完整安装' : descriptor.detail}</span>
                       <span className="model-card-state">
                         {loading ? (
                           <>

@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { ClipboardPaste, FileAudio, FolderOpen, LoaderCircle } from 'lucide-react';
 
 import { useWorkspace } from '../state/workspace';
-import { HelpTip } from './HelpTip';
 
 export function SourcePanel() {
   const inputs = useWorkspace((state) => state.inputs);
@@ -99,13 +98,6 @@ export function SourcePanel() {
           <span>自动读取当前剪贴板，检查后直接加入媒体队列。</span>
         </span>
       </button>
-
-      <div className="input-hint">
-        <HelpTip id="path-processing-help" label="查看路径处理说明">
-          <strong>路径处理</strong>
-          路径始终按结构化字符串处理，不经过 shell，也不会按空格拆分。
-        </HelpTip>
-      </div>
     </section>
   );
 }

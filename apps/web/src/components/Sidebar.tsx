@@ -87,7 +87,6 @@ export function Sidebar() {
           aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'}
           className="sidebar-toggle"
           onClick={() => setCollapsed((current) => !current)}
-          title={collapsed ? '展开侧边栏' : '收起侧边栏'}
           type="button"
         >
           <ChevronLeft size={17} />
@@ -104,7 +103,6 @@ export function Sidebar() {
               className={`nav-item ${activeView === item.id ? 'is-active' : ''}`}
               key={item.id}
               onClick={() => setActiveView(item.id)}
-              title={item.label}
               type="button"
             >
               <Icon size={18} />

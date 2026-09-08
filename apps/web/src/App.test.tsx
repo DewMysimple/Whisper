@@ -98,7 +98,7 @@ describe('desktop workspace', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /开始本地转录/ })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: /开始本地转录/ }));
-    expect(screen.getByRole('dialog', { name: '确认使用标准转录版本？' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '确认使用标准转录版本' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '继续转录' }));
     expect(await screen.findByRole('heading', { name: '性能监控' })).toBeInTheDocument();
     expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' });
@@ -159,10 +159,10 @@ describe('desktop workspace', () => {
     expect(screen.getByRole('button', { name: '关机' })).toHaveAttribute('aria-pressed', 'true');
 
     await user.click(screen.getByRole('button', { name: /开始本地转录/ }));
-    expect(screen.getByRole('dialog', { name: '确认使用标准转录版本？' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '确认使用标准转录版本' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '继续转录' }));
     expect(
-      await screen.findByRole('dialog', { name: '确认任务完成后关闭电脑？' }),
+      await screen.findByRole('dialog', { name: '确认任务完成后关闭电脑' }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '取消' }));
@@ -201,13 +201,11 @@ describe('desktop workspace', () => {
     await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
 
     await user.keyboard('{Control>}{Enter}{/Control}');
-    expect(screen.getByRole('dialog', { name: '确认使用标准转录版本？' })).toHaveTextContent(
+    expect(screen.getByRole('dialog', { name: '确认使用标准转录版本' })).toHaveTextContent(
       '英文转录',
     );
     await user.click(screen.getByRole('button', { name: '取消' }));
-    expect(
-      screen.queryByRole('dialog', { name: '确认使用标准转录版本？' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '确认使用标准转录版本' })).not.toBeInTheDocument();
 
     const presetPanel = screen.getByRole('heading', { name: '文本识别模式' }).closest('section');
     expect(presetPanel).not.toBeNull();

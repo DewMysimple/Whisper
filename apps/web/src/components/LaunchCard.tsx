@@ -204,7 +204,7 @@ export function LaunchCard() {
         onConfirm={() => void confirmPresetStart()}
         open={presetConfirmationOpen}
         pending={startingTask}
-        title="确认使用标准转录版本？"
+        title="确认使用标准转录版本"
       >
         <dl>
           <div>

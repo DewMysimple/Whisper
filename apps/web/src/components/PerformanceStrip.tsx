@@ -31,7 +31,6 @@ import {
   type MetricId,
   utilizationVerdict,
 } from '../state/performanceMetrics';
-import { HelpTip } from './HelpTip';
 import { formatElapsedSeconds, useTaskTiming } from './useTaskTiming';
 
 function Heatmap({
@@ -182,12 +181,7 @@ export function PerformanceView() {
         <header className="insight-heading">
           <div>
             <p className="step-label">LIVE PERFORMANCE</p>
-            <div className="heading-with-help">
-              <h2>实时性能趋势</h2>
-              <HelpTip id="performance-sampling-help" label="查看性能采样说明">
-                数据来自 Python Worker 的正式本机采样，不经网络传输。
-              </HelpTip>
-            </div>
+            <h2>实时性能趋势</h2>
           </div>
           <div className="live-chip">
             <Radio size={14} />

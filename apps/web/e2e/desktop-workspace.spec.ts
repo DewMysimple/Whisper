@@ -4,6 +4,9 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '转录工作台' })).toBeVisible();
   await expect(page.getByText('MOCK BRIDGE')).toBeVisible();
+  await expect(
+    page.locator('.help-trigger, .help-popover, [data-tooltip], .has-tooltip, [title]'),
+  ).toHaveCount(0);
 });
 
 test('keeps the requested desktop card and empty-path geometry', async ({ page }) => {
@@ -105,7 +108,7 @@ test('locks model and hardware changes while queued or running work exists', asy
     .locator('.model-card')
     .filter({ has: page.getByRole('heading', { name: 'Large V3 Turbo' }) });
   await expect(turboCard).toBeDisabled();
-  await expect(turboCard).toHaveAttribute('title', '任务执行期间不可切换模型');
+  await expect(page.locator('[title]')).toHaveCount(0);
   await expect(page.getByText('任务执行期间已锁定')).toHaveCount(1);
   await page.getByRole('tab', { name: /参数配置/ }).click();
   await expect(page.getByRole('heading', { name: '当前模型参数' })).toBeVisible();
@@ -204,7 +207,7 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   await startTask.evaluate((element: HTMLButtonElement) => element.click());
-  await expect(page.getByRole('dialog', { name: '确认使用标准转录版本？' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '确认使用标准转录版本' })).toBeVisible();
   await page.screenshot({
     fullPage: true,
     path: testInfo.outputPath('standard-preset-confirmation.png'),
@@ -240,9 +243,9 @@ test('confirms the one-time shutdown action without exposing hibernate', async (
   await page.getByRole('button', { name: '选择媒体文件' }).click();
   await page.getByRole('button', { name: '关机' }).click();
   await page.getByRole('button', { name: /开始本地转录/ }).click();
-  await expect(page.getByRole('dialog', { name: '确认使用标准转录版本？' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '确认使用标准转录版本' })).toBeVisible();
   await page.getByRole('button', { name: '继续转录' }).click();
-  const shutdownDialog = page.getByRole('dialog', { name: '确认任务完成后关闭电脑？' });
+  const shutdownDialog = page.getByRole('dialog', { name: '确认任务完成后关闭电脑' });
   await expect(shutdownDialog).toBeVisible();
   await expect(shutdownDialog).toContainText('60 秒关机倒计时');
   await page.screenshot({
@@ -550,9 +553,8 @@ test('opens an accessible task detail and output preview', async ({ page }) => {
     .getByRole('button', { name: /历史记录/ })
     .click();
   const retry = page.getByRole('button', { name: '重新转录 Product Interview 06.mkv' });
-  await expect(retry).toHaveAttribute('data-tooltip', '重新转录');
   await retry.click();
-  await expect(page.getByRole('dialog', { name: '载入历史转录配置？' })).toContainText(
+  await expect(page.getByRole('dialog', { name: '载入历史转录配置' })).toContainText(
     'Product Interview 06.mkv',
   );
   await page.getByRole('button', { name: '取消', exact: true }).click();
@@ -560,7 +562,7 @@ test('opens an accessible task detail and output preview', async ({ page }) => {
   await expect(page.getByRole('dialog', { name: 'Product Interview 06.mkv' })).toBeVisible();
   await expect(page.getByText('This is a local output preview')).toBeVisible();
   await page.getByRole('button', { name: '载入原配置' }).click();
-  await expect(page.getByRole('dialog', { name: '载入历史转录配置？' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '载入历史转录配置' })).toBeVisible();
   await page.getByRole('button', { name: '取消', exact: true }).click();
   await page.getByRole('button', { name: '关闭任务详情' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -626,7 +628,6 @@ test('monitors the active task and manages dated history in a responsive grid', 
   const remove = page.getByRole('button', {
     name: '删除 Product Interview 06.mkv 的任务记录',
   });
-  await expect(remove).toHaveAttribute('data-tooltip', '删除任务记录');
   await remove.click();
   await expect(remove).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText('Product Interview 06.mkv', { exact: true })).toBeVisible();

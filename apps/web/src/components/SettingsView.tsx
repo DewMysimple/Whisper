@@ -11,7 +11,6 @@ import {
   type UiFontFamily,
 } from '../state/persistence';
 import { useWorkspace } from '../state/workspace';
-import { HelpTip } from './HelpTip';
 
 const ACCENTS: Array<{ id: Exclude<AccentPreset, 'custom'>; label: string; color: string }> = [
   { id: 'orange', label: '橙色', color: '#FF5B04' },
@@ -108,12 +107,7 @@ export function SettingsView() {
         <div className="appearance-heading">
           <div>
             <p className="step-label">DESK APPEARANCE</p>
-            <div className="heading-with-help">
-              <h2>桌面外观</h2>
-              <HelpTip id="theme-scope-help" label="查看外观作用范围">
-                外观设置覆盖五个工作台、侧栏与顶栏，不改变任务、转录参数或输出内容。
-              </HelpTip>
-            </div>
+            <h2>桌面外观</h2>
           </div>
           <button
             className="secondary-button appearance-reset"
@@ -193,7 +187,6 @@ export function SettingsView() {
                   key={accent.id}
                   onClick={() => setAccentPreset(accent.id)}
                   style={{ '--swatch': accent.color } as CSSProperties}
-                  title={accent.label}
                   type="button"
                 >
                   <span />
@@ -205,7 +198,6 @@ export function SettingsView() {
                 className="is-custom"
                 onClick={() => setAccentPreset('custom')}
                 style={{ '--swatch': customAccentColor } as CSSProperties}
-                title="自定义"
                 type="button"
               >
                 <span />
@@ -341,12 +333,7 @@ export function SettingsView() {
 
         <section className="panel settings-card config-card">
           <p className="step-label">PORTABLE SETTINGS</p>
-          <div className="heading-with-help">
-            <h2>便携配置</h2>
-            <HelpTip id="portable-config-help" label="查看便携配置范围">
-              包含外观、Preset、参数覆盖和输出策略，不包含任务历史、日志或媒体路径。
-            </HelpTip>
-          </div>
+          <h2>便携配置</h2>
           <p>导出外观、Preset、参数覆盖和输出策略，不包含任务历史或日志。</p>
           <textarea
             aria-label="配置 JSON"

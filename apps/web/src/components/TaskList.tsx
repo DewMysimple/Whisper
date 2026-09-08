@@ -265,11 +265,8 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                       <button
                         aria-label={`${armedDelete?.key === `task:${task.id}` ? '再次点击删除' : '删除'} ${task.title} 的任务记录`}
                         aria-pressed={armedDelete?.key === `task:${task.id}`}
-                        className={`icon-button has-tooltip is-danger-action ${armedDelete?.key === `task:${task.id}` ? 'is-delete-armed' : ''}`}
+                        className={`icon-button is-danger-action ${armedDelete?.key === `task:${task.id}` ? 'is-delete-armed' : ''}`}
                         data-delete-arm-key={`task:${task.id}`}
-                        data-tooltip={
-                          armedDelete?.key === `task:${task.id}` ? '再次点击删除' : '删除任务记录'
-                        }
                         onClick={(event) => {
                           event.stopPropagation();
                           armOrDelete(
@@ -285,8 +282,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                       {task.draft && (
                         <button
                           aria-label={`${resumable ? '继续转录' : '重新转录'} ${task.title}`}
-                          className="icon-button has-tooltip"
-                          data-tooltip={resumable ? '继续转录' : '重新转录'}
+                          className="icon-button"
                           onClick={(event) => {
                             event.stopPropagation();
                             if (resumable) {
@@ -305,8 +301,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                         (task.outputs?.length ?? 0) > 0 && (
                           <button
                             aria-label={`在资源管理器中定位 ${task.title} 的输出`}
-                            className="icon-button has-tooltip"
-                            data-tooltip="定位输出"
+                            className="icon-button"
                             onClick={(event) => {
                               event.stopPropagation();
                               void revealTaskOutput(task.id);
@@ -318,8 +313,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                         )}
                       <button
                         aria-label={`查看 ${task.title} 详情`}
-                        className="icon-button has-tooltip"
-                        data-tooltip="查看任务详情"
+                        className="icon-button"
                         onClick={(event) => {
                           event.stopPropagation();
                           void selectTask(task.id);
@@ -343,7 +337,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
         onConfirm={() => void confirmRetry()}
         open={retryCandidate !== undefined}
         pending={startingTask}
-        title="载入历史转录配置？"
+        title="载入历史转录配置"
       >
         {retryCandidate && (
           <dl>

@@ -3,7 +3,6 @@ import { motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
 
 import { desktopBridge } from './bridge';
-import { HelpTip } from './components/HelpTip';
 import { HardwareOptimizationPanel } from './components/HardwareOptimizationPanel';
 import { LaunchCard } from './components/LaunchCard';
 import { ModelSwitchView } from './components/ModelSwitchView';
@@ -23,41 +22,34 @@ import { TaskMonitor } from './components/TaskMonitor';
 import { WorkerLogsView } from './components/WorkerLogsView';
 import { isAbnormalTask, useWorkspace, type WorkspaceViewId } from './state/workspace';
 
-const PAGE_COPY: Record<WorkspaceViewId, { eyebrow: string; title: string; summary: string }> = {
+const PAGE_COPY: Record<WorkspaceViewId, { eyebrow: string; title: string }> = {
   workspace: {
     eyebrow: 'LOCAL TRANSCRIPTION',
     title: '转录工作台',
-    summary: '添加媒体、选择方案并开始本地转录。',
   },
   models: {
     eyebrow: 'LOCAL MODEL LIBRARY',
     title: '模型切换',
-    summary: '管理本地模型，并为新任务选择冻结的推理模型。',
   },
   hardware: {
     eyebrow: 'LOCAL COMPUTE',
     title: '硬件优化',
-    summary: '选择本机推理设备、计算精度与 CPU 线程配置。',
   },
   tasks: {
     eyebrow: 'LOCAL QUEUE',
     title: '任务监控与记录',
-    summary: '监视正在执行的媒体进度，并管理本机任务历史。',
   },
   performance: {
     eyebrow: 'SYSTEM INSIGHT',
     title: '性能监控',
-    summary: '查看 GPU、显存、CPU 与内存的实时趋势。',
   },
   logs: {
     eyebrow: 'LOCAL DIAGNOSTICS',
     title: 'Worker 日志',
-    summary: '查看本机 Worker 的实时诊断输出与运行状态。',
   },
   settings: {
     eyebrow: 'DESK SETTINGS',
     title: '偏好设置',
-    summary: '管理界面、Worker 与便携配置。',
   },
 };
 
@@ -89,12 +81,7 @@ function Topbar() {
     <header className="topbar">
       <div className="title-block">
         <p className="eyebrow">{copy.eyebrow}</p>
-        <div className="title-heading-row">
-          <h1>{copy.title}</h1>
-          <HelpTip id={`page-summary-${activeView}`} label="查看当前页面说明">
-            {copy.summary}
-          </HelpTip>
-        </div>
+        <h1>{copy.title}</h1>
       </div>
       <div className="topbar-actions">
         <div className="mock-pill">

@@ -17,7 +17,7 @@ export function ShutdownConfirmDialog() {
       onConfirm={() => void confirmShutdownStart()}
       open={pending !== null}
       pending={startingTask}
-      title="确认任务完成后关闭电脑？"
+      title="确认任务完成后关闭电脑"
       tone="danger"
     >
       <dl>

@@ -108,7 +108,6 @@ export function HardwareOptimizationPanel() {
         aria-busy={modelSwitching}
         aria-disabled={busy}
         className={`hardware-control-grid ${busy ? 'is-locked' : ''}`}
-        title={busy ? '任务执行期间不可更改硬件配置' : undefined}
       >
         <div className="hardware-device-band">
           <fieldset className="hardware-device-control">

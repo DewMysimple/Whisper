@@ -4,7 +4,6 @@ import type { EditableParameters, SubtitleParameters } from '../contracts/deskto
 import { MODEL_PRESENTATIONS } from '../data/models';
 import { PRESETS, modelProfileSummary } from '../data/presets';
 import { useWorkspace } from '../state/workspace';
-import { HelpTip } from './HelpTip';
 
 type NumericParameterKey = {
   [K in keyof EditableParameters]: EditableParameters[K] extends number ? K : never;
@@ -258,9 +257,6 @@ export function InferenceParameterEditor() {
             <p className="step-label">MODEL × PRESET PROFILE</p>
             <h2 id="model-parameter-title">当前模型参数</h2>
           </div>
-          <HelpTip id="inference-parameter-help" label="查看识别参数说明">
-            参数按模型与识别模式分别保存，并在任务入队时冻结。修改不会影响已经运行或排队的任务。
-          </HelpTip>
         </div>
         <div className="parameter-heading-actions">
           <button className="quiet-button" onClick={() => setActiveView('workspace')} type="button">
@@ -506,9 +502,6 @@ export function SubtitleParameterEditor({ onRestore }: { onRestore: () => void }
         <div className="parameter-heading-copy">
           <SlidersHorizontal size={17} />
           <strong>SRT 排版参数</strong>
-          <HelpTip id="subtitle-parameter-help" label="查看 SRT 排版参数说明">
-            参数只控制字幕切分、换行和时间轴排版，不改变模型识别内容。
-          </HelpTip>
         </div>
         {isCustom && (
           <button className="quiet-button" onClick={onRestore} type="button">

@@ -1,7 +1,6 @@
 import { Captions, Check, Copy, FolderOutput, Power, RotateCcw } from 'lucide-react';
 
 import { useWorkspace } from '../state/workspace';
-import { HelpTip } from './HelpTip';
 
 export function OutputPanel() {
   const output = useWorkspace((state) => state.output);
@@ -56,11 +55,7 @@ export function OutputPanel() {
             <small>{locationDescription}</small>
           </span>
         </div>
-        {usesCustomLocation && (
-          <code className="output-path-value" title={output.rootDirectory ?? undefined}>
-            {output.rootDirectory}
-          </code>
-        )}
+        {usesCustomLocation && <code className="output-path-value">{output.rootDirectory}</code>}
         <div className="output-location-actions">
           <button
             className="output-location-action"
@@ -154,7 +149,7 @@ export function OutputPanel() {
               </span>
               <small>可选</small>
             </div>
-            <p>除了自选目录，是否还要在原媒体旁保存一份？</p>
+            <p>除了自选目录，也可以在原媒体旁保存一份。</p>
             <div className="output-copy-options">
               {output.txtEnabled && (
                 <label>
@@ -191,12 +186,7 @@ export function OutputPanel() {
         )}
 
       <div className="output-section-heading output-conflict-heading">
-        <strong className="output-footnote-label">
-          同名文件
-          <HelpTip id="output-conflict-help" label="查看同名冲突处理方式" align="right">
-            发现同名输出时，可在创建任务前确认覆盖、整条媒体跳过，或自动安全重命名。
-          </HelpTip>
-        </strong>
+        <strong>同名文件</strong>
         <span>确认只对本次任务生效</span>
       </div>
       <div className="output-conflict-control">
@@ -217,13 +207,7 @@ export function OutputPanel() {
       </div>
 
       <div className="output-section-heading output-finish-heading">
-        <strong className="output-footnote-label">
-          执行完
-          <HelpTip id="output-finish-help" label="查看任务完成后的系统操作" align="right">
-            该选择只对下一次成功创建的任务批次生效。队列全部成功后会显示 60 秒倒计时；
-            任一任务失败或取消时不会执行。
-          </HelpTip>
-        </strong>
+        <strong>执行完</strong>
         <span>一次性操作，不写入任务历史</span>
       </div>
       <div className="finish-action-options" aria-label="任务完成后的系统操作">

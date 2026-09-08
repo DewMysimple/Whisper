@@ -275,8 +275,8 @@ export function TaskMonitor() {
                   {media.status === 'completed' ? <Check size={16} /> : <FileAudio size={16} />}
                 </span>
                 <div className="task-media-copy">
-                  <strong title={media.path}>{fileName(media.path)}</strong>
-                  <span title={media.path}>{media.path}</span>
+                  <strong>{fileName(media.path)}</strong>
+                  <span>{media.path}</span>
                   <div
                     aria-label={
                       media.progress === null
@@ -348,7 +348,7 @@ export function TaskMonitor() {
           void cancelTask(activeTask.id);
         }}
         open={terminationOpen}
-        title="确认终止当前任务？"
+        title="确认终止当前任务"
       >
         <dl>
           <div>

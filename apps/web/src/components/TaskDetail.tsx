@@ -390,7 +390,7 @@ export function TaskDetail() {
         onConfirm={() => void confirmRetry()}
         open={retryConfirmationOpen}
         pending={startingTask}
-        title="载入历史转录配置？"
+        title="载入历史转录配置"
       >
         <dl>
           <div>

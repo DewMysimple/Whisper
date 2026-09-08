@@ -49,7 +49,7 @@ describe('OverwriteConfirmDialog', () => {
     const user = userEvent.setup();
     render(<OverwriteConfirmDialog />);
 
-    const dialog = screen.getByRole('dialog', { name: '确认覆盖同名输出文件？' });
+    const dialog = screen.getByRole('dialog', { name: '确认覆盖同名输出文件' });
     expect(dialog).toHaveTextContent('检测到 2 个冲突目标');
     expect(dialog).toHaveTextContent('D:\\Text\\lesson.txt');
     expect(dialog).toHaveTextContent('D:\\Markdown\\lesson.md');

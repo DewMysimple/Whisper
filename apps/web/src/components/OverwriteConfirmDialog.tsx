@@ -22,7 +22,7 @@ export function OverwriteConfirmDialog() {
       onConfirm={() => void confirmOverwrite()}
       open={pending !== null}
       pending={startingTask}
-      title={skipMode ? '确认跳过同名媒体？' : '确认覆盖同名输出文件？'}
+      title={skipMode ? '确认跳过同名媒体' : '确认覆盖同名输出文件'}
       tone={skipMode ? undefined : 'danger'}
     >
       {pending && (
@@ -45,12 +45,10 @@ export function OverwriteConfirmDialog() {
             <div className="overwrite-conflict-groups" aria-label="按媒体分组的同名输出目标">
               {pending.conflicts.map((conflict) => (
                 <section key={conflict.inputPath}>
-                  <strong title={conflict.inputPath}>
-                    {conflict.inputPath.split(/[/\\]/).at(-1)}
-                  </strong>
+                  <strong>{conflict.inputPath.split(/[/\\]/).at(-1)}</strong>
                   <ul className="overwrite-path-list">
                     {conflict.paths.map((path) => (
-                      <li key={path} title={path}>
+                      <li key={path}>
                         <FileWarning size={14} />
                         <code>{path}</code>
                       </li>
@@ -62,7 +60,7 @@ export function OverwriteConfirmDialog() {
           ) : (
             <ul className="overwrite-path-list" aria-label="同名输出目标">
               {pending.paths.map((path) => (
-                <li key={path} title={path}>
+                <li key={path}>
                   <FileWarning size={14} />
                   <code>{path}</code>
                 </li>
