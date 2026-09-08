@@ -5287,7 +5287,7 @@ textarea:focus {
   color: var(--text-muted);
 }
 
-.output-format-option:focus-within .output-format-code {
+.output-format-option:has(input:focus-visible) .output-format-code {
   outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
   outline-offset: 2px;
 }
@@ -5306,7 +5306,7 @@ textarea:focus {
   font-weight: 900;
 }
 
-.output-format-option.is-enabled .output-format-code {
+.output-format-option.is-selected .output-format-code {
   border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
   background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface));
   color: var(--accent);
@@ -9198,5 +9198,68 @@ output,
   .model-workspace-tabs > button,
   .hardware-config-group {
     transition: none;
+  }
+}
+
+/* Selection cards share one tactile contract across profile, output and
+   completion-action choices. The content can differ; the state change should
+   still feel like the same control. */
+.selection-card {
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    transform 100ms ease-out;
+}
+
+.selection-card:not(:disabled) {
+  cursor: pointer;
+}
+
+.selection-card:not(:disabled):not(.is-selected):hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+}
+
+.selection-card.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 78%, white);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 10px 24px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.selection-card:focus-visible,
+.output-format-option:has(input:focus-visible) .output-format-code {
+  outline: 2px solid color-mix(in srgb, var(--accent) 68%, white);
+  outline-offset: 3px;
+}
+
+.output-format-option input:focus-visible {
+  outline: none;
+}
+
+.output-format-option:not(:disabled):hover .output-format-code {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface-raised));
+}
+
+.output-format-option.is-selected .output-format-code {
+  border-color: color-mix(in srgb, var(--accent) 78%, white);
+}
+
+.selection-card:not(:disabled):active {
+  transform: scale(0.98) !important;
+  transition-duration: 80ms !important;
+  transition-timing-function: ease-out !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .selection-card {
+    transition: none;
+  }
+
+  .selection-card:not(:disabled):active {
+    transform: none !important;
   }
 }

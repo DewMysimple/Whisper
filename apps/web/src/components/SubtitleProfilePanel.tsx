@@ -50,7 +50,8 @@ export function SubtitleProfilePanel() {
       <div className="preset-grid subtitle-preset-grid">
         {SUBTITLE_PRESETS.map((preset) => (
           <button
-            className={`preset-card subtitle-preset-card ${active && preset.basePresetId === selectedPresetId ? 'is-selected' : ''}`}
+            aria-pressed={active && preset.basePresetId === selectedPresetId}
+            className={`selection-card preset-card subtitle-preset-card ${active && preset.basePresetId === selectedPresetId ? 'is-selected' : ''}`}
             key={preset.id}
             onClick={() => selectProfile('subtitle', preset.basePresetId)}
             type="button"

@@ -38,7 +38,8 @@ export function PresetPanel() {
       <div className="preset-grid">
         {PRESETS.map((preset) => (
           <button
-            className={`preset-card ${active && preset.id === selectedPresetId ? 'is-selected' : ''}`}
+            aria-pressed={active && preset.id === selectedPresetId}
+            className={`selection-card preset-card ${active && preset.id === selectedPresetId ? 'is-selected' : ''}`}
             key={preset.id}
             onClick={() => selectProfile('transcript', preset.id)}
             type="button"

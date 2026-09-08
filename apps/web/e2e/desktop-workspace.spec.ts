@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
@@ -75,6 +75,38 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
       .locator('.workspace-grid')
       .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length),
   ).resolves.toBe(1);
+});
+
+test('uses the same subtle press feedback for selectable cards', async ({ page }) => {
+  const pressAndReadTransform = async (card: Locator) => {
+    await card.scrollIntoViewIfNeeded();
+    const bounds = await card.boundingBox();
+    expect(bounds).not.toBeNull();
+    await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
+    await page.mouse.down();
+    try {
+      await expect
+        .poll(() => card.evaluate((element) => getComputedStyle(element).transform))
+        .not.toBe('none');
+    } finally {
+      await page.mouse.up();
+    }
+  };
+
+  const transcriptMode = page
+    .locator('.preset-panel:not(.subtitle-profile-panel) .preset-card')
+    .first();
+  const markdownFormat = page.locator('.output-format-list .output-format-option').nth(1);
+  const finishAction = page.getByRole('button', { name: '无操作' });
+
+  await expect(transcriptMode).toHaveClass(/selection-card/);
+  await expect(markdownFormat).toHaveClass(/selection-card/);
+  await expect(finishAction).toHaveClass(/selection-card/);
+  await pressAndReadTransform(transcriptMode);
+  await pressAndReadTransform(markdownFormat);
+  await pressAndReadTransform(finishAction);
+
+  await expect(markdownFormat.locator('.output-format-code')).toHaveCSS('outline-style', 'none');
 });
 
 test('freezes the optional recognition strategies in the Chinese V3 profile', async ({ page }) => {

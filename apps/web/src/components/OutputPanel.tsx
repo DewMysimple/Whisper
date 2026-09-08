@@ -80,7 +80,9 @@ export function OutputPanel() {
       </div>
       {profileMode === 'transcript' ? (
         <div className="output-format-list">
-          <label className={`output-format-option ${output.txtEnabled ? 'is-enabled' : ''}`}>
+          <label
+            className={`selection-card output-format-option ${output.txtEnabled ? 'is-selected' : ''}`}
+          >
             <span className="output-format-code" aria-hidden="true">
               TXT
             </span>
@@ -96,7 +98,9 @@ export function OutputPanel() {
               type="checkbox"
             />
           </label>
-          <label className={`output-format-option ${output.markdownEnabled ? 'is-enabled' : ''}`}>
+          <label
+            className={`selection-card output-format-option ${output.markdownEnabled ? 'is-selected' : ''}`}
+          >
             <span className="output-format-code" aria-hidden="true">
               MD
             </span>
@@ -117,7 +121,9 @@ export function OutputPanel() {
         </div>
       ) : (
         <div className="output-format-list">
-          <label className={`output-format-option ${output.srtEnabled ? 'is-enabled' : ''}`}>
+          <label
+            className={`selection-card output-format-option ${output.srtEnabled ? 'is-selected' : ''}`}
+          >
             <span className="output-format-code" aria-hidden="true">
               SRT
             </span>
@@ -128,7 +134,9 @@ export function OutputPanel() {
               type="checkbox"
             />
           </label>
-          <label className={`output-format-option ${output.txtEnabled ? 'is-enabled' : ''}`}>
+          <label
+            className={`selection-card output-format-option ${output.txtEnabled ? 'is-selected' : ''}`}
+          >
             <span className="output-format-code" aria-hidden="true">
               TXT
             </span>
@@ -222,7 +230,7 @@ export function OutputPanel() {
       <div className="finish-action-options" aria-label="任务完成后的系统操作">
         <button
           aria-pressed={finishAction === 'none'}
-          className={finishAction === 'none' ? 'is-selected' : ''}
+          className={`selection-card ${finishAction === 'none' ? 'is-selected' : ''}`}
           onClick={() => setFinishAction('none')}
           type="button"
         >
@@ -230,7 +238,7 @@ export function OutputPanel() {
         </button>
         <button
           aria-pressed={finishAction === 'shutdown'}
-          className={finishAction === 'shutdown' ? 'is-selected' : ''}
+          className={`selection-card ${finishAction === 'shutdown' ? 'is-selected' : ''}`}
           disabled={!powerCapabilities.shutdown}
           onClick={() => setFinishAction('shutdown')}
           type="button"
