@@ -24,7 +24,7 @@ from whisper_subtitle.domain.presets import (  # noqa: E402
     PRESETS,
     derive_preset,
 )
-from whisper_subtitle.paths import SUPPORTED_MODEL_IDS  # noqa: E402
+from whisper_subtitle.domain.models import SUPPORTED_MODEL_IDS  # noqa: E402
 
 
 OUTPUT_PATH = PROJECT_ROOT / "apps" / "web" / "src" / "data" / "presetCatalog.generated.ts"

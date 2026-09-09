@@ -14,9 +14,10 @@ from .mixed_language import (
     segments_for_region,
     splice_candidate_segments,
 )
+from .models import SECONDARY_RECOGNITION_MODEL_IDS
 
 
-SUPPORTED_DETAIL_MODELS = frozenset({"large-v3", "large-v3-turbo"})
+SUPPORTED_DETAIL_MODELS = SECONDARY_RECOGNITION_MODEL_IDS
 DETAIL_MIN_CHINESE_PROBABILITY = 0.5
 DETAIL_CONTEXT_CHARACTERS = 80
 DETAIL_CLIP_PADDING_SECONDS = 0.4

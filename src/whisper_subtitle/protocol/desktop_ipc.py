@@ -11,6 +11,8 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any, TypeAlias
 
+from ..domain.models import SUPPORTED_MODEL_IDS
+
 
 PROTOCOL_SCHEMA_VERSION = 1
 
@@ -90,9 +92,7 @@ _PRESET_IDS = frozenset({"cn", "cn2", "en_v1", "en_v2"})
 _RECOGNITION_STRATEGIES = frozenset(
     {"stable_primary", "mixed_zh_en", "zh_detail_review"}
 )
-_MODEL_IDS = frozenset(
-    {"tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"}
-)
+_MODEL_IDS = frozenset(SUPPORTED_MODEL_IDS)
 _INPUT_KINDS = frozenset({"file", "directory"})
 _INPUT_ORIGINS = frozenset({"dialog", "drop", "paste", "manual"})
 _OUTPUT_MODES = frozenset({"compatibility", "custom"})

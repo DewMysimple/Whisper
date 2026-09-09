@@ -1,4 +1,5 @@
 import type { DesktopEvent, ModelStatus, TaskSnapshot } from '../contracts/desktop';
+import { DEFAULT_MODEL_ID } from '../contracts/desktop';
 import { TaskProgressTracker } from './taskProgress';
 import {
   ERROR_LABELS,
@@ -113,7 +114,7 @@ function handleTaskQueued(message: WorkerEnvelope, context: WorkerEventContext):
     presetId: metadata?.presetId ?? 'en_v1',
     modelId: isModelId(message.data.model_id)
       ? message.data.model_id
-      : (metadata?.draft.modelId ?? 'large-v3-turbo'),
+      : (metadata?.draft.modelId ?? DEFAULT_MODEL_ID),
     recognitionStrategy: isRecognitionStrategy(message.data.recognition_strategy)
       ? message.data.recognition_strategy
       : (metadata?.draft.recognitionStrategy ?? 'stable_primary'),

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { desktopBridge } from '../bridge';
+import { DEFAULT_MODEL_ID } from '../contracts/desktop';
 import type {
   DesktopEvent,
   EditableParameters,
@@ -113,7 +114,7 @@ const INITIAL_TASKS: TaskSnapshot[] = [
     title: '设计评审会议.m4a',
     sourceCount: 2,
     presetId: 'cn2',
-    modelId: 'large-v3-turbo',
+    modelId: DEFAULT_MODEL_ID,
     isCustom: false,
     status: 'running',
     progress: 63,
@@ -139,7 +140,7 @@ const INITIAL_TASKS: TaskSnapshot[] = [
           mediaCount: 1,
         },
       ],
-      modelId: 'large-v3-turbo',
+      modelId: DEFAULT_MODEL_ID,
       basePresetId: 'cn2',
       profileMode: 'transcript',
       overrides: {},
@@ -163,7 +164,7 @@ const INITIAL_TASKS: TaskSnapshot[] = [
     title: 'Product Interview 06.mkv',
     sourceCount: 1,
     presetId: 'en_v1',
-    modelId: 'large-v3-turbo',
+    modelId: DEFAULT_MODEL_ID,
     isCustom: true,
     status: 'completed',
     progress: 100,
@@ -182,7 +183,7 @@ const INITIAL_TASKS: TaskSnapshot[] = [
           mediaCount: 1,
         },
       ],
-      modelId: 'large-v3-turbo',
+      modelId: DEFAULT_MODEL_ID,
       basePresetId: 'en_v1',
       profileMode: 'transcript',
       overrides: {},
@@ -353,7 +354,7 @@ function mergeUniqueInputs(existing: InputSource[], incoming: InputSource[]): In
 
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
   inputs: [],
-  selectedModelId: 'large-v3-turbo',
+  selectedModelId: DEFAULT_MODEL_ID,
   hardwarePreference: { ...DEFAULT_HARDWARE_PREFERENCE },
   selectedPresetId: 'en_v1',
   profileMode: 'transcript',

@@ -62,6 +62,57 @@ def test_domain_has_no_outward_package_dependencies():
         ), path
 
 
+def _assert_layer_avoids(layer: str, forbidden: tuple[str, ...]) -> None:
+    for path in (PACKAGE_ROOT / layer).rglob("*.py"):
+        imports = _resolved_internal_imports(path)
+        assert all(
+            not any(
+                imported == prefix or imported.startswith(f"{prefix}.")
+                for prefix in forbidden
+            )
+            for imported in imports
+        ), path
+
+
+def test_application_does_not_depend_on_delivery_layers():
+    _assert_layer_avoids(
+        "application",
+        (
+            "whisper_subtitle.presentation",
+            "whisper_subtitle.protocol",
+            "whisper_subtitle.worker",
+        ),
+    )
+
+
+def test_infrastructure_does_not_depend_on_orchestration_or_delivery_layers():
+    _assert_layer_avoids(
+        "infrastructure",
+        (
+            "whisper_subtitle.application",
+            "whisper_subtitle.presentation",
+            "whisper_subtitle.protocol",
+            "whisper_subtitle.worker",
+        ),
+    )
+
+
+def test_protocol_does_not_depend_on_runtime_or_delivery_implementations():
+    _assert_layer_avoids(
+        "protocol",
+        (
+            "whisper_subtitle.application",
+            "whisper_subtitle.infrastructure",
+            "whisper_subtitle.presentation",
+            "whisper_subtitle.worker",
+        ),
+    )
+
+
+def test_worker_does_not_depend_on_presentation():
+    _assert_layer_avoids("worker", ("whisper_subtitle.presentation",))
+
+
 def test_presentation_does_not_reference_removed_core_dispatch():
     source = "\n".join(
         path.read_text(encoding="utf-8")

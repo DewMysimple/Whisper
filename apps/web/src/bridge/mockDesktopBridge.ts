@@ -13,6 +13,7 @@ import type {
   PowerActionStatus,
   PowerCapabilities,
   TaskSnapshot,
+  TaskFinishedNotice,
   StartTranscriptionOptions,
   TranscriptionDraft,
   Unlisten,
@@ -207,6 +208,16 @@ export class MockDesktopBridge implements DesktopBridge {
     };
     this.emit({ type: 'power.action', status: this.powerStatus });
     return this.powerStatus;
+  }
+
+  async notifyTaskFinished(notice: TaskFinishedNotice): Promise<boolean> {
+    void notice;
+    return false;
+  }
+
+  async notifyPowerCountdown(elapsed: string): Promise<boolean> {
+    void elapsed;
+    return false;
   }
 
   async startTranscription(

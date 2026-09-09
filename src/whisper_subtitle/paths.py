@@ -10,29 +10,12 @@ from importlib import resources
 from pathlib import Path
 from typing import Mapping
 
+from .domain.models import MODEL_REPOSITORIES, SUPPORTED_MODEL_IDS
+
 
 MODEL_DIR_ENV = "WHISPER_SUBTITLE_MODEL_DIR"
 APP_HOME_ENV = "WHISPER_SUBTITLE_HOME"
 MODEL_REQUIRED_FILES = ("config.json", "model.bin")
-SUPPORTED_MODEL_IDS = (
-    "tiny",
-    "base",
-    "small",
-    "medium",
-    "large-v3",
-    "large-v3-turbo",
-)
-MODEL_REPOSITORIES = {
-    "tiny": ("Systran/faster-whisper-tiny",),
-    "base": ("Systran/faster-whisper-base",),
-    "small": ("Systran/faster-whisper-small",),
-    "medium": ("Systran/faster-whisper-medium",),
-    "large-v3": ("Systran/faster-whisper-large-v3",),
-    "large-v3-turbo": (
-        "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
-        "Systran/faster-whisper-large-v3-turbo",
-    ),
-}
 
 
 class ModelNotFoundError(FileNotFoundError):

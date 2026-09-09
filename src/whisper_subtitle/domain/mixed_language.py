@@ -8,8 +8,9 @@ import math
 import re
 from typing import Any
 
+from .models import SECONDARY_RECOGNITION_MODEL_IDS
 
-SUPPORTED_MIXED_MODELS = frozenset({"large-v3", "large-v3-turbo"})
+SUPPORTED_MIXED_MODELS = SECONDARY_RECOGNITION_MODEL_IDS
 MODEL_ENGLISH_THRESHOLDS = {
     "large-v3": 0.75,
     "large-v3-turbo": 0.75,

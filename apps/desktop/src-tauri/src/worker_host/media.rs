@@ -2,8 +2,12 @@
 
 use std::path::Path;
 
-use super::model_catalog::SUPPORTED_MEDIA_EXTENSIONS;
 use super::{HostError, InspectedInput, MediaInspectionItem};
+
+const SUPPORTED_MEDIA_EXTENSIONS: &[&str] = &[
+    "aac", "avi", "flv", "m4a", "m4v", "mkv", "mov", "mp3", "mp4", "mpeg", "mpg", "ogg", "wav",
+    "webm", "wmv",
+];
 
 fn is_supported_media(path: &Path) -> bool {
     path.extension()

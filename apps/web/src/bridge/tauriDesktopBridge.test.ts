@@ -10,6 +10,7 @@ const native = vi.hoisted(() => ({
   invoke: vi.fn(),
   open: vi.fn(),
   readText: vi.fn(),
+  requestUserAttention: vi.fn(),
   save: vi.fn(),
   writeText: vi.fn(),
 }));
@@ -32,6 +33,10 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
       };
     },
   }),
+}));
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({ requestUserAttention: native.requestUserAttention }),
+  UserAttentionType: { Critical: 1, Informational: 2 },
 }));
 vi.mock('@tauri-apps/api/path', () => ({
   desktopDir: vi.fn(async () => 'C:\\Users\\Test\\Desktop'),
@@ -94,6 +99,7 @@ describe('TauriDesktopBridge', () => {
     native.invoke.mockReset();
     native.open.mockReset();
     native.readText.mockReset();
+    native.requestUserAttention.mockReset().mockResolvedValue(undefined);
     native.save.mockReset();
     native.writeText.mockReset();
     native.readText.mockResolvedValue('"F:\\Media\\clipboard lesson.wav"');
@@ -551,5 +557,40 @@ describe('TauriDesktopBridge', () => {
     expect(native.invoke).toHaveBeenCalledWith('open_output_directory', {
       path: 'F:\\Text\\lesson.txt',
     });
+  });
+
+  it('owns native task and power notifications behind the bridge boundary', async () => {
+    const bridge = new TauriDesktopBridge();
+
+    await expect(
+      bridge.notifyTaskFinished({
+        status: 'completed',
+        elapsed: '03:18',
+        detail: '已生成 2 个输出文件',
+      }),
+    ).resolves.toBe(true);
+    await expect(bridge.notifyPowerCountdown('04:27')).resolves.toBe(true);
+
+    expect(native.requestUserAttention.mock.calls).toEqual([[2], [1]]);
+    expect(native.invoke).toHaveBeenCalledWith('show_app_notification', {
+      status: 'completed',
+      title: '总耗时 03:18',
+      detail: '已生成 2 个输出文件',
+    });
+    expect(native.invoke).toHaveBeenCalledWith('show_app_notification', {
+      status: 'power',
+      title: '总耗时 04:27 · 60 秒后关机',
+      detail: '点击通知返回 WhisperSubtitle，可取消本次关机。',
+    });
+  });
+
+  it('isolates a native notification failure from task finalization', async () => {
+    native.invoke.mockRejectedValueOnce(new Error('toast unavailable'));
+    const bridge = new TauriDesktopBridge();
+
+    await expect(
+      bridge.notifyTaskFinished({ status: 'failed', elapsed: '00:12', detail: '模型错误' }),
+    ).resolves.toBe(false);
+    expect(native.requestUserAttention).toHaveBeenCalledWith(1);
   });
 });

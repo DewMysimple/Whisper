@@ -6,6 +6,11 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from ..domain.models import (
+    DEFAULT_MODEL_ID,
+    SECONDARY_RECOGNITION_MODEL_IDS,
+    TRANSLATION_MODEL_IDS,
+)
 from .desktop_ipc import (
     CommandMethod,
     ErrorCode,
@@ -184,7 +189,7 @@ def _validate_parameter_overrides(
                 parameter_value == "translate"
                 and (
                     base_preset_id not in {"en_v1", "en_v2"}
-                    or model_id == "large-v3-turbo"
+                    or model_id not in TRANSLATION_MODEL_IDS
                 )
             ):
                 raise ProtocolValidationError(
@@ -364,7 +369,7 @@ def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
     _validate_parameter_overrides(
         profile["overrides"],
         str(profile["base_preset_id"]),
-        str(params.get("model_id") or "large-v3-turbo"),
+        str(params.get("model_id") or DEFAULT_MODEL_ID),
     )
     recognition_strategy = params.get("recognition_strategy", "stable_primary")
     if recognition_strategy not in _RECOGNITION_STRATEGIES:
@@ -376,8 +381,8 @@ def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
         recognition_strategy != "stable_primary"
         and (
             profile["base_preset_id"] not in {"cn", "cn2"}
-            or params.get("model_id", "large-v3-turbo")
-            not in {"large-v3", "large-v3-turbo"}
+            or params.get("model_id", DEFAULT_MODEL_ID)
+            not in SECONDARY_RECOGNITION_MODEL_IDS
         )
     ):
         raise ProtocolValidationError(

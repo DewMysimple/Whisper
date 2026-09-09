@@ -8,6 +8,7 @@ import type {
   SubtitleParameters,
   TranscriptionDraft,
 } from '../contracts/desktop';
+import { DEFAULT_MODEL_ID } from '../contracts/desktop';
 import { getPreset } from '../data/presets';
 import { getSubtitlePreset } from '../data/subtitlePresets';
 import { DEFAULT_HARDWARE_PREFERENCE } from './hardware';
@@ -79,7 +80,7 @@ export function normalizeDraft(draft: TranscriptionDraft): TranscriptionDraft {
     hardware?: HardwarePreference;
     output: OutputPolicy & { srtEnabled?: boolean; preserveSourceMarkdown?: boolean };
   };
-  const modelId = legacy.modelId ?? 'large-v3-turbo';
+  const modelId = legacy.modelId ?? DEFAULT_MODEL_ID;
   const baseParameters = getPreset(draft.basePresetId, modelId).parameters;
   return {
     ...structuredClone(draft),

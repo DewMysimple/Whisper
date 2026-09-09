@@ -1,5 +1,12 @@
 # 扩展开发指南
 
+## 新增模型
+
+1. 在 `src/whisper_subtitle/domain/models.py` 更新模型定义、能力和默认值。
+2. 如模型身份需要跨进程传输，同步评审 `contracts/desktop_ipc/v1/desktop_ipc.schema.json`。
+3. 运行 `python scripts/generate_model_catalog.py`，更新 TypeScript 与 Rust 投影。
+4. 运行 `python scripts/generate_model_catalog.py --check` 和跨语言测试，禁止在 Web、Rust 或 Worker 中另建手工模型列表。
+
 ## 新增 preset
 
 1. 在 `domain/presets.py` 的 `PRESETS` 中增加一个 `Preset`。
@@ -9,7 +16,7 @@
 5. 运行 `python scripts/generate_preset_catalog.py` 更新 Web 参数投影，并确保 `corepack pnpm check:preset-catalog` 通过。
 6. 增加固定输出并运行 benchmark/golden 门禁。
 
-CLI choices、GUI 列表、设置恢复和进程参数都从同一注册表派生。新增 preset 不应修改 `TranscriptionService` 主流程。
+CLI choices、桌面列表、设置恢复和进程参数都从同一注册表派生。新增 preset 不应修改 `TranscriptionService` 主流程。
 
 显示标签和摘要可以在 `apps/web/src/data/presets.ts` 维护；推理参数不要在 TypeScript 中手工复制，统一从 Python 注册表生成。
 
@@ -31,16 +38,20 @@ CLI choices、GUI 列表、设置恢复和进程参数都从同一注册表派�
 ## 新增 UI 或自动化入口
 
 1. 将用户输入转换为 `TranscriptionRequest`。
-2. 进程内入口调用 application service；独立进程入口调用统一 CLI 的 JSONL 协议。
+2. React 组件只调用 typed `DesktopBridge`；原生 Tauri import、invoke 和事件订阅只放在 `apps/web/src/bridge/`。
 3. 只消费 `ProgressEvent` 和 `BatchResult`，不要解析 Core 脚本 stdout 或复制转录逻辑。
-4. GUI 状态、窗口组件和进程控制放在 `presentation/`。
+4. React 状态和组件留在 `apps/web`；进程、窗口和原生权限留在 Tauri/Rust Host。Python `presentation/` 仅服务 CLI/JSONL 展示。
 
 ## 验证清单
 
 ```powershell
-python -m pytest -q
-python -m whisper_subtitle check
+.\.venv\Scripts\python.exe -m pytest -q
+corepack pnpm check
+python scripts/generate_model_catalog.py --check
+python scripts/generate_preset_catalog.py --check
+python scripts/check_repository_hygiene.py
+python wiki-memory/工具/memory_lint.py check
 python -m tests.benchmark.run_benchmark --output final-benchmark.json
 ```
 
-涉及 GPU 或依赖调整时，还必须在从零安装的隔离环境中验证真实中英文音频、四 preset、CLI、GUI 和显存。
+涉及 Rust Host 时还需运行 `cargo fmt --check`、`cargo test --locked` 和 clippy。涉及 GPU 或依赖调整时，还必须在从零安装的隔离环境中验证真实中英文音频、四 preset、CLI、桌面应用和显存。

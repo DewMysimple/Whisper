@@ -71,10 +71,11 @@ pub(super) fn inspect_local_models(root: &Path) -> Vec<LocalModelDescriptor> {
                 path: path
                     .as_ref()
                     .map(|value| value.to_string_lossy().into_owned()),
-                detail: path
-                    .is_some()
-                    .then_some("本地模型完整，可离线加载".to_owned())
-                    .unwrap_or_else(|| format!("请放入 models\\{id}")),
+                detail: if path.is_some() {
+                    "本地模型完整，可离线加载".to_owned()
+                } else {
+                    format!("请放入 models\\{id}")
+                },
             }
         })
         .collect()

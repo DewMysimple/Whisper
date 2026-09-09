@@ -26,7 +26,7 @@ It is designed for people who want to transcribe their own audio and video files
 | `en` | English standard | English speech with the standard context and post-processing strategy |
 | `en2` | English anti-hallucination | English speech with stricter thresholds and trailing hallucination cleanup |
 
-The default CLI preset is `en`. Desktop controls, generated Web settings, and Worker requests are derived from the same Python registry in `src/whisper_subtitle/domain/presets.py`.
+The default CLI preset is `en`. Desktop controls, generated Web settings, and Worker requests are derived from the same Python registry in `src/whisper_subtitle/domain/presets.py`. Supported model identities are maintained separately in `src/whisper_subtitle/domain/models.py` and projected into TypeScript and Rust by `scripts/generate_model_catalog.py`.
 
 ## Architecture
 
@@ -47,7 +47,7 @@ The runtime boundary is deliberate:
 
 - `apps/web` owns the desktop workbench, settings, task history, metrics, and presentation state.
 - `apps/desktop/src-tauri` owns the native window, exact Tauri commands, Worker lifecycle, and protocol validation.
-- `src/whisper_subtitle` owns presets, transcription orchestration, media discovery, model/runtime checks, post-processing, and output storage.
+- `src/whisper_subtitle` owns model and preset catalogs, transcription orchestration, media discovery, runtime checks, post-processing, and output storage.
 - `contracts/desktop_ipc/v1` defines the cross-language Desktop IPC contract.
 - The production desktop loads local compiled assets and starts a controlled Worker process; it does not open a browser or listen on localhost.
 
@@ -77,13 +77,13 @@ corepack enable
 corepack pnpm install
 ```
 
-The model is not stored in Git. Put a compatible local model in the supported model location, or point the application at one explicitly:
+The model is not stored in Git. For source CLI usage, point the process at a compatible local model snapshot:
 
 ```powershell
 $env:WHISPER_SUBTITLE_MODEL_DIR = "D:\models\large-v3-turbo"
 ```
 
-The environment check reports missing Python packages, GPU/CUDA information, and model path problems before transcription starts:
+The packaged desktop resolves its model from the packaged resource layout; the environment variable above is primarily for source CLI and Worker development. The environment check reports missing Python packages, GPU/CUDA information, and model path problems before transcription starts:
 
 ```powershell
 python -m whisper_subtitle check
@@ -143,11 +143,19 @@ Useful commands from the repository root:
 # Frontend build
 corepack pnpm build
 
-# Full project checks: preset projection, formatting, lint, types, and tests
+# Repository and frontend checks: generated catalogs, hygiene, memory, format,
+# lint, types, and browser unit tests
 corepack pnpm check
 
-# Python tests
-python -m pytest -q
+# Python tests (use an interpreter where this project is installed)
+.\.venv\Scripts\python.exe -m pytest -q
+
+# Rust host checks
+Push-Location apps/desktop/src-tauri
+cargo fmt --check
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+Pop-Location
 
 # Browser end-to-end tests
 corepack pnpm e2e
@@ -177,14 +185,16 @@ docs/                       Current architecture, development, migration, and pa
 packaging/                  Windows offline installer and portable-build scripts
 assets/                     Source assets copied into installable packages
 wiki-memory/                Current engineering memory and historical audit records
+AGENTS.md                   Agent startup, validation, memory, and delivery gates
 ```
 
-Local models, virtual environments, caches, generated build output, and local Agent/tool state are intentionally outside the product source boundary and are ignored or removable when no longer needed.
+Local models, virtual environments, caches, generated build output, and local Agent/tool state are intentionally outside the product source boundary. They are ignored, and periodic maintenance must not delete them without explicit authorization.
 
 ## Documentation
 
 - [Current architecture](docs/architecture/current_architecture.md)
 - [Extension guide](docs/development/extension_guide.md)
+- [Periodic maintenance guide](docs/development/maintenance_guide.md)
 - [Windows packaging](packaging/README.md)
 - [Repository policy](docs/repository_policy.md)
 - [Project documentation index](docs/README.md)

@@ -21,6 +21,7 @@ from typing import Iterable
 
 ALLOWED_TYPES = {"state", "decision", "knowledge", "log", "moc"}
 ALLOWED_STATUSES = {"active", "proposed", "deprecated", "superseded", "archived"}
+ALLOWED_IMPORTANCES = {"low", "medium", "high"}
 ALLOWED_KINDS = {
     "feature",
     "ui",
@@ -33,7 +34,7 @@ ALLOWED_KINDS = {
     "module",
     "operations",
 }
-REQUIRED_FIELDS = {"type", "status", "kind", "importance", "updated", "topic"}
+REQUIRED_FIELDS = {"type", "status", "kind", "importance", "updated", "topic", "source_logs"}
 MANAGED_DIRS = {"当前状态", "决策", "知识", "日志"}
 INDEX_PATH = Path("日志") / "MOC_工作日志.md"
 
@@ -168,6 +169,25 @@ def display_title(page: Page) -> str:
     return page.path.stem
 
 
+def log_goal(page: Page) -> str:
+    """Return the first explicit goal from a work log."""
+    lines = page.body.splitlines()
+    for line in lines:
+        match = re.match(r"^[-*]\s+(?:`?目标`?|本轮目标)：\s*(.+)$", line)
+        if match:
+            return match.group(1).strip()
+
+    for index, line in enumerate(lines):
+        if re.match(r"^##\s+(?:目标|本轮目标)\s*$", line):
+            for candidate in lines[index + 1 :]:
+                stripped = candidate.strip()
+                if stripped.startswith("## "):
+                    break
+                if stripped and not stripped.startswith(("<!--", "- ", "* ")):
+                    return stripped
+    return "-"
+
+
 def validate_pages(root: Path, pages: list[Page]) -> list[str]:
     errors: list[str] = []
     page_by_path = {page.rel: page for page in pages}
@@ -185,6 +205,9 @@ def validate_pages(root: Path, pages: list[Page]) -> list[str]:
         kind = str(page.fields.get("kind", ""))
         if kind and kind not in ALLOWED_KINDS:
             errors.append(f"{page.rel}: invalid kind '{kind}'")
+        importance = str(page.fields.get("importance", ""))
+        if importance and importance not in ALLOWED_IMPORTANCES:
+            errors.append(f"{page.rel}: invalid importance '{importance}'")
 
         for target in links_in(page.body):
             resolved = resolve_link(page.path, target)
@@ -267,14 +290,7 @@ def index_logs(root: Path, pages: list[Page]) -> Path:
             status = str(page.fields.get("status", "-"))
             topic = page.topic or "-"
             title = display_title(page).replace("|", "\\|")
-            goal = "-"
-            for line in page.body.splitlines():
-                if re.match(r"^[-*] `?目标`?：", line):
-                    goal = line.split("：", 1)[1].strip().replace("|", "\\|")
-                    break
-                if re.match(r"^[-*] (目标|本轮目标)：", line):
-                    goal = line.split("：", 1)[1].strip().replace("|", "\\|")
-                    break
+            goal = log_goal(page).replace("|", "\\|")
             link = f"[[日志/{page.path.name}|{title}]]"
             lines.append(f"| {page.fields.get('updated', '-')} | {kind} | {goal} | {status} | {topic} | {link} |")
 

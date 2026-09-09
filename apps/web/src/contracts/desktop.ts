@@ -1,9 +1,26 @@
+import {
+  CALIBRATED_MODEL_IDS,
+  DEFAULT_MODEL_ID,
+  MODEL_IDS,
+  SECONDARY_RECOGNITION_MODEL_IDS,
+  TRANSLATION_MODEL_IDS,
+  VISIBLE_MODEL_IDS,
+} from './modelCatalog.generated';
+
 export const PRESET_IDS = ['cn', 'cn2', 'en_v1', 'en_v2'] as const;
-export const MODEL_IDS = ['tiny', 'base', 'small', 'medium', 'large-v3', 'large-v3-turbo'] as const;
+
+export {
+  CALIBRATED_MODEL_IDS,
+  DEFAULT_MODEL_ID,
+  MODEL_IDS,
+  SECONDARY_RECOGNITION_MODEL_IDS,
+  TRANSLATION_MODEL_IDS,
+  VISIBLE_MODEL_IDS,
+};
 
 export type PresetId = (typeof PRESET_IDS)[number];
 export type ModelId = (typeof MODEL_IDS)[number];
-export type V3ModelId = Extract<ModelId, 'large-v3' | 'large-v3-turbo'>;
+export type V3ModelId = (typeof CALIBRATED_MODEL_IDS)[number];
 export type TranscriptionTask = 'transcribe' | 'translate';
 export type RecognitionStrategy = 'stable_primary' | 'mixed_zh_en' | 'zh_detail_review';
 export type ProfileMode = 'transcript' | 'subtitle';
@@ -329,6 +346,12 @@ export interface PowerActionStatus {
   error: string | null;
 }
 
+export interface TaskFinishedNotice {
+  status: 'completed' | 'failed' | 'cancelled';
+  elapsed: string;
+  detail: string;
+}
+
 export type DesktopEvent =
   | { type: 'inputs.added'; inputs: InputSource[] }
   | { type: 'host.status'; status: HostStatus }
@@ -392,6 +415,8 @@ export interface DesktopBridge {
   getPowerCapabilities(): Promise<PowerCapabilities>;
   getPowerActionStatus(): Promise<PowerActionStatus>;
   cancelPowerAction(): Promise<PowerActionStatus>;
+  notifyTaskFinished(notice: TaskFinishedNotice): Promise<boolean>;
+  notifyPowerCountdown(elapsed: string): Promise<boolean>;
   startTranscription(
     draft: TranscriptionDraft,
     options?: StartTranscriptionOptions,

@@ -6,11 +6,13 @@ import importlib.util
 import sys
 from collections.abc import Callable
 
+from ..domain.models import SUPPORTED_MODEL_IDS
 from ..paths import AppPaths, get_app_paths
 
 
 REQUIRED_MODULES = ("psutil", "faster_whisper", "ctranslate2", "opencc")
 WORKER_REQUIRED_MODULES = REQUIRED_MODULES
+SUPPORTED_MODEL_LABEL = "、".join(SUPPORTED_MODEL_IDS)
 
 
 def check_environment(
@@ -35,8 +37,8 @@ def check_environment(
         errors.append(f"当前 Python 解释器不存在: {paths.python_executable}")
     if not paths.model_location.available_models():
         errors.append(
-            "未找到受支持的本地 Whisper 模型；请安装 tiny、base、small、medium、"
-            "large-v3 或 large-v3-turbo，并检查 WHISPER_SUBTITLE_MODEL_DIR。"
+            f"未找到受支持的本地 Whisper 模型；请安装 {SUPPORTED_MODEL_LABEL}，"
+            "并检查 WHISPER_SUBTITLE_MODEL_DIR。"
         )
     return errors
 
@@ -61,8 +63,8 @@ def check_worker_environment(
         errors.append(f"当前 Python 解释器不存在: {paths.python_executable}")
     if not paths.model_location.available_models():
         errors.append(
-            "未找到受支持的本地 Whisper 模型；请安装 tiny、base、small、medium、"
-            "large-v3 或 large-v3-turbo，并检查 WHISPER_SUBTITLE_MODEL_DIR。"
+            f"未找到受支持的本地 Whisper 模型；请安装 {SUPPORTED_MODEL_LABEL}，"
+            "并检查 WHISPER_SUBTITLE_MODEL_DIR。"
         )
     return errors
 

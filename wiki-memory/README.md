@@ -4,7 +4,7 @@
 
 ## 启动读取
 
-Agent 首先读取 `AGENTS.md`，然后读取 `当前状态/` 下的五个页面，再按任务读取 active 决策和知识页。`历史归档/` 不属于默认启动上下文。
+Agent 首先读取 `AGENTS.md`，然后依次读取项目概览、系统架构、当前约束和当前待办四个基线页面；已知问题、active 决策和知识页按任务相关性读取。`历史归档/` 不属于默认启动上下文。
 
 ## 目录
 
@@ -22,12 +22,13 @@ Agent 首先读取 `AGENTS.md`，然后读取 `当前状态/` 下的五个页面
 3. 未确认的方案不进入 active 当前状态或 active 决策。
 4. 新结论替代旧结论时保留旧页面并标记状态，不删除历史。
 5. 当前未提交工作只能记录为开发中事实，不能写成已验收结论。
+6. 实质任务完成后必须新增日志、同步受影响的 active 页面、重建索引并通过记忆体检。
 
 ## 检查
 
 ```powershell
-python wiki-memory/工具/memory_lint.py check
 python wiki-memory/工具/memory_lint.py index
+python wiki-memory/工具/memory_lint.py check
 ```
 
 本次迁移前目录名为 `Log`；迁移映射和完整旧文件位于 [历史归档](历史归档/)。

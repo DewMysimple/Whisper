@@ -1,9 +1,3 @@
-# 运行依赖
-faster-whisper>=1.0
-psutil>=5.9
-nvidia-ml-py>=12.0
-nvidia-cublas-cu12>=12.0,<13
-
-# 开发工具
-setuptools>=68,<82
-pytest>=7.0
+# Compatibility entry point for tools that still expect requirements.txt.
+# Runtime and development dependencies are maintained in pyproject.toml.
+-e .[dev]

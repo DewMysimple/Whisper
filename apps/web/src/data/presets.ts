@@ -1,4 +1,9 @@
-import type { ModelId, PresetDefinition, TranscriptionTask } from '../contracts/desktop';
+import {
+  DEFAULT_MODEL_ID,
+  type ModelId,
+  type PresetDefinition,
+  type TranscriptionTask,
+} from '../contracts/desktop';
 import { GENERATED_MODEL_PROFILES, GENERATED_PRESET_PARAMETERS } from './presetCatalog.generated';
 
 type PresetPresentation = Omit<PresetDefinition, 'parameters'>;
@@ -31,8 +36,6 @@ const PRESET_PRESENTATION: PresetPresentation[] = [
     summary: 'Auto-detect primary language · English anti-loop cleanup',
   },
 ];
-
-const DEFAULT_MODEL_ID: ModelId = 'large-v3-turbo';
 
 export const PRESETS: PresetDefinition[] = PRESET_PRESENTATION.map((preset) => ({
   ...preset,

@@ -2,7 +2,9 @@
 
 use serde_json::{Map, Value};
 
-use super::model_catalog::SUPPORTED_MODEL_IDS;
+use super::model_catalog::{
+    SECONDARY_RECOGNITION_MODEL_IDS, SUPPORTED_MODEL_IDS, TRANSLATION_MODEL_IDS,
+};
 use super::{BridgeHardwarePreference, HostError, StartDraft};
 use crate::protocol::valid_identifier;
 
@@ -24,7 +26,7 @@ pub(super) fn validate_start_draft(draft: &StartDraft) -> Result<(), HostError> 
         "stable_primary" | "mixed_zh_en" | "zh_detail_review"
     ) || (draft.recognition_strategy != "stable_primary"
         && (!matches!(draft.base_preset_id.as_str(), "cn" | "cn2")
-            || !matches!(draft.model_id.as_str(), "large-v3" | "large-v3-turbo")))
+            || !SECONDARY_RECOGNITION_MODEL_IDS.contains(&draft.model_id.as_str())))
     {
         return Err(HostError::new(
             "request.invalid",
@@ -114,7 +116,7 @@ fn validate_overrides(
             "task" => value.as_str().is_some_and(|task| {
                 task == "transcribe"
                     || (task == "translate"
-                        && model_id != "large-v3-turbo"
+                        && TRANSLATION_MODEL_IDS.contains(&model_id)
                         && matches!(base_preset_id, "en_v1" | "en_v2"))
             }),
             "beam_size" | "best_of" => value.as_i64().is_some_and(|item| (1..=20).contains(&item)),

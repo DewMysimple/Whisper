@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { desktopDir, join } from '@tauri-apps/api/path';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { getCurrentWindow, UserAttentionType } from '@tauri-apps/api/window';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { open, save } from '@tauri-apps/plugin-dialog';
 
@@ -21,6 +22,7 @@ import type {
   PowerActionStatus,
   PowerCapabilities,
   StartTranscriptionOptions,
+  TaskFinishedNotice,
   TranscriptionDraft,
   Unlisten,
 } from '../contracts/desktop';
@@ -240,6 +242,45 @@ export class TauriDesktopBridge implements DesktopBridge {
   async cancelPowerAction(): Promise<PowerActionStatus> {
     await this.ensureNativeListeners();
     return invoke<PowerActionStatus>('cancel_power_action');
+  }
+
+  async notifyTaskFinished(notice: TaskFinishedNotice): Promise<boolean> {
+    const attentionType =
+      notice.status === 'failed' ? UserAttentionType.Critical : UserAttentionType.Informational;
+    return this.showAppNotification(
+      notice.status,
+      `总耗时 ${notice.elapsed}`,
+      notice.detail,
+      attentionType,
+    );
+  }
+
+  async notifyPowerCountdown(elapsed: string): Promise<boolean> {
+    return this.showAppNotification(
+      'power',
+      `总耗时 ${elapsed} · 60 秒后关机`,
+      '点击通知返回 WhisperSubtitle，可取消本次关机。',
+      UserAttentionType.Critical,
+    );
+  }
+
+  private async showAppNotification(
+    status: TaskFinishedNotice['status'] | 'power',
+    title: string,
+    detail: string,
+    attentionType: UserAttentionType,
+  ): Promise<boolean> {
+    try {
+      await getCurrentWindow().requestUserAttention(attentionType);
+    } catch {
+      // A denied attention permission must not disturb task finalization.
+    }
+    try {
+      await invoke('show_app_notification', { status, title, detail });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async startTranscription(

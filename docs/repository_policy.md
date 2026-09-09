@@ -15,7 +15,10 @@
 | `assets/` | 便携启动资源源文件 | 与包内资源保持来源关系 |
 | `models/` | 本地大模型 | 忽略，不提交 |
 | `whisper_env/` | 本地虚拟环境 | 忽略，不提交 |
-| `build/`、缓存、`__pycache__/` | 可再生产物 | 忽略，可安全清理 |
+| `build/`、`target/`、缓存、`__pycache__/` | 可再生产物 | 忽略；定期维护不自动删除，清理需明确授权 |
+| `dist/release/` | 本地发布与验收产物 | 忽略；保留最近验收产物，清理需明确授权 |
+| `requirements.txt` | pip 兼容入口 | 只委托到 `pyproject.toml`，不重复维护依赖清单 |
+| `*.lnk` | 机器相关快捷方式 | 忽略且不提交；正式入口由安装/打包流程创建 |
 | `.agents/`、`.claude/`、`.workbuddy/` | 本地 Agent/工具状态，不参与产品运行 | 不属于仓库产品边界；不需要时可清理，不纳入提交 |
 
 ## 命名
@@ -23,6 +26,8 @@
 - 生产 Python 模块、测试和当前英文路径使用小写 snake_case。
 - 历史需求、Log 和 archive 文件保留原名，避免破坏审计链。
 - 新代码不以物理脚本名表达 preset；统一使用 preset ID/CLI alias。
+- Python 依赖以 `pyproject.toml` 为唯一事实源；兼容安装入口不得复制版本约束。
+- 模型身份以 `domain/models.py` 为唯一事实源，并通过生成脚本投影到 Web 和 Rust。
 
 ## Golden 与 benchmark
 

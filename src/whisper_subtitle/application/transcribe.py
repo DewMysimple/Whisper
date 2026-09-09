@@ -21,6 +21,7 @@ from .recognition_passes import (
 )
 
 from ..domain.mixed_language import hotword_audit
+from ..domain.models import DEFAULT_MODEL_ID, SECONDARY_RECOGNITION_MODEL_IDS
 from ..domain.postprocess import (
     apply_strategy,
     merge_chinese_segments_to_sentences,
@@ -162,7 +163,7 @@ class TranscriptionService:
         preset: Preset | None = None,
         output_plan: OutputPlan | None = None,
         subtitle_options: dict[str, object] | None = None,
-        model_id: str = "large-v3-turbo",
+        model_id: str = DEFAULT_MODEL_ID,
     ) -> TranscriptionResult:
         """Transcribe one discovered file, propagating operational failures."""
         preset = preset or resolve_preset(request.preset_id)
@@ -198,7 +199,7 @@ class TranscriptionService:
             # Whisper segment. Stable-primary tasks keep their existing cost.
             params["word_timestamps"] = True
         media_started_at = time.monotonic()
-        if mixed_recognition and model_id not in {"large-v3", "large-v3-turbo"}:
+        if mixed_recognition and model_id not in SECONDARY_RECOGNITION_MODEL_IDS:
             raise ValueError("mixed_zh_en requires a Large V3 or Large V3 Turbo model")
         segments, info = engine.transcribe(str(media_path), **params)
         if params.get("language") is None:

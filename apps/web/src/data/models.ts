@@ -1,4 +1,6 @@
-import type { ModelId } from '../contracts/desktop';
+import { VISIBLE_MODEL_IDS, type ModelId } from '../contracts/desktop';
+
+export { VISIBLE_MODEL_IDS };
 
 export interface ModelPresentation {
   label: string;
@@ -56,5 +58,3 @@ export const MODEL_PRESENTATIONS: Record<ModelId, ModelPresentation> = {
 export function getModelLabel(modelId: ModelId): string {
   return MODEL_PRESENTATIONS[modelId].label;
 }
-
-export const VISIBLE_MODEL_IDS = ['large-v3', 'large-v3-turbo'] as const;

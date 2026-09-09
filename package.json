@@ -9,8 +9,12 @@
   },
   "scripts": {
     "build": "corepack pnpm --filter @whisper-subtitle/web build",
-    "check": "corepack pnpm check:preset-catalog && corepack pnpm format:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test",
+    "check": "corepack pnpm check:repo && corepack pnpm check:memory && corepack pnpm check:model-catalog && corepack pnpm check:preset-catalog && corepack pnpm format:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test",
+    "check:repo": "python scripts/check_repository_hygiene.py",
+    "check:memory": "python wiki-memory/工具/memory_lint.py check",
+    "generate:model-catalog": "python scripts/generate_model_catalog.py",
     "generate:preset-catalog": "python scripts/generate_preset_catalog.py",
+    "check:model-catalog": "python scripts/generate_model_catalog.py --check",
     "check:preset-catalog": "python scripts/generate_preset_catalog.py --check",
     "desktop:build": "corepack pnpm build && corepack pnpm --filter @whisper-subtitle/desktop tauri build --no-bundle",
     "desktop:dev": "corepack pnpm build && corepack pnpm --filter @whisper-subtitle/desktop tauri dev",

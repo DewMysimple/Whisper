@@ -13,4 +13,21 @@ export default tseslint.config(
       globals: { ...globals.browser, ...globals.es2023 },
     },
   },
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/bridge/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@tauri-apps/*', '@tauri-apps/*/*'],
+              message: 'Native APIs belong behind the typed DesktopBridge boundary.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

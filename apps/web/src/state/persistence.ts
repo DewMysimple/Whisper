@@ -9,13 +9,19 @@ import type {
   SubtitleParameters,
   TaskSnapshot,
 } from '../contracts/desktop';
-import { MODEL_IDS, PRESET_IDS } from '../contracts/desktop';
+import {
+  DEFAULT_MODEL_ID,
+  MODEL_IDS,
+  PRESET_IDS,
+  SECONDARY_RECOGNITION_MODEL_IDS,
+} from '../contracts/desktop';
 import { getPreset } from '../data/presets';
 import { getSubtitlePreset } from '../data/subtitlePresets';
 import { DEFAULT_HARDWARE_PREFERENCE } from './hardware';
 import {
   isV3ModelId,
   parameterProfileKey,
+  parseParameterProfileKey,
   sanitizeProfileOverrides,
   DEFAULT_RECOGNITION_STRATEGY,
   translationTaskSupported,
@@ -142,7 +148,7 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   const customAccentColor = value.customAccentColor ?? DEFAULT_APPEARANCE.customAccentColor;
   const uiFontFamily = value.uiFontFamily ?? DEFAULT_APPEARANCE.uiFontFamily;
   const monoFontFamily = value.monoFontFamily ?? DEFAULT_APPEARANCE.monoFontFamily;
-  const requestedModelId = value.selectedModelId ?? 'large-v3-turbo';
+  const requestedModelId = value.selectedModelId ?? DEFAULT_MODEL_ID;
   const hardwarePreference = value.hardwarePreference ?? DEFAULT_HARDWARE_PREFERENCE;
   if (
     !isNumberInRange(uiFontSize, UI_FONT_SIZE_RANGE.minimum, UI_FONT_SIZE_RANGE.maximum, true) ||
@@ -157,7 +163,7 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   ) {
     return null;
   }
-  const selectedModelId = isV3ModelId(requestedModelId) ? requestedModelId : 'large-v3-turbo';
+  const selectedModelId = isV3ModelId(requestedModelId) ? requestedModelId : DEFAULT_MODEL_ID;
   const profileMode = value.profileMode ?? 'transcript';
   if (profileMode !== 'transcript' && profileMode !== 'subtitle') return null;
   if (!isOverrides(value.overrides)) return null;
@@ -270,13 +276,15 @@ function normalizeTaskSnapshot(task: TaskSnapshot): TaskSnapshot {
   const legacy = task as TaskSnapshot & { modelId?: ModelId; draft?: TaskSnapshot['draft'] };
   return {
     ...task,
-    modelId: isModelId(legacy.modelId) ? legacy.modelId : 'large-v3-turbo',
+    modelId: isModelId(legacy.modelId) ? legacy.modelId : DEFAULT_MODEL_ID,
     recognitionStrategy:
       (task.recognitionStrategy === 'mixed_zh_en' ||
         task.recognitionStrategy === 'zh_detail_review') &&
       ['cn', 'cn2'].includes(task.presetId) &&
-      ['large-v3', 'large-v3-turbo'].includes(
-        isModelId(legacy.modelId) ? legacy.modelId : 'large-v3-turbo',
+      SECONDARY_RECOGNITION_MODEL_IDS.includes(
+        (isModelId(legacy.modelId)
+          ? legacy.modelId
+          : DEFAULT_MODEL_ID) as (typeof SECONDARY_RECOGNITION_MODEL_IDS)[number],
       )
         ? task.recognitionStrategy
         : 'stable_primary',
@@ -285,13 +293,15 @@ function normalizeTaskSnapshot(task: TaskSnapshot): TaskSnapshot {
         ? undefined
         : {
             ...legacy.draft,
-            modelId: isModelId(legacy.draft.modelId) ? legacy.draft.modelId : 'large-v3-turbo',
+            modelId: isModelId(legacy.draft.modelId) ? legacy.draft.modelId : DEFAULT_MODEL_ID,
             recognitionStrategy:
               (legacy.draft.recognitionStrategy === 'mixed_zh_en' ||
                 legacy.draft.recognitionStrategy === 'zh_detail_review') &&
               ['cn', 'cn2'].includes(legacy.draft.basePresetId) &&
-              ['large-v3', 'large-v3-turbo'].includes(
-                isModelId(legacy.draft.modelId) ? legacy.draft.modelId : 'large-v3-turbo',
+              SECONDARY_RECOGNITION_MODEL_IDS.includes(
+                (isModelId(legacy.draft.modelId)
+                  ? legacy.draft.modelId
+                  : DEFAULT_MODEL_ID) as (typeof SECONDARY_RECOGNITION_MODEL_IDS)[number],
               )
                 ? legacy.draft.recognitionStrategy
                 : 'stable_primary',
@@ -386,13 +396,11 @@ function parseParameterProfiles(value: unknown): ParameterProfiles | null {
   if (!isRecord(value)) return null;
   const profiles: ParameterProfiles = {};
   for (const [key, overrides] of Object.entries(value)) {
-    if (!/^(large-v3|large-v3-turbo):(cn|cn2|en_v1|en_v2)$/.test(key)) return null;
+    const parsedKey = parseParameterProfileKey(key);
+    if (parsedKey === null) return null;
     if (!isOverrides(overrides)) return null;
-    const [modelId, presetId] = key.split(':') as [
-      'large-v3' | 'large-v3-turbo',
-      'cn' | 'cn2' | 'en_v1' | 'en_v2',
-    ];
-    profiles[key as keyof ParameterProfiles] = sanitizeProfileOverrides(
+    const [modelId, presetId] = parsedKey;
+    profiles[parameterProfileKey(modelId, presetId)] = sanitizeProfileOverrides(
       modelId,
       presetId,
       overrides,
@@ -405,7 +413,7 @@ function parseRecognitionStrategyProfiles(value: unknown): RecognitionStrategyPr
   if (value === undefined) return {};
   if (!isRecord(value)) return null;
   for (const [key, strategy] of Object.entries(value)) {
-    if (!/^(large-v3|large-v3-turbo):(cn|cn2|en_v1|en_v2)$/.test(key)) return null;
+    if (parseParameterProfileKey(key) === null) return null;
     if (
       strategy !== 'mixed_zh_en' &&
       strategy !== 'zh_detail_review' &&

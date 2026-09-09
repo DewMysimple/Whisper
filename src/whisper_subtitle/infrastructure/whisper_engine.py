@@ -8,11 +8,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..domain.mixed_language import LanguageDetectionRegion
+from ..domain.models import DEFAULT_MODEL_ID
 from .hardware import HardwareInfo
 from ..paths import AppPaths, ModelLocation
 
 
-DEFAULT_MODEL_NAME = "large-v3-turbo"
+DEFAULT_MODEL_NAME = DEFAULT_MODEL_ID
 ModelFactory = Callable[..., Any]
 
 

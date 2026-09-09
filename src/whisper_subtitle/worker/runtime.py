@@ -19,7 +19,6 @@ from ..domain.contracts import Preset, ProgressEvent, TranscriptionRequest
 from ..domain.presets import derive_preset
 from ..infrastructure.environment_check import check_worker_environment
 from ..infrastructure.hardware import HardwareDetector, HardwareInfo
-from ..infrastructure.media_files import MediaDiscoveryError, discover_media_files
 from ..infrastructure.output_store import (
     OutputConflict,
     OutputConflictError,
@@ -51,96 +50,12 @@ from .runtime_types import (
     WorkerCommandError,
     _default_engine_loader,
 )
-
-
-def _default_media_duration_probe(
-    path: Path,
-) -> tuple[bool, float | None, str | None]:
-    """Read container metadata through the PyAV runtime bundled with the Worker."""
-    try:
-        import av
-
-        with av.open(str(path), mode="r") as container:
-            duration: float | None = None
-            if container.duration is not None and container.duration > 0:
-                duration = float(container.duration) / float(av.time_base)
-            if duration is None:
-                stream_durations = [
-                    float(stream.duration * stream.time_base)
-                    for stream in container.streams
-                    if stream.duration is not None
-                    and stream.time_base is not None
-                    and stream.duration > 0
-                ]
-                if stream_durations:
-                    duration = max(stream_durations)
-        return True, duration, None
-    except Exception as exc:
-        return False, None, str(exc) or type(exc).__name__
-
-
-def normalize_input_path(value: str) -> Path:
-    """Normalize one structured path without shell parsing or tokenization."""
-    normalized = value.strip()
-    if len(normalized) >= 2 and normalized.startswith('"') and normalized.endswith('"'):
-        normalized = normalized[1:-1]
-    if not normalized:
-        raise ValueError("input path is empty")
-    return Path(normalized).resolve(strict=False)
-
-
-def _path_key(path: Path) -> str:
-    return str(path.resolve(strict=False)).casefold()
-
-
-def expand_input_sources(inputs: Sequence[Mapping[str, Any]]) -> tuple[Path, ...]:
-    """Expand files/directories in source order and deduplicate Windows-style."""
-    media_paths: list[Path] = []
-    seen: set[str] = set()
-    issues: list[dict[str, str]] = []
-
-    for index, source in enumerate(inputs):
-        raw_path = source.get("path")
-        kind = source.get("kind")
-        try:
-            if not isinstance(raw_path, str):
-                raise ValueError("path must be a string")
-            path = normalize_input_path(raw_path)
-            if kind == "file" and not path.is_file():
-                raise ValueError("declared file does not exist or is not a file")
-            if kind == "directory" and not path.is_dir():
-                raise ValueError("declared directory does not exist or is not a directory")
-            if kind not in {"file", "directory"}:
-                raise ValueError("unsupported input kind")
-            discovered = discover_media_files(path)
-        except (MediaDiscoveryError, OSError, ValueError) as exc:
-            issues.append(
-                {
-                    "index": str(index),
-                    "path": str(raw_path),
-                    "reason": str(exc),
-                }
-            )
-            continue
-
-        for media_path in discovered:
-            key = _path_key(media_path)
-            if key not in seen:
-                seen.add(key)
-                media_paths.append(media_path)
-
-    if issues:
-        raise WorkerCommandError(
-            ErrorCode.REQUEST_INVALID,
-            "one or more input sources are invalid",
-            data={"inputs": issues},
-        )
-    if not media_paths:
-        raise WorkerCommandError(
-            ErrorCode.REQUEST_INVALID,
-            "input sources did not produce supported media",
-        )
-    return tuple(media_paths)
+from .media import (
+    default_media_duration_probe,
+    expand_input_sources,
+    normalize_input_path,
+    path_key,
+)
 
 
 _PROGRESS_STAGE_MAP = {
@@ -186,7 +101,7 @@ class WorkerRuntime:
         hardware_capability_loader: HardwareCapabilityLoader | None = None,
         engine_loader: EngineLoader = _default_engine_loader,
         performance_sampler: PerformanceSampler = collect_performance_sample,
-        media_duration_probe: MediaDurationProbe = _default_media_duration_probe,
+        media_duration_probe: MediaDurationProbe = default_media_duration_probe,
     ) -> None:
         self._emit = emit
         self._check_environment = environment_checker
@@ -535,7 +450,7 @@ class WorkerRuntime:
             self._queue.append(task)
             for plan in task.output_plans:
                 for path in plan.content_paths:
-                    key = _path_key(path)
+                    key = path_key(path)
                     self._reserved_output_paths[key] = (
                         self._reserved_output_paths.get(key, 0) + 1
                     )
@@ -728,7 +643,7 @@ class WorkerRuntime:
     def _release_task_reservations_locked(self, task: WorkerTask) -> None:
         for plan in task.output_plans:
             for path in plan.content_paths:
-                key = _path_key(path)
+                key = path_key(path)
                 remaining = self._reserved_output_paths.get(key, 0) - 1
                 if remaining > 0:
                     self._reserved_output_paths[key] = remaining

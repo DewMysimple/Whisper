@@ -3,6 +3,7 @@ import { ArrowLeft, RotateCcw, SlidersHorizontal, Sparkles } from 'lucide-react'
 import type { EditableParameters, SubtitleParameters } from '../contracts/desktop';
 import { MODEL_PRESENTATIONS } from '../data/models';
 import { PRESETS, modelProfileSummary } from '../data/presets';
+import { translationTaskSupported } from '../state/parameterProfiles';
 import { useWorkspace } from '../state/workspace';
 
 type NumericParameterKey = {
@@ -235,8 +236,7 @@ export function InferenceParameterEditor() {
     ? 'fixed'
     : 'model';
   const preset = PRESETS.find((item) => item.id === selectedPresetId)!;
-  const englishMode = selectedPresetId === 'en_v1' || selectedPresetId === 'en_v2';
-  const translationAvailable = englishMode && selectedModelId === 'large-v3';
+  const translationAvailable = translationTaskSupported(selectedModelId, selectedPresetId);
   const hotwordCount = parameters.hotwords
     .split(/[\n,，;；]+/)
     .map((item) => item.trim())

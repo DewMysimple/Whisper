@@ -7,6 +7,7 @@ from types import MappingProxyType
 from typing import Any
 
 from .contracts import Preset
+from .models import CALIBRATED_MODEL_IDS, TRANSLATION_MODEL_IDS
 from .postprocess.strategies import STRATEGY_LABELS
 
 
@@ -23,7 +24,7 @@ EN_PROMPT = (
     "Ensure each sentence is complete and ends with a period, exclamation mark, or question mark."
 )
 
-MODEL_CALIBRATED_IDS = frozenset({"large-v3", "large-v3-turbo"})
+MODEL_CALIBRATED_IDS = CALIBRATED_MODEL_IDS
 
 POSTPROCESS_STRATEGIES = STRATEGY_LABELS
 
@@ -340,9 +341,9 @@ def derive_preset(
             raise ValueError(f"invalid override for task: {task!r}")
         if task == "translate" and base.format_language != "en":
             raise ValueError("translate is only supported by English presets")
-        if task == "translate" and model_id == "large-v3-turbo":
+        if task == "translate" and model_id not in TRANSLATION_MODEL_IDS:
             raise ValueError(
-                "large-v3-turbo is not trained for translation; use large-v3"
+                f"{model_id} is not trained for translation; use large-v3"
             )
         params["task"] = task
 

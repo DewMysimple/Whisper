@@ -1,13 +1,16 @@
-import type {
-  EditableParameters,
-  ModelId,
-  PresetId,
-  RecognitionStrategy,
-  V3ModelId,
+import {
+  CALIBRATED_MODEL_IDS,
+  PRESET_IDS,
+  TRANSLATION_MODEL_IDS,
+  type EditableParameters,
+  type ModelId,
+  type PresetId,
+  type RecognitionStrategy,
+  type V3ModelId,
 } from '../contracts/desktop';
 import { getPreset } from '../data/presets';
 
-export const V3_MODEL_IDS: readonly V3ModelId[] = ['large-v3', 'large-v3-turbo'];
+export const V3_MODEL_IDS: readonly V3ModelId[] = CALIBRATED_MODEL_IDS;
 export const DEFAULT_RECOGNITION_STRATEGY: RecognitionStrategy = 'stable_primary';
 
 export type ParameterProfileKey = `${V3ModelId}:${PresetId}`;
@@ -19,11 +22,26 @@ export function isV3ModelId(modelId: ModelId): modelId is V3ModelId {
 }
 
 export function translationTaskSupported(modelId: ModelId, presetId: PresetId): boolean {
-  return modelId !== 'large-v3-turbo' && (presetId === 'en_v1' || presetId === 'en_v2');
+  return (
+    TRANSLATION_MODEL_IDS.includes(modelId as (typeof TRANSLATION_MODEL_IDS)[number]) &&
+    (presetId === 'en_v1' || presetId === 'en_v2')
+  );
 }
 
 export function parameterProfileKey(modelId: V3ModelId, presetId: PresetId): ParameterProfileKey {
   return `${modelId}:${presetId}`;
+}
+
+export function parseParameterProfileKey(value: string): [V3ModelId, PresetId] | null {
+  const [modelId, presetId, extra] = value.split(':');
+  if (
+    extra !== undefined ||
+    !isV3ModelId(modelId as ModelId) ||
+    !PRESET_IDS.includes(presetId as PresetId)
+  ) {
+    return null;
+  }
+  return [modelId as V3ModelId, presetId as PresetId];
 }
 
 export function profileOverrides(
