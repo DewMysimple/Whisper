@@ -61,13 +61,6 @@ const DRAFT: TranscriptionDraft = {
     },
   ],
   modelId: 'large-v3-turbo',
-  hardware: {
-    mode: 'auto',
-    gpuDeviceIndex: 0,
-    cudaComputeType: 'float16',
-    cpuComputeType: 'int8',
-    cpuThreads: 4,
-  },
   basePresetId: 'en_v1',
   profileMode: 'transcript',
   overrides: {},

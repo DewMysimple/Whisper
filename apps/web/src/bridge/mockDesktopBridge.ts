@@ -1,7 +1,6 @@
 import type {
   DesktopBridge,
   DesktopEvent,
-  HardwarePreference,
   HostStatus,
   InputOrigin,
   InputSource,
@@ -154,39 +153,6 @@ export class MockDesktopBridge implements DesktopBridge {
     }));
   }
 
-  async loadModel(modelId: ModelId, hardware?: HardwarePreference): Promise<void> {
-    const preference = hardware ?? {
-      mode: 'auto' as const,
-      gpuDeviceIndex: 0,
-      cudaComputeType: 'float16' as const,
-      cpuComputeType: 'int8' as const,
-      cpuThreads: 4,
-    };
-    const device = preference.mode === 'cpu' ? 'cpu' : 'cuda';
-    this.emit({
-      type: 'model.status',
-      model: {
-        state: 'loading',
-        modelId,
-        device: null,
-        computeType: null,
-        deviceIndex: null,
-        cpuThreads: null,
-      },
-    });
-    this.emit({
-      type: 'model.status',
-      model: {
-        state: 'ready',
-        modelId,
-        device,
-        computeType: device === 'cuda' ? preference.cudaComputeType : preference.cpuComputeType,
-        deviceIndex: device === 'cuda' ? preference.gpuDeviceIndex : 0,
-        cpuThreads: device === 'cpu' ? preference.cpuThreads : 0,
-      },
-    });
-  }
-
   async getPowerCapabilities(): Promise<PowerCapabilities> {
     return { shutdown: true };
   }
@@ -245,13 +211,10 @@ export class MockDesktopBridge implements DesktopBridge {
       createdAt: new Date().toISOString(),
       draft: structuredClone(draft),
       hardware: {
-        device: draft.hardware.mode === 'cpu' ? 'cpu' : 'cuda',
-        deviceIndex: draft.hardware.mode === 'cpu' ? 0 : draft.hardware.gpuDeviceIndex,
-        computeType:
-          draft.hardware.mode === 'cpu'
-            ? draft.hardware.cpuComputeType
-            : draft.hardware.cudaComputeType,
-        cpuThreads: draft.hardware.mode === 'cpu' ? draft.hardware.cpuThreads : 0,
+        device: 'cuda',
+        deviceIndex: 0,
+        computeType: 'float16',
+        cpuThreads: 0,
       },
       mediaPaths,
       processingCount: mediaPaths.length,
@@ -324,19 +287,6 @@ export class MockDesktopBridge implements DesktopBridge {
           errors: [],
           python: '3.13.5',
           platform: 'Windows mock',
-          hardware: {
-            cpuName: 'Intel(R) Core(TM) i7-14700KF',
-            cpuPhysicalCores: 20,
-            cpuLogicalCores: 28,
-            cpuComputeTypes: ['int8', 'float32'],
-            gpus: [
-              {
-                index: 0,
-                name: 'NVIDIA GeForce RTX 5070 Ti',
-                computeTypes: ['float16', 'int8_float16', 'float32'],
-              },
-            ],
-          },
         },
       }),
     );

@@ -3,7 +3,7 @@ type: moc
 status: active
 kind: process
 importance: high
-updated: 2026-09-16
+updated: 2026-09-17
 topic: work-log-index
 source_logs: []
 supersedes: null
@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-17 | maintenance | 按用户明确授权，从正式工程删除“硬件优化”工作台及人工设备、精度和 CPU 线程配置，并检查删除过程中遗留的冗余代码；保留转录所需的自动硬件探测、任务级实际硬件记录和性能监控。 | archived | retire-hardware-optimization-workbench | [[日志/2026-09-17-删除硬件优化工作台.md|删除硬件优化工作台]] |
 | 2026-09-16 | ui | 按用户明确授权，从正式软件删除“模型切换”工作台及相关冗余代码，暂不设计替代页面，同时保证其他工作台与转录运行链路不受影响。 | archived | retire-model-switch-workbench | [[日志/2026-09-16-删除模型切换工作台.md|删除模型切换工作台]] |
 | 2026-09-09 | maintenance | 评估并维护当前工程的架构、工程文件、目录管理、Agent 入口、README 和长期记忆，在不改变产品功能契约的前提下修复本期应处理的问题。 | archived | periodic-engineering-maintenance | [[日志/2026-09-09-工程定期维护.md|工程定期维护]] |
 | 2026-09-08 | ui | - | archived | unified-selection-card-interaction | [[日志/2026-09-08-统一卡片点击交互.md|第 34 次修改：统一选择卡片点击交互]] |

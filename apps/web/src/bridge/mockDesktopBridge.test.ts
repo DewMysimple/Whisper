@@ -15,13 +15,6 @@ describe('MockDesktopBridge', () => {
     const draft: TranscriptionDraft = {
       inputs,
       modelId: 'large-v3-turbo',
-      hardware: {
-        mode: 'auto',
-        gpuDeviceIndex: 0,
-        cudaComputeType: 'float16',
-        cpuComputeType: 'int8',
-        cpuThreads: 4,
-      },
       basePresetId: 'cn',
       profileMode: 'transcript',
       overrides: {},

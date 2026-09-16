@@ -23,8 +23,6 @@
         "system.environment",
         "system.metrics",
         "media.inspect",
-        "model.load",
-        "model.unload",
         "transcription.start",
         "transcription.cancel",
         "worker.shutdown"
@@ -249,24 +247,6 @@
         }
       ]
     },
-    "HardwarePreference": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "mode",
-        "gpu_device_index",
-        "cuda_compute_type",
-        "cpu_compute_type",
-        "cpu_threads"
-      ],
-      "properties": {
-        "mode": { "enum": ["auto", "cuda", "cpu"] },
-        "gpu_device_index": { "type": "integer", "minimum": 0, "maximum": 31 },
-        "cuda_compute_type": { "enum": ["float16", "int8_float16", "float32"] },
-        "cpu_compute_type": { "enum": ["int8", "float32"] },
-        "cpu_threads": { "type": "integer", "minimum": 1, "maximum": 256 }
-      }
-    },
     "ResolvedHardware": {
       "type": "object",
       "additionalProperties": false,
@@ -287,7 +267,6 @@
         "recognition_strategy": {
           "enum": ["stable_primary", "mixed_zh_en", "zh_detail_review"]
         },
-        "hardware": { "$ref": "#/$defs/HardwarePreference" },
         "inputs": {
           "type": "array",
           "minItems": 1,
@@ -325,14 +304,6 @@
           }
         }
       ]
-    },
-    "ModelLoadParams": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "model_id": { "type": "string", "minLength": 1 },
-        "hardware": { "$ref": "#/$defs/HardwarePreference" }
-      }
     },
     "MediaInspectParams": {
       "type": "object",
@@ -374,17 +345,12 @@
                   "system.health",
                   "system.environment",
                   "system.metrics",
-                  "model.unload",
                   "worker.shutdown"
                 ]
               }
             }
           },
           "then": { "properties": { "params": { "$ref": "#/$defs/EmptyObject" } } }
-        },
-        {
-          "if": { "properties": { "method": { "const": "model.load" } } },
-          "then": { "properties": { "params": { "$ref": "#/$defs/ModelLoadParams" } } }
         },
         {
           "if": { "properties": { "method": { "const": "media.inspect" } } },

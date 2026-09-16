@@ -60,8 +60,7 @@ Schema source of truth: [`desktop_ipc.schema.json`](desktop_ipc.schema.json).
 - `system.health`
 - `system.environment`
 - `system.metrics`
-- `model.load`
-- `model.unload`
+- `media.inspect`
 - `transcription.start`
 - `transcription.cancel`
 - `worker.shutdown`
@@ -89,28 +88,10 @@ Boost clock shown by vendor utilities.
 
 `transcription.start` carries an `InputSource[]`, a base preset plus validated overrides, an explicit compatibility/custom output policy, and may include a local `model_id`. Supported task model IDs are `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-turbo`. The Worker freezes the model with the task and echoes it in `task.queued.data.model_id`; omitting it preserves the original `large-v3-turbo` behavior. The existing CLI continues to accept one physical input argument.
 
-`model.load` and `transcription.start` may also include the same optional hardware preference:
-
-```json
-{
-  "hardware": {
-    "mode": "auto",
-    "gpu_device_index": 0,
-    "cuda_compute_type": "float16",
-    "cpu_compute_type": "int8",
-    "cpu_threads": 4
-  }
-}
-```
-
-`mode` is `auto`, `cuda`, or `cpu`. CUDA compute types are limited to
-`float16`, `int8_float16`, and the compatibility fallback `float32`; CPU
-compute types are `int8` and `float32`. The Worker resolves the preference
-against CTranslate2's runtime capabilities and echoes the frozen result in
-`task.queued.data.hardware`. A task keeps that model/hardware pair even when
-the desktop changes defaults while it is queued or running. Omitting
-`hardware` preserves the original automatic CUDA/FP16, otherwise CPU/INT8
-behavior.
+The Worker selects inference hardware automatically: CUDA device 0 with FP16
+when available (or FP32 compatibility fallback), otherwise CPU with INT8. It
+freezes the resolved device for each task and reports it in
+`task.queued.data.hardware`; callers do not submit hardware preferences.
 
 For output confirmation, the desktop first submits the existing Worker
 `fail` conflict policy. An `output.failed` error whose data contains
@@ -172,7 +153,9 @@ task.queued
   -> task.completed | task.failed | task.cancelled
 ```
 
-Model events are Worker-level events and are not inserted into the task lifecycle sequence.
+Model events report automatic loading performed for transcription tasks and are
+not inserted into the task lifecycle sequence. Explicit model load/unload
+commands are not part of the current contract.
 
 `command.completed` is the request-correlated success acknowledgement for commands
 that do not naturally create a task terminal event. Its `data` contains the original
@@ -186,8 +169,8 @@ remain unchanged.
 - Unknown fields are rejected to prevent accidental silent protocol drift.
 - The optional SRT fields and `preserve_source_markdown` are accepted additive
   v1 extensions; the original TXT/Markdown request shape remains valid.
-- Optional `model_id`, hardware preferences, resolved task hardware and
-  structured output-conflict paths are backward-compatible v1 extensions.
+- Optional `model_id`, resolved task hardware and structured output-conflict
+  paths are v1 extensions.
 - Unknown methods produce `protocol.unknown_method`.
 - Unsupported versions produce `protocol.unsupported_version`.
 - The retained CLI JSONL shape with `type: progress` is not a v1 desktop IPC message. Its PyQt5 consumer was retired in batch 7; the CLI channel remains available independently.

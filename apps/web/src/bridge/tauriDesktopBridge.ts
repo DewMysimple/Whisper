@@ -11,11 +11,9 @@ import type {
   DesktopEvent,
   EditableParameters,
   HostStatus,
-  HardwarePreference,
   InputOrigin,
   InputSource,
   LocalModelDescriptor,
-  ModelId,
   ModelStatus,
   OutputPathStatus,
   OutputPreview,
@@ -58,9 +56,7 @@ import {
   normalizeDialogPaths,
   normalizeInvokeError,
   outputConflictDetails,
-  readHardwareCapabilities,
   readResolvedHardware,
-  toHostHardware,
   toHostOutput,
   type PendingTaskMetadata,
 } from './tauriWorkerDecoder';
@@ -219,11 +215,6 @@ export class TauriDesktopBridge implements DesktopBridge {
     return invoke<LocalModelDescriptor[]>('list_local_models');
   }
 
-  async loadModel(modelId: ModelId, hardware?: HardwarePreference): Promise<void> {
-    await this.ensureNativeListeners();
-    await invoke('load_model', { modelId, hardware: toHostHardware(hardware) });
-  }
-
   async getPowerCapabilities(): Promise<PowerCapabilities> {
     await this.ensureNativeListeners();
     return invoke<PowerCapabilities>('get_power_capabilities');
@@ -298,7 +289,6 @@ export class TauriDesktopBridge implements DesktopBridge {
           inputs: draft.inputs.map(({ path, kind, origin }) => ({ path, kind, origin })),
           basePresetId: draft.basePresetId,
           overrides: draft.overrides,
-          hardware: toHostHardware(draft.hardware),
           output: toHostOutput(
             draft.output,
             draft.subtitleParameters,
@@ -439,10 +429,7 @@ export class TauriDesktopBridge implements DesktopBridge {
       if (isWorkerEnvironment(result)) {
         this.emit({
           type: 'worker.environment',
-          environment: {
-            ...result,
-            hardware: readHardwareCapabilities(result.hardware),
-          },
+          environment: result,
         });
       }
     } catch (error) {

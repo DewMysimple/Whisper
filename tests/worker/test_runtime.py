@@ -47,7 +47,6 @@ def start_command(
     overrides=None,
     policy=None,
     model_id=None,
-    hardware_preference=None,
     preset_id="en_v1",
 ):
     params = {
@@ -63,8 +62,6 @@ def start_command(
     }
     if model_id is not None:
         params["model_id"] = model_id
-    if hardware_preference is not None:
-        params["hardware"] = hardware_preference
     return CommandMessage(
         request_id,
         CommandMethod.TRANSCRIPTION_START,
@@ -286,7 +283,7 @@ def test_mixed_model_queue_freezes_each_task_without_interrupting_active_work(tm
     ]
 
 
-def test_mixed_hardware_queue_freezes_and_switches_at_task_boundaries(tmp_path):
+def test_queued_tasks_freeze_automatically_resolved_hardware(tmp_path):
     first = make_media(tmp_path, "first-hardware.wav")
     second = make_media(tmp_path, "second-hardware.wav")
     events = []
@@ -294,27 +291,31 @@ def test_mixed_hardware_queue_freezes_and_switches_at_task_boundaries(tmp_path):
     detected = []
     loaded = []
 
-    def detect(preference=None):
-        selected = dict(preference or {})
-        detected.append(selected)
-        if selected.get("mode") == "cpu":
-            return HardwareInfo(
+    resolved = iter(
+        [
+            HardwareInfo(
+                device="cuda",
+                compute_type="float16",
+                cuda_available=True,
+                gpu_name="Test GPU",
+                cuda_version="driver 555.0",
+                cpu_threads=0,
+            ),
+            HardwareInfo(
                 device="cpu",
-                compute_type=str(selected["cpu_compute_type"]),
+                compute_type="int8",
                 cuda_available=False,
                 gpu_name=None,
                 cuda_version=None,
-                cpu_threads=int(selected["cpu_threads"]),
-            )
-        return HardwareInfo(
-            device="cuda",
-            compute_type=str(selected.get("cuda_compute_type") or "float16"),
-            cuda_available=True,
-            gpu_name="Test GPU",
-            cuda_version="driver 555.0",
-            cpu_threads=0,
-            device_index=int(selected.get("gpu_device_index") or 0),
-        )
+                cpu_threads=4,
+            ),
+        ]
+    )
+
+    def detect():
+        hardware = next(resolved)
+        detected.append(hardware)
+        return hardware
 
     def load(resolved_hardware, _location, model_id):
         loaded.append((model_id, resolved_hardware.device, resolved_hardware.compute_type))
@@ -330,36 +331,16 @@ def test_mixed_hardware_queue_freezes_and_switches_at_task_boundaries(tmp_path):
         idle_timeout_seconds=60,
         task_id_factory=iter(["task-cuda", "task-cpu"]).__next__,
     )
-    cuda_preference = {
-        "mode": "cuda",
-        "gpu_device_index": 0,
-        "cuda_compute_type": "int8_float16",
-        "cpu_compute_type": "int8",
-        "cpu_threads": 4,
-    }
-    cpu_preference = {
-        "mode": "cpu",
-        "gpu_device_index": 0,
-        "cuda_compute_type": "float16",
-        "cpu_compute_type": "float32",
-        "cpu_threads": 6,
-    }
     try:
-        runtime.handle_command(
-            start_command(
-                "req-cuda", first, hardware_preference=cuda_preference
-            )
-        )
-        runtime.handle_command(
-            start_command("req-cpu", second, hardware_preference=cpu_preference)
-        )
+        runtime.handle_command(start_command("req-cuda", first))
+        runtime.handle_command(start_command("req-cpu", second))
         assert runtime.wait_until_idle()
     finally:
         assert runtime.close(timeout=3)
 
     assert loaded == [
-        ("large-v3-turbo", "cuda", "int8_float16"),
-        ("large-v3-turbo", "cpu", "float32"),
+        ("large-v3-turbo", "cuda", "float16"),
+        ("large-v3-turbo", "cpu", "int8"),
     ]
     queued_events = [
         event
@@ -370,18 +351,34 @@ def test_mixed_hardware_queue_freezes_and_switches_at_task_boundaries(tmp_path):
         {
             "device": "cuda",
             "device_index": 0,
-            "compute_type": "int8_float16",
+            "compute_type": "float16",
             "cpu_threads": 0,
         },
         {
             "device": "cpu",
             "device_index": 0,
-            "compute_type": "float32",
-            "cpu_threads": 6,
+            "compute_type": "int8",
+            "cpu_threads": 4,
         },
     ]
-    assert cuda_preference in detected
-    assert cpu_preference in detected
+    assert detected == [
+        HardwareInfo(
+            device="cuda",
+            compute_type="float16",
+            cuda_available=True,
+            gpu_name="Test GPU",
+            cuda_version="driver 555.0",
+            cpu_threads=0,
+        ),
+        HardwareInfo(
+            device="cpu",
+            compute_type="int8",
+            cuda_available=False,
+            gpu_name=None,
+            cuda_version=None,
+            cpu_threads=4,
+        ),
+    ]
 
 
 def test_system_metrics_returns_read_only_machine_snapshot():
@@ -460,7 +457,7 @@ def test_media_inspect_uses_metadata_cache_and_returns_unknown_duration(tmp_path
     assert completed[0].data["result"]["items"][0]["duration_seconds"] is None
 
 
-def test_active_task_can_be_cancelled_and_model_unload_is_busy(tmp_path):
+def test_active_task_can_be_cancelled(tmp_path):
     media = make_media(tmp_path, "blocked.wav")
     started = threading.Event()
     release = threading.Event()
@@ -474,12 +471,6 @@ def test_active_task_can_be_cancelled_and_model_unload_is_busy(tmp_path):
     try:
         runtime.handle_command(start_command("req-start", media))
         assert started.wait(3)
-
-        with pytest.raises(WorkerCommandError) as captured:
-            runtime.handle_command(
-                CommandMessage("req-unload", CommandMethod.MODEL_UNLOAD, {})
-            )
-        assert captured.value.code is ErrorCode.WORKER_BUSY
 
         runtime.handle_command(
             CommandMessage(

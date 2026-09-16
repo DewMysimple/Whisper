@@ -1,6 +1,5 @@
 import type {
   EditableParameters,
-  HardwarePreference,
   ModelId,
   OutputConflictGroup,
   OutputPolicy,
@@ -11,7 +10,6 @@ import type {
 import { DEFAULT_MODEL_ID } from '../contracts/desktop';
 import { getPreset } from '../data/presets';
 import { getSubtitlePreset } from '../data/subtitlePresets';
-import { DEFAULT_HARDWARE_PREFERENCE } from './hardware';
 import {
   DEFAULT_RECOGNITION_STRATEGY,
   normalizePromptText,
@@ -77,16 +75,16 @@ export function normalizeDraft(draft: TranscriptionDraft): TranscriptionDraft {
     modelId?: ModelId;
     profileMode?: ProfileMode;
     subtitleParameters?: SubtitleParameters;
-    hardware?: HardwarePreference;
     output: OutputPolicy & { srtEnabled?: boolean; preserveSourceMarkdown?: boolean };
   };
   const modelId = legacy.modelId ?? DEFAULT_MODEL_ID;
   const baseParameters = getPreset(draft.basePresetId, modelId).parameters;
+  const normalized = structuredClone(draft) as TranscriptionDraft & { hardware?: unknown };
+  delete normalized.hardware;
   return {
-    ...structuredClone(draft),
+    ...normalized,
     modelId,
     recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
-    hardware: legacy.hardware ?? { ...DEFAULT_HARDWARE_PREFERENCE },
     profileMode: legacy.profileMode ?? 'transcript',
     effectiveParameters: { ...baseParameters, ...draft.effectiveParameters },
     subtitleParameters: {

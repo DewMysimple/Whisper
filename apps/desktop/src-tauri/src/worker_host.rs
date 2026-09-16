@@ -21,7 +21,6 @@ pub const WORKER_LOG_EVENT: &str = "desktop://worker-log";
 pub const WORKER_LOGS_CLEARED_EVENT: &str = "desktop://worker-logs-cleared";
 
 const START_TIMEOUT: Duration = Duration::from_secs(180);
-const MODEL_LOAD_TIMEOUT: Duration = Duration::from_secs(180);
 const MEDIA_INSPECT_TIMEOUT: Duration = Duration::from_secs(120);
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -33,7 +32,7 @@ mod model_catalog;
 mod models;
 use self::logs::{worker_log_summary, worker_quality_diagnostic_log_lines};
 pub use self::media::{apply_media_inspections, inspect_input_paths};
-use self::model_catalog::{DEFAULT_MODEL_ID, SUPPORTED_MODEL_IDS};
+use self::model_catalog::DEFAULT_MODEL_ID;
 use self::models::{inspect_local_models, packaged_worker_environment};
 
 pub type EventSink = Arc<dyn Fn(&str, Value) + Send + Sync + 'static>;
@@ -115,16 +114,6 @@ pub struct BridgeOutputPolicy {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct BridgeHardwarePreference {
-    pub mode: String,
-    pub gpu_device_index: i64,
-    pub cuda_compute_type: String,
-    pub cpu_compute_type: String,
-    pub cpu_threads: i64,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BridgeSubtitleParameters {
     pub max_characters_per_line: i64,
     pub max_lines_per_cue: i64,
@@ -147,8 +136,6 @@ pub struct StartDraft {
     pub inputs: Vec<BridgeInputSource>,
     pub base_preset_id: String,
     pub overrides: Map<String, Value>,
-    #[serde(default)]
-    pub hardware: Option<BridgeHardwarePreference>,
     pub output: BridgeOutputPolicy,
 }
 
@@ -429,24 +416,6 @@ impl WorkerManager {
             ));
         }
         Ok(items)
-    }
-
-    pub fn load_model(
-        &self,
-        model_id: &str,
-        hardware: Option<BridgeHardwarePreference>,
-    ) -> Result<Value, HostError> {
-        if !SUPPORTED_MODEL_IDS.contains(&model_id) {
-            return Err(HostError::new("request.invalid", "model_id is unsupported"));
-        }
-        if let Some(value) = hardware.as_ref() {
-            validate_hardware_preference(value)?;
-        }
-        let mut params = json!({"model_id": model_id});
-        if let Some(value) = hardware {
-            params["hardware"] = hardware_to_protocol(value);
-        }
-        self.send_generated_command("model.load", params, MODEL_LOAD_TIMEOUT)
     }
 
     pub fn model_root(&self) -> PathBuf {
@@ -963,21 +932,10 @@ impl WorkerManager {
 }
 
 mod validation;
-use validation::{validate_hardware_preference, validate_start_draft};
-
-fn hardware_to_protocol(hardware: BridgeHardwarePreference) -> Value {
-    json!({
-        "mode": hardware.mode,
-        "gpu_device_index": hardware.gpu_device_index,
-        "cuda_compute_type": hardware.cuda_compute_type,
-        "cpu_compute_type": hardware.cpu_compute_type,
-        "cpu_threads": hardware.cpu_threads,
-    })
-}
+use validation::validate_start_draft;
 
 fn draft_to_protocol_params(draft: StartDraft) -> Value {
-    let hardware = draft.hardware;
-    let mut params = json!({
+    json!({
         "model_id": draft.model_id,
         "recognition_strategy": draft.recognition_strategy,
         "inputs": draft.inputs,
@@ -1003,11 +961,7 @@ fn draft_to_protocol_params(draft: StartDraft) -> Value {
             "preserve_source_markdown": draft.output.preserve_source_markdown,
             "conflict_policy": draft.output.conflict_policy,
         }
-    });
-    if let Some(value) = hardware {
-        params["hardware"] = hardware_to_protocol(value);
-    }
-    params
+    })
 }
 
 #[cfg(test)]
@@ -1022,9 +976,9 @@ mod tests {
 
     use super::media::strip_one_pair_of_quotes;
     use super::{
-        BridgeHardwarePreference, BridgeInputSource, BridgeOutputPolicy, BridgeSubtitleParameters,
-        MediaInspectionItem, StartDraft, WORKER_LOGS_CLEARED_EVENT, WORKER_MESSAGE_EVENT,
-        WorkerManager, apply_media_inspections, draft_to_protocol_params, inspect_input_paths,
+        BridgeInputSource, BridgeOutputPolicy, BridgeSubtitleParameters, MediaInspectionItem,
+        StartDraft, WORKER_LOGS_CLEARED_EVENT, WORKER_MESSAGE_EVENT, WorkerManager,
+        apply_media_inspections, draft_to_protocol_params, inspect_input_paths,
         inspect_local_models, validate_start_draft, worker_log_summary,
         worker_quality_diagnostic_log_lines,
     };
@@ -1053,7 +1007,6 @@ mod tests {
             }],
             base_preset_id: "en_v1".to_owned(),
             overrides: Map::new(),
-            hardware: None,
             output: BridgeOutputPolicy {
                 mode: "compatibility".to_owned(),
                 root_directory: None,
@@ -1120,41 +1073,14 @@ mod tests {
     }
 
     #[test]
-    fn freezes_validated_hardware_and_overwrite_policy_in_worker_request() {
+    fn freezes_overwrite_policy_in_worker_request() {
         let mut draft = valid_draft();
-        draft.hardware = Some(BridgeHardwarePreference {
-            mode: "cuda".to_owned(),
-            gpu_device_index: 1,
-            cuda_compute_type: "int8_float16".to_owned(),
-            cpu_compute_type: "int8".to_owned(),
-            cpu_threads: 4,
-        });
         draft.output.conflict_policy = "overwrite".to_owned();
 
-        validate_start_draft(&draft).expect("valid hardware draft");
+        validate_start_draft(&draft).expect("valid overwrite draft");
         let params = draft_to_protocol_params(draft);
 
-        assert_eq!(params["hardware"]["mode"], json!("cuda"));
-        assert_eq!(params["hardware"]["gpu_device_index"], json!(1));
-        assert_eq!(
-            params["hardware"]["cuda_compute_type"],
-            json!("int8_float16")
-        );
         assert_eq!(params["output"]["conflict_policy"], json!("overwrite"));
-    }
-
-    #[test]
-    fn rejects_hardware_values_outside_the_host_whitelist() {
-        let mut draft = valid_draft();
-        draft.hardware = Some(BridgeHardwarePreference {
-            mode: "cuda".to_owned(),
-            gpu_device_index: 0,
-            cuda_compute_type: "int8".to_owned(),
-            cpu_compute_type: "int8".to_owned(),
-            cpu_threads: 4,
-        });
-
-        assert!(validate_start_draft(&draft).is_err());
     }
 
     #[test]
@@ -1622,7 +1548,6 @@ mod tests {
             }],
             base_preset_id: preset_id,
             overrides: Map::new(),
-            hardware: None,
             output: BridgeOutputPolicy {
                 mode: "custom".to_owned(),
                 root_directory: Some(output_root.to_string_lossy().into_owned()),

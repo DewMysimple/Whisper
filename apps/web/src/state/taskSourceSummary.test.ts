@@ -42,13 +42,6 @@ function task(inputs: InputSource[], sourceCount: number): TaskSnapshot {
         preserveSourceMarkdown: false,
         conflictPolicy: 'confirm_overwrite',
       },
-      hardware: {
-        mode: 'auto',
-        gpuDeviceIndex: 0,
-        cudaComputeType: 'float16',
-        cpuComputeType: 'int8',
-        cpuThreads: 4,
-      },
     },
   };
 }

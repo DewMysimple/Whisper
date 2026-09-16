@@ -24,38 +24,13 @@ export type RecognitionStrategy = 'stable_primary' | 'mixed_zh_en' | 'zh_detail_
 export type ProfileMode = 'transcript' | 'subtitle';
 export type InputOrigin = 'dialog' | 'drop' | 'paste' | 'manual';
 export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
-export type HardwareMode = 'auto' | 'cuda' | 'cpu';
-export type CudaComputeType = 'float16' | 'int8_float16' | 'float32';
-export type CpuComputeType = 'int8' | 'float32';
 export type FinishAction = 'none' | 'shutdown';
-
-export interface HardwarePreference {
-  mode: HardwareMode;
-  gpuDeviceIndex: number;
-  cudaComputeType: CudaComputeType;
-  cpuComputeType: CpuComputeType;
-  cpuThreads: number;
-}
 
 export interface ResolvedHardware {
   device: 'cuda' | 'cpu';
   deviceIndex: number;
   computeType: string;
   cpuThreads: number;
-}
-
-export interface GpuCapability {
-  index: number;
-  name: string;
-  computeTypes: string[];
-}
-
-export interface HardwareCapabilities {
-  cpuName: string | null;
-  cpuPhysicalCores: number;
-  cpuLogicalCores: number;
-  cpuComputeTypes: string[];
-  gpus: GpuCapability[];
 }
 
 export interface InputSource {
@@ -293,7 +268,6 @@ export interface WorkerEnvironment {
   errors: string[];
   python: string;
   platform: string;
-  hardware?: HardwareCapabilities;
 }
 
 export interface ModelStatus {
@@ -324,7 +298,6 @@ export interface TranscriptionDraft {
   profileMode: ProfileMode;
   subtitleParameters: SubtitleParameters;
   output: OutputPolicy;
-  hardware: HardwarePreference;
 }
 
 export interface StartTranscriptionOptions {
@@ -408,7 +381,6 @@ export interface DesktopBridge {
   getHostStatus(): Promise<HostStatus>;
   restartWorker(): Promise<HostStatus>;
   listLocalModels(): Promise<LocalModelDescriptor[]>;
-  loadModel(modelId: ModelId, hardware?: HardwarePreference): Promise<void>;
   getPowerCapabilities(): Promise<PowerCapabilities>;
   getPowerActionStatus(): Promise<PowerActionStatus>;
   cancelPowerAction(): Promise<PowerActionStatus>;

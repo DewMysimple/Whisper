@@ -83,7 +83,7 @@ The model is not stored in Git. For source CLI usage, point the process at a com
 $env:WHISPER_SUBTITLE_MODEL_DIR = "D:\models\large-v3-turbo"
 ```
 
-The packaged desktop resolves its model from the packaged resource layout; the environment variable above is primarily for source CLI and Worker development. The environment check reports missing Python packages, GPU/CUDA information, and model path problems before transcription starts:
+The packaged desktop resolves its model from the packaged resource layout; the environment variable above is primarily for source CLI and Worker development. The environment check reports missing Python packages and model path problems before transcription starts. Inference hardware is selected automatically when a task starts and the resolved device is recorded with the task:
 
 ```powershell
 python -m whisper_subtitle check

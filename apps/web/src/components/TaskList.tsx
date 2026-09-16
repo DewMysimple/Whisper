@@ -14,7 +14,6 @@ import { useCallback, useEffect, useState } from 'react';
 
 import type { TaskSnapshot } from '../contracts/desktop';
 import { getModelLabel } from '../data/models';
-import { formatResolvedHardware } from '../state/hardware';
 import { formatDurationSummary, taskDurationSummary } from '../state/mediaDuration';
 import { getPreset, transcriptionTaskLabel } from '../data/presets';
 import { canResumeTask, isAbnormalTask, useWorkspace } from '../state/workspace';
@@ -332,7 +331,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
       </div>
       <ConfirmDialog
         confirmLabel="载入原配置"
-        description="软件只会把历史输入、参数、模型、硬件和输出策略载入转录工作台，不会立即创建或执行任务。"
+        description="软件只会把历史输入、参数、模型和输出策略载入转录工作台，不会立即创建或执行任务。"
         onCancel={closeRetryConfirmation}
         onConfirm={() => void confirmRetry()}
         open={retryCandidate !== undefined}
@@ -360,10 +359,6 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
             <div>
               <dt>推理模型</dt>
               <dd>{getModelLabel(retryCandidate.modelId)}</dd>
-            </div>
-            <div>
-              <dt>硬件配置</dt>
-              <dd>{formatResolvedHardware(retryCandidate.hardware)}</dd>
             </div>
             <div>
               <dt>媒体数量</dt>

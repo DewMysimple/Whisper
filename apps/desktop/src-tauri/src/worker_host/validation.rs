@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 use super::model_catalog::{
     SECONDARY_RECOGNITION_MODEL_IDS, SUPPORTED_MODEL_IDS, TRANSLATION_MODEL_IDS,
 };
-use super::{BridgeHardwarePreference, HostError, StartDraft};
+use super::{HostError, StartDraft};
 use crate::protocol::valid_identifier;
 
 pub(super) fn validate_start_draft(draft: &StartDraft) -> Result<(), HostError> {
@@ -61,9 +61,6 @@ pub(super) fn validate_start_draft(draft: &StartDraft) -> Result<(), HostError> 
         return Err(HostError::new("request.invalid", "base preset is invalid"));
     }
     validate_overrides(&draft.overrides, &draft.base_preset_id, &draft.model_id)?;
-    if let Some(hardware) = draft.hardware.as_ref() {
-        validate_hardware_preference(hardware)?;
-    }
     let output = &draft.output;
     if !matches!(output.mode.as_str(), "compatibility" | "custom")
         || !matches!(
@@ -159,24 +156,4 @@ fn number_in_range(value: &Value, minimum: f64, maximum: f64) -> bool {
     value
         .as_f64()
         .is_some_and(|item| item.is_finite() && (minimum..=maximum).contains(&item))
-}
-
-pub(super) fn validate_hardware_preference(
-    hardware: &BridgeHardwarePreference,
-) -> Result<(), HostError> {
-    if !matches!(hardware.mode.as_str(), "auto" | "cuda" | "cpu")
-        || !(0..=31).contains(&hardware.gpu_device_index)
-        || !matches!(
-            hardware.cuda_compute_type.as_str(),
-            "float16" | "int8_float16" | "float32"
-        )
-        || !matches!(hardware.cpu_compute_type.as_str(), "int8" | "float32")
-        || !(1..=256).contains(&hardware.cpu_threads)
-    {
-        return Err(HostError::new(
-            "request.invalid",
-            "hardware preference is invalid",
-        ));
-    }
-    Ok(())
 }

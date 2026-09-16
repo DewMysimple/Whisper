@@ -1,5 +1,4 @@
 import type {
-  HardwarePreference,
   ModelId,
   OutputPolicy,
   TaskSnapshot,
@@ -72,17 +71,6 @@ export function createTaskMetadata(draft: TranscriptionDraft): PendingTaskMetada
     isCustom: Object.keys(draft.overrides).length > 0,
     createdAt: currentTimestamp(),
     draft: structuredClone(draft),
-  };
-}
-
-export function toHostHardware(hardware: HardwarePreference | undefined) {
-  if (hardware === undefined) return undefined;
-  return {
-    mode: hardware.mode,
-    gpuDeviceIndex: hardware.gpuDeviceIndex,
-    cudaComputeType: hardware.cudaComputeType,
-    cpuComputeType: hardware.cpuComputeType,
-    cpuThreads: hardware.cpuThreads,
   };
 }
 
@@ -185,47 +173,8 @@ export function isWorkerEnvironment(value: unknown): value is WorkerEnvironment 
     Array.isArray(candidate.errors) &&
     candidate.errors.every((item) => typeof item === 'string') &&
     typeof candidate.python === 'string' &&
-    typeof candidate.platform === 'string' &&
-    (candidate.hardware === undefined ||
-      candidate.hardware === null ||
-      readHardwareCapabilities(candidate.hardware) !== undefined)
+    typeof candidate.platform === 'string'
   );
-}
-
-export function readHardwareCapabilities(value: unknown): WorkerEnvironment['hardware'] {
-  if (!isRecord(value)) return undefined;
-  if (
-    (value.cpu_name !== null && typeof value.cpu_name !== 'string') ||
-    typeof value.cpu_physical_cores !== 'number' ||
-    typeof value.cpu_logical_cores !== 'number' ||
-    !Array.isArray(value.cpu_compute_types) ||
-    !Array.isArray(value.gpus)
-  ) {
-    return undefined;
-  }
-  if (!(
-    value.cpu_compute_types.every((item) => typeof item === 'string') &&
-    value.gpus.every(
-      (item) =>
-        isRecord(item) &&
-        typeof item.index === 'number' &&
-        typeof item.name === 'string' &&
-        Array.isArray(item.compute_types) &&
-        item.compute_types.every((type) => typeof type === 'string'),
-    )
-  ))
-    return undefined;
-  return {
-    cpuName: value.cpu_name as string | null,
-    cpuPhysicalCores: value.cpu_physical_cores as number,
-    cpuLogicalCores: value.cpu_logical_cores as number,
-    cpuComputeTypes: value.cpu_compute_types as string[],
-    gpus: (value.gpus as Array<Record<string, unknown>>).map((item) => ({
-      index: item.index as number,
-      name: item.name as string,
-      computeTypes: item.compute_types as string[],
-    })),
-  };
 }
 
 export interface PerformanceResult {

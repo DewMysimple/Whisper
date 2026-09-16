@@ -20,13 +20,6 @@ const preferences: WorkspacePreferences = {
   uiFontFamily: 'microsoft-yahei-ui',
   monoFontFamily: 'consolas',
   selectedModelId: 'large-v3-turbo',
-  hardwarePreference: {
-    mode: 'auto',
-    gpuDeviceIndex: 0,
-    cudaComputeType: 'float16',
-    cpuComputeType: 'int8',
-    cpuThreads: 4,
-  },
   selectedPresetId: 'en_v1',
   profileMode: 'transcript',
   recognitionStrategy: 'stable_primary',
@@ -180,7 +173,13 @@ describe('desktop workspace persistence', () => {
     delete legacy.preferences.uiFontFamily;
     delete legacy.preferences.monoFontFamily;
     delete legacy.preferences.selectedModelId;
-    delete legacy.preferences.hardwarePreference;
+    legacy.preferences.hardwarePreference = {
+      mode: 'cpu',
+      gpuDeviceIndex: 0,
+      cudaComputeType: 'float16',
+      cpuComputeType: 'float32',
+      cpuThreads: 8,
+    };
     legacy.preferences.contentFontSize = 'small';
     delete legacy.preferences.output.preserveSourceMarkdown;
     legacy.preferences.output.conflictPolicy = 'fail';
@@ -194,17 +193,11 @@ describe('desktop workspace persistence', () => {
         uiFontFamily: 'system',
         monoFontFamily: 'cascadia-mono',
         selectedModelId: 'large-v3-turbo',
-        hardwarePreference: {
-          mode: 'auto',
-          gpuDeviceIndex: 0,
-          cudaComputeType: 'float16',
-          cpuComputeType: 'int8',
-          cpuThreads: 4,
-        },
       }),
     );
     expect(migrated.output.preserveSourceMarkdown).toBe(false);
     expect(migrated.output.conflictPolicy).toBe('confirm_overwrite');
+    expect(migrated).not.toHaveProperty('hardwarePreference');
 
     legacy.preferences.contentFontSize = 'balanced';
     expect(importPreferences(JSON.stringify(legacy)).uiFontSize).toBe(14);

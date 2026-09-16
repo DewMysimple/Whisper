@@ -385,7 +385,7 @@ export function TaskDetail() {
       </aside>
       <ConfirmDialog
         confirmLabel="载入原配置"
-        description="软件只会把历史输入、参数、模型、硬件和输出策略载入转录工作台，不会立即创建或执行任务。"
+        description="软件只会把历史输入、参数、模型和输出策略载入转录工作台，不会立即创建或执行任务。"
         onCancel={closeRetryConfirmation}
         onConfirm={() => void confirmRetry()}
         open={retryConfirmationOpen}
@@ -412,10 +412,6 @@ export function TaskDetail() {
           <div>
             <dt>推理模型</dt>
             <dd>{getModelLabel(task.modelId)}</dd>
-          </div>
-          <div>
-            <dt>硬件配置</dt>
-            <dd>{formatResolvedHardware(task.hardware)}</dd>
           </div>
           <div>
             <dt>媒体数量</dt>

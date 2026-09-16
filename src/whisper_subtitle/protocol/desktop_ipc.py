@@ -28,8 +28,6 @@ class CommandMethod(str, Enum):
     SYSTEM_ENVIRONMENT = "system.environment"
     SYSTEM_METRICS = "system.metrics"
     MEDIA_INSPECT = "media.inspect"
-    MODEL_LOAD = "model.load"
-    MODEL_UNLOAD = "model.unload"
     TRANSCRIPTION_START = "transcription.start"
     TRANSCRIPTION_CANCEL = "transcription.cancel"
     WORKER_SHUTDOWN = "worker.shutdown"
@@ -98,9 +96,6 @@ _INPUT_ORIGINS = frozenset({"dialog", "drop", "paste", "manual"})
 _OUTPUT_MODES = frozenset({"compatibility", "custom"})
 _CONFLICT_POLICIES = frozenset({"overwrite", "fail", "auto_rename", "skip"})
 _CANCEL_REASONS = frozenset({"user", "shutdown", "superseded"})
-_HARDWARE_MODES = frozenset({"auto", "cuda", "cpu"})
-_CUDA_COMPUTE_TYPES = frozenset({"float16", "int8_float16", "float32"})
-_CPU_COMPUTE_TYPES = frozenset({"int8", "float32"})
 
 _PARAMETER_RULES: Mapping[str, tuple[type, float, float]] = MappingProxyType(
     {
@@ -206,7 +201,6 @@ from .desktop_ipc_validation import (
     _validate_command_params,
     _validate_detail_candidates,
     _validate_event_data,
-    _validate_hardware_preference,
     _validate_hotword_audit,
     _validate_language_regions,
     _validate_output_target,

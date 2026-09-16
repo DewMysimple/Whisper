@@ -19,7 +19,6 @@ class WorkerTask:
     request_id: str
     inputs: tuple[Mapping[str, Any], ...]
     model_id: str
-    hardware_preference: Mapping[str, object]
     hardware: HardwareInfo
     preset: Preset
     media_paths: tuple[Path, ...]

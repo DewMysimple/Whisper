@@ -3,19 +3,20 @@ type: knowledge
 status: active
 kind: module
 importance: high
-updated: 2026-09-09
+updated: 2026-09-17
 topic: tauri-react-desktop
 source_logs:
   - "[[日志/2026-08-23-项目记忆重建]]"
   - "[[日志/2026-08-24-架构瘦身实施]]"
   - "[[日志/2026-08-24-架构瘦身收口]]"
   - "[[日志/2026-09-09-工程定期维护]]"
+  - "[[日志/2026-09-17-删除硬件优化工作台]]"
 supersedes: null
 ---
 
 # Tauri 与 React 桌面层
 
-- `apps/web/src/` 提供页面组件、任务工作区、历史、设置、性能、模型和 bridge。
+- `apps/web/src/` 提供页面组件、任务工作区、历史、设置、性能和 bridge；模型切换与硬件优化没有独立页面。
 - `apps/web/src/bridge/mockDesktopBridge.ts` 只用于浏览器测试；`tauriDesktopBridge.ts` 是正式本地 bridge。
 - `apps/desktop/src-tauri/` 负责窗口、原生对话框、拖放、系统通知、Worker Host、权限和受限输出预览。
 - UI 状态通过版本化 localStorage 保存设置和最多 100 条任务，不依赖服务端数据库。

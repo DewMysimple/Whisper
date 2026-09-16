@@ -40,7 +40,6 @@ from .runtime_types import (
     DEFAULT_MODEL_IDLE_TIMEOUT_SECONDS,
     EngineLoader,
     EnvironmentChecker,
-    HardwareCapabilityLoader,
     HardwareProbe,
     MediaDurationProbe,
     MessageEmitter,
@@ -98,7 +97,6 @@ class WorkerRuntime:
         logger: logging.Logger | None = None,
         runtime_configurer: RuntimeConfigurer = configure_runtime,
         hardware_detector: HardwareProbe | None = None,
-        hardware_capability_loader: HardwareCapabilityLoader | None = None,
         engine_loader: EngineLoader = _default_engine_loader,
         performance_sampler: PerformanceSampler = collect_performance_sample,
         media_duration_probe: MediaDurationProbe = default_media_duration_probe,
@@ -114,11 +112,7 @@ class WorkerRuntime:
         self._media_duration_cache: dict[
             str, tuple[int, int, tuple[bool, float | None, str | None]]
         ] = {}
-        if hardware_detector is None:
-            detector = HardwareDetector()
-            hardware_detector = detector.detect
-            hardware_capability_loader = hardware_capability_loader or detector.capabilities
-        self._hardware_capability_loader = hardware_capability_loader
+        hardware_detector = hardware_detector or HardwareDetector().detect
         self._condition = threading.Condition()
         self._queue: deque[WorkerTask] = deque()
         self._tasks: dict[str, WorkerTask] = {}
@@ -202,12 +196,6 @@ class WorkerRuntime:
             return False
         if command.method is CommandMethod.SYSTEM_ENVIRONMENT:
             errors = self._check_environment()
-            hardware = None
-            if self._hardware_capability_loader is not None:
-                try:
-                    hardware = dict(self._hardware_capability_loader())
-                except Exception as exc:
-                    self._logger.warning("hardware capability detection failed: %s", exc)
             self._complete_command(
                 command,
                 {
@@ -215,7 +203,6 @@ class WorkerRuntime:
                     "errors": errors,
                     "python": platform.python_version(),
                     "platform": platform.platform(),
-                    "hardware": hardware,
                 },
             )
             return False
@@ -250,23 +237,6 @@ class WorkerRuntime:
                     "worker is shutting down",
                 )
 
-        if command.method is CommandMethod.MODEL_LOAD:
-            model_id = str(command.params.get("model_id") or DEFAULT_MODEL_NAME)
-            hardware_preference = command.params.get("hardware")
-            loaded_new = self._model_cache.load(
-                model_id,
-                hardware_preference=hardware_preference,
-                request_id=command.request_id,
-            )
-            self._complete_command(
-                command,
-                {"model_id": model_id, "reused": not loaded_new},
-            )
-            return False
-        if command.method is CommandMethod.MODEL_UNLOAD:
-            unloaded = self._model_cache.unload()
-            self._complete_command(command, {"unloaded": unloaded})
-            return False
         if command.method is CommandMethod.TRANSCRIPTION_START:
             self._start_task(command)
             return False
@@ -309,7 +279,6 @@ class WorkerRuntime:
 
     def _start_task(self, command: CommandMessage) -> None:
         model_id = str(command.params.get("model_id") or DEFAULT_MODEL_NAME)
-        hardware_preference = dict(command.params.get("hardware") or {})
         profile = command.params["profile"]
         try:
             preset = derive_preset(
@@ -405,7 +374,6 @@ class WorkerRuntime:
         if can_preload:
             self._model_cache.load(
                 model_id,
-                hardware_preference=hardware_preference,
                 request_id=command.request_id,
             )
             hardware = self._model_cache.hardware
@@ -415,13 +383,12 @@ class WorkerRuntime:
                     "model loaded without a resolved hardware configuration",
                 )
         else:
-            hardware = self._model_cache.validate(model_id, hardware_preference)
+            hardware = self._model_cache.validate(model_id)
         task = WorkerTask(
             task_id=self._task_id_factory(),
             request_id=command.request_id,
             inputs=tuple(command.params["inputs"]),
             model_id=model_id,
-            hardware_preference=hardware_preference,
             hardware=hardware,
             preset=preset,
             recognition_strategy=str(

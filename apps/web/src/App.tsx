@@ -3,7 +3,6 @@ import { motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
 
 import { desktopBridge } from './bridge';
-import { HardwareOptimizationPanel } from './components/HardwareOptimizationPanel';
 import { LaunchCard } from './components/LaunchCard';
 import { OutputPanel } from './components/OutputPanel';
 import { OverwriteConfirmDialog } from './components/OverwriteConfirmDialog';
@@ -25,10 +24,6 @@ const PAGE_COPY: Record<WorkspaceViewId, { eyebrow: string; title: string }> = {
   workspace: {
     eyebrow: 'LOCAL TRANSCRIPTION',
     title: '转录工作台',
-  },
-  hardware: {
-    eyebrow: 'LOCAL COMPUTE',
-    title: '硬件优化',
   },
   tasks: {
     eyebrow: 'LOCAL QUEUE',
@@ -124,14 +119,6 @@ function WorkspaceView() {
         <OutputPanel />
         <LaunchCard />
       </div>
-    </div>
-  );
-}
-
-function HardwareView() {
-  return (
-    <div className="hardware-workspace">
-      <HardwareOptimizationPanel />
     </div>
   );
 }
@@ -279,7 +266,6 @@ export default function App() {
           }
         >
           {activeView === 'workspace' && <WorkspaceView />}
-          {activeView === 'hardware' && <HardwareView />}
           {activeView === 'performance' && <PerformanceView />}
           {activeView === 'tasks' && <TasksView />}
           {activeView === 'logs' && <WorkerLogsView />}

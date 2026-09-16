@@ -10,7 +10,7 @@ Runtime rules:
 - Real files, folders, drag/drop, pasted paths, outputs and tasks cross only the typed Tauri command/event boundary.
 - UI task state uses machine codes and identifiers, never localized Worker messages.
 - Preset parameters and model identities consumed by the presentation layer come from generated projections of the Python domain catalogs; TypeScript is not a second source of truth.
-- The model-switching and inference-parameter workbench is currently retired. Task model snapshots, local-model validation, and hardware-triggered model reloads remain runtime responsibilities rather than standalone UI.
+- The model-switching/inference-parameter and hardware-optimization workbenches are retired. Task model snapshots, local-model validation, automatic hardware selection, and resolved device records remain runtime responsibilities rather than standalone UI.
 - Versioned local desktop state retains preferences and at most 100 task snapshots; configuration export excludes task history and logs.
 - Performance trends use real Worker metrics in Tauri and bounded mock samples only in tests/previews.
 - Output preview crosses a dedicated bounded Rust command and accepts TXT, Markdown, and SRT files only.

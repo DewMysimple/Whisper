@@ -1,6 +1,5 @@
 import type {
   EditableParameters,
-  HardwarePreference,
   ModelId,
   OutputPolicy,
   ProfileMode,
@@ -17,7 +16,6 @@ import {
 } from '../contracts/desktop';
 import { getPreset } from '../data/presets';
 import { getSubtitlePreset } from '../data/subtitlePresets';
-import { DEFAULT_HARDWARE_PREFERENCE } from './hardware';
 import {
   isV3ModelId,
   parameterProfileKey,
@@ -57,7 +55,6 @@ export type {
 
 export interface WorkspacePreferences extends AppearancePreferences {
   selectedModelId: ModelId;
-  hardwarePreference: HardwarePreference;
   selectedPresetId: PresetId;
   profileMode: ProfileMode;
   parameters: EditableParameters;
@@ -149,7 +146,6 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   const uiFontFamily = value.uiFontFamily ?? DEFAULT_APPEARANCE.uiFontFamily;
   const monoFontFamily = value.monoFontFamily ?? DEFAULT_APPEARANCE.monoFontFamily;
   const requestedModelId = value.selectedModelId ?? DEFAULT_MODEL_ID;
-  const hardwarePreference = value.hardwarePreference ?? DEFAULT_HARDWARE_PREFERENCE;
   if (
     !isNumberInRange(uiFontSize, UI_FONT_SIZE_RANGE.minimum, UI_FONT_SIZE_RANGE.maximum, true) ||
     !isNumberInRange(logFontSize, LOG_FONT_SIZE_RANGE.minimum, LOG_FONT_SIZE_RANGE.maximum, true) ||
@@ -158,8 +154,7 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
     normalizeHexColor(customAccentColor) === null ||
     !isUiFontFamily(uiFontFamily) ||
     !isMonoFontFamily(monoFontFamily) ||
-    !isModelId(requestedModelId) ||
-    !isHardwarePreference(hardwarePreference)
+    !isModelId(requestedModelId)
   ) {
     return null;
   }
@@ -242,7 +237,6 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
     uiFontFamily,
     monoFontFamily,
     selectedModelId,
-    hardwarePreference,
     selectedPresetId: value.selectedPresetId,
     profileMode,
     parameters,
@@ -274,6 +268,11 @@ function isTaskSnapshot(value: unknown): value is TaskSnapshot {
 
 function normalizeTaskSnapshot(task: TaskSnapshot): TaskSnapshot {
   const legacy = task as TaskSnapshot & { modelId?: ModelId; draft?: TaskSnapshot['draft'] };
+  const normalizedDraft =
+    legacy.draft === undefined
+      ? undefined
+      : ({ ...legacy.draft } as NonNullable<TaskSnapshot['draft']> & { hardware?: unknown });
+  if (normalizedDraft !== undefined) delete normalizedDraft.hardware;
   return {
     ...task,
     modelId: isModelId(legacy.modelId) ? legacy.modelId : DEFAULT_MODEL_ID,
@@ -289,47 +288,35 @@ function normalizeTaskSnapshot(task: TaskSnapshot): TaskSnapshot {
         ? task.recognitionStrategy
         : 'stable_primary',
     draft:
-      legacy.draft === undefined
+      normalizedDraft === undefined
         ? undefined
         : {
-            ...legacy.draft,
-            modelId: isModelId(legacy.draft.modelId) ? legacy.draft.modelId : DEFAULT_MODEL_ID,
+            ...normalizedDraft,
+            modelId: isModelId(normalizedDraft.modelId)
+              ? normalizedDraft.modelId
+              : DEFAULT_MODEL_ID,
             recognitionStrategy:
-              (legacy.draft.recognitionStrategy === 'mixed_zh_en' ||
-                legacy.draft.recognitionStrategy === 'zh_detail_review') &&
-              ['cn', 'cn2'].includes(legacy.draft.basePresetId) &&
+              (normalizedDraft.recognitionStrategy === 'mixed_zh_en' ||
+                normalizedDraft.recognitionStrategy === 'zh_detail_review') &&
+              ['cn', 'cn2'].includes(normalizedDraft.basePresetId) &&
               SECONDARY_RECOGNITION_MODEL_IDS.includes(
-                (isModelId(legacy.draft.modelId)
-                  ? legacy.draft.modelId
+                (isModelId(normalizedDraft.modelId)
+                  ? normalizedDraft.modelId
                   : DEFAULT_MODEL_ID) as (typeof SECONDARY_RECOGNITION_MODEL_IDS)[number],
               )
-                ? legacy.draft.recognitionStrategy
+                ? normalizedDraft.recognitionStrategy
                 : 'stable_primary',
-            hardware: isHardwarePreference(legacy.draft.hardware)
-              ? legacy.draft.hardware
-              : DEFAULT_HARDWARE_PREFERENCE,
             output: {
-              ...legacy.draft.output,
+              ...normalizedDraft.output,
               conflictPolicy:
-                legacy.draft.output.conflictPolicy === 'auto_rename'
+                normalizedDraft.output.conflictPolicy === 'auto_rename'
                   ? 'auto_rename'
-                  : legacy.draft.output.conflictPolicy === 'confirm_skip'
+                  : normalizedDraft.output.conflictPolicy === 'confirm_skip'
                     ? 'confirm_skip'
                     : 'confirm_overwrite',
             },
           },
   };
-}
-
-function isHardwarePreference(value: unknown): value is HardwarePreference {
-  if (!isRecord(value)) return false;
-  return (
-    (value.mode === 'auto' || value.mode === 'cuda' || value.mode === 'cpu') &&
-    isNumberInRange(value.gpuDeviceIndex, 0, 31, true) &&
-    ['float16', 'int8_float16', 'float32'].includes(String(value.cudaComputeType)) &&
-    (value.cpuComputeType === 'int8' || value.cpuComputeType === 'float32') &&
-    isNumberInRange(value.cpuThreads, 1, 256, true)
-  );
 }
 
 function isParameters(value: unknown): value is EditableParameters {

@@ -17,7 +17,6 @@ export function preferencesFromState(state: WorkspaceState): WorkspacePreference
     uiFontFamily: state.uiFontFamily,
     monoFontFamily: state.monoFontFamily,
     selectedModelId: state.selectedModelId,
-    hardwarePreference: state.hardwarePreference,
     selectedPresetId: state.selectedPresetId,
     profileMode: state.profileMode,
     parameters: state.parameters,

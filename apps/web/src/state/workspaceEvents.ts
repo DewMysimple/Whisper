@@ -1,9 +1,4 @@
-import type {
-  DesktopEvent,
-  HardwarePreference,
-  ModelStatus,
-  WorkerEnvironment,
-} from '../contracts/desktop';
+import type { DesktopEvent } from '../contracts/desktop';
 import { notifyPowerCountdown, notifyTaskFinished } from '../notifications';
 import { appendPerformanceSample } from './performanceWindow';
 import type { WorkspaceState } from './workspace';
@@ -35,30 +30,6 @@ function mergeUniqueInputs(
   ];
 }
 
-function modelMatchesPreference(
-  model: ModelStatus,
-  preference: HardwarePreference,
-  capabilities: WorkerEnvironment['hardware'],
-): boolean {
-  if (model.state !== 'ready') return false;
-  const expectedDevice =
-    preference.mode === 'auto'
-      ? (capabilities?.gpus.length ?? 0) > 0
-        ? 'cuda'
-        : 'cpu'
-      : preference.mode;
-  if (model.device !== expectedDevice) return false;
-  if (expectedDevice === 'cuda') {
-    return (
-      model.deviceIndex === preference.gpuDeviceIndex &&
-      model.computeType === preference.cudaComputeType
-    );
-  }
-  return (
-    model.computeType === preference.cpuComputeType && model.cpuThreads === preference.cpuThreads
-  );
-}
-
 export function handleWorkspaceEvent(
   event: DesktopEvent,
   set: WorkspaceSet,
@@ -78,14 +49,7 @@ export function handleWorkspaceEvent(
     return;
   }
   if (event.type === 'model.status') {
-    set({
-      model: event.model,
-      pendingHardware:
-        event.model.state === 'ready' &&
-        modelMatchesPreference(event.model, get().hardwarePreference, get().environment?.hardware)
-          ? false
-          : get().pendingHardware,
-    });
+    set({ model: event.model });
     return;
   }
   if (event.type === 'worker.log') {
@@ -230,10 +194,4 @@ export function handleWorkspaceEvent(
     }
   }
   persistLater(get);
-  if (
-    get().pendingHardware &&
-    !get().tasks.some((task) => task.status === 'queued' || task.status === 'running')
-  ) {
-    void get().setHardwarePreference(get().hardwarePreference);
-  }
 }

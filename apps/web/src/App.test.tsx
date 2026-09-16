@@ -20,7 +20,8 @@ describe('desktop workspace', () => {
       within(navigation)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['转录工作台', '硬件优化', '性能监控', '任务监控与记录2', 'Worker 日志', '偏好设置']);
+    ).toEqual(['转录工作台', '性能监控', '任务监控与记录2', 'Worker 日志', '偏好设置']);
+    expect(screen.queryByRole('button', { name: '硬件优化' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '模型切换' })).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /查看并修改当前模型与模式/ }),
@@ -326,39 +327,5 @@ describe('desktop workspace', () => {
     expect(screen.queryByRole('spinbutton', { name: 'Compression ratio' })).not.toBeInTheDocument();
     expect(screen.queryByRole('spinbutton', { name: 'Log probability' })).not.toBeInTheDocument();
     expect(screen.queryByRole('spinbutton', { name: 'VAD 最短静音' })).not.toBeInTheDocument();
-  });
-
-  it('exposes runtime-supported hardware controls in an independent workbench', async () => {
-    const user = userEvent.setup();
-    useWorkspace.setState((state) => ({
-      tasks: state.tasks.map((task) =>
-        task.status === 'queued' || task.status === 'running'
-          ? { ...task, status: 'completed' as const, progress: 100 }
-          : task,
-      ),
-    }));
-    render(<App />);
-    await user.click(screen.getByRole('button', { name: '硬件优化' }));
-
-    expect(await screen.findByRole('heading', { name: '硬件优化', level: 2 })).toBeInTheDocument();
-    const devices = screen.getByRole('group', { name: '推理设备' });
-    expect(within(devices).getByRole('button', { name: '自动' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await user.click(within(devices).getByRole('button', { name: 'CPU' }));
-    await user.selectOptions(screen.getByRole('combobox', { name: /^CPU 计算精度/ }), 'float32');
-    await user.click(screen.getByRole('button', { name: /应用硬件设置/ }));
-
-    expect(screen.getByText('配置已生效')).toBeInTheDocument();
-    expect(within(devices).getByRole('button', { name: 'CPU' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await user.click(screen.getByRole('button', { name: /恢复推荐配置/ }));
-    expect(within(devices).getByRole('button', { name: '自动' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
   });
 });

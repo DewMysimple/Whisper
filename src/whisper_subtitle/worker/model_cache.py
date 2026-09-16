@@ -5,7 +5,6 @@ from __future__ import annotations
 import gc
 import logging
 import threading
-from collections.abc import Mapping
 from contextlib import contextmanager
 from typing import Any
 
@@ -15,7 +14,6 @@ from ..protocol import ErrorCode, EventCode, EventMessage
 from .runtime_types import (
     DEFAULT_MODEL_IDLE_TIMEOUT_SECONDS,
     EngineLoader,
-    HardwareCapabilityLoader,
     HardwareProbe,
     MessageEmitter,
     RuntimeConfigurer,
@@ -33,7 +31,6 @@ class ModelCache:
         *,
         runtime_configurer: RuntimeConfigurer = configure_runtime,
         hardware_detector: HardwareProbe | None = None,
-        hardware_capability_loader: HardwareCapabilityLoader | None = None,
         engine_loader: EngineLoader = _default_engine_loader,
         idle_timeout_seconds: float = DEFAULT_MODEL_IDLE_TIMEOUT_SECONDS,
         logger: logging.Logger | None = None,
@@ -106,24 +103,15 @@ class ModelCache:
         with self._lock:
             return self._hardware
 
-    def _resolve_hardware(
-        self, preference: Mapping[str, object] | None
-    ) -> HardwareInfo:
-        try:
-            return self._detect_hardware(preference)
-        except TypeError:
-            # Keep injected version-one probes used by older hosts/tests compatible.
-            return self._detect_hardware()  # type: ignore[call-arg]
-
     def _ensure_loaded_locked(
         self,
         model_id: str,
         *,
-        hardware_preference: Mapping[str, object] | None = None,
+        hardware: HardwareInfo | None = None,
         request_id: str | None = None,
     ) -> tuple[Any, HardwareInfo, bool]:
         try:
-            resolved_hardware = self._resolve_hardware(hardware_preference)
+            resolved_hardware = hardware or self._detect_hardware()
         except Exception as exc:
             raise WorkerCommandError(
                 ErrorCode.MODEL_LOAD_FAILED,
@@ -184,13 +172,11 @@ class ModelCache:
         self,
         model_id: str,
         *,
-        hardware_preference: Mapping[str, object] | None = None,
         request_id: str | None = None,
     ) -> bool:
         with self._lock:
             _engine, _hardware, loaded_new = self._ensure_loaded_locked(
                 model_id,
-                hardware_preference=hardware_preference,
                 request_id=request_id,
             )
             self._schedule_idle_release_locked()
@@ -199,11 +185,10 @@ class ModelCache:
     def validate(
         self,
         model_id: str,
-        hardware_preference: Mapping[str, object] | None = None,
     ) -> HardwareInfo:
         """Verify a local model exists without importing CTranslate2."""
         try:
-            resolved_hardware = self._resolve_hardware(hardware_preference)
+            resolved_hardware = self._detect_hardware()
             if self.loaded and self.model_id == model_id and self.hardware == resolved_hardware:
                 return resolved_hardware
             location = self._configure_runtime()
@@ -223,13 +208,13 @@ class ModelCache:
         self,
         model_id: str,
         *,
-        hardware_preference: Mapping[str, object] | None = None,
+        hardware: HardwareInfo | None = None,
         request_id: str | None = None,
     ):
         with self._lock:
             engine, hardware, _loaded_new = self._ensure_loaded_locked(
                 model_id,
-                hardware_preference=hardware_preference,
+                hardware=hardware,
                 request_id=request_id,
             )
             self._cancel_timer_locked()
@@ -240,16 +225,6 @@ class ModelCache:
             with self._lock:
                 self._active_users -= 1
                 self._schedule_idle_release_locked()
-
-    def unload(self, *, reason: str = "explicit request") -> bool:
-        with self._lock:
-            if self._active_users:
-                raise WorkerCommandError(
-                    ErrorCode.WORKER_BUSY,
-                    "cannot unload the model while a task is running",
-                )
-            self._cancel_timer_locked()
-            return self._release_locked(reason)
 
     def close(self) -> None:
         with self._lock:

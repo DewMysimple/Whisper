@@ -572,13 +572,6 @@ describe('workspace terminal event notifications', () => {
         },
       ],
       selectedModelId: 'large-v3-turbo',
-      hardwarePreference: {
-        mode: 'auto',
-        gpuDeviceIndex: 0,
-        cudaComputeType: 'float16',
-        cpuComputeType: 'int8',
-        cpuThreads: 4,
-      },
       environment: null,
       selectedPresetId: 'en_v2',
       profileMode: 'transcript',
@@ -608,76 +601,6 @@ describe('workspace terminal event notifications', () => {
         condition_on_previous_text: false,
       }),
     });
-    start.mockRestore();
-    listModels.mockRestore();
-  });
-
-  it('restores frozen hardware for editing without starting or loading a model', async () => {
-    const listModels = vi.spyOn(desktopBridge, 'listLocalModels');
-    const start = vi.spyOn(desktopBridge, 'startTranscription');
-    const inspect = vi.spyOn(desktopBridge, 'inspectPaths').mockResolvedValue([]);
-    useWorkspace.setState({
-      environment: {
-        available: true,
-        errors: [],
-        python: '3.14',
-        platform: 'Windows',
-        hardware: {
-          cpuName: 'Test CPU',
-          cpuPhysicalCores: 8,
-          cpuLogicalCores: 16,
-          cpuComputeTypes: ['int8', 'float32'],
-          gpus: [{ index: 0, name: 'GPU 0', computeTypes: ['float16', 'int8_float16'] }],
-        },
-      },
-      tasks: [
-        {
-          ...RUNNING_TASK,
-          id: 'missing-hardware-task',
-          status: 'completed',
-          draft: {
-            inputs: [],
-            modelId: 'large-v3-turbo',
-            hardware: {
-              mode: 'cuda',
-              gpuDeviceIndex: 1,
-              cudaComputeType: 'float16',
-              cpuComputeType: 'int8',
-              cpuThreads: 4,
-            },
-            basePresetId: 'cn',
-            profileMode: 'transcript',
-            overrides: {},
-            effectiveParameters: { ...getPreset('cn').parameters },
-            subtitleParameters: { ...getSubtitlePreset('cn').subtitleParameters },
-            output: {
-              mode: 'compatibility',
-              rootDirectory: null,
-              txtEnabled: true,
-              markdownEnabled: false,
-              srtEnabled: false,
-              preserveSourceTxt: false,
-              preserveSourceMarkdown: false,
-              conflictPolicy: 'confirm_overwrite',
-            },
-          },
-        },
-      ],
-    });
-
-    await useWorkspace.getState().retryTask('missing-hardware-task');
-
-    expect(listModels).not.toHaveBeenCalled();
-    expect(start).not.toHaveBeenCalled();
-    expect(useWorkspace.getState()).toMatchObject({
-      activeView: 'workspace',
-      lastError: null,
-      hardwarePreference: {
-        mode: 'cuda',
-        gpuDeviceIndex: 1,
-      },
-    });
-    inspect.mockRestore();
     start.mockRestore();
     listModels.mockRestore();
   });
@@ -747,13 +670,6 @@ describe('workspace terminal event notifications', () => {
         ],
         modelId: 'large-v3-turbo',
         recognitionStrategy: 'mixed_zh_en',
-        hardware: {
-          mode: 'auto',
-          gpuDeviceIndex: 0,
-          cudaComputeType: 'float16',
-          cpuComputeType: 'int8',
-          cpuThreads: 4,
-        },
         basePresetId: 'cn2',
         profileMode: 'transcript',
         overrides: {},
@@ -779,13 +695,6 @@ describe('workspace terminal event notifications', () => {
         errors: [],
         python: '3.14',
         platform: 'Windows',
-        hardware: {
-          cpuName: 'Test CPU',
-          cpuPhysicalCores: 8,
-          cpuLogicalCores: 16,
-          cpuComputeTypes: ['int8', 'float32'],
-          gpus: [{ index: 0, name: 'GPU 0', computeTypes: ['float16', 'int8_float16'] }],
-        },
       },
     });
 
@@ -847,13 +756,6 @@ describe('workspace terminal event notifications', () => {
     const draft = {
       inputs: [],
       modelId: 'large-v3-turbo' as const,
-      hardware: {
-        mode: 'auto' as const,
-        gpuDeviceIndex: 0,
-        cudaComputeType: 'float16' as const,
-        cpuComputeType: 'int8' as const,
-        cpuThreads: 4,
-      },
       basePresetId: 'cn2' as const,
       profileMode: 'transcript' as const,
       overrides: {},
@@ -903,13 +805,6 @@ describe('workspace terminal event notifications', () => {
         errors: [],
         python: '3.14',
         platform: 'Windows',
-        hardware: {
-          cpuName: 'Test CPU',
-          cpuPhysicalCores: 8,
-          cpuLogicalCores: 16,
-          cpuComputeTypes: ['int8', 'float32'],
-          gpus: [{ index: 0, name: 'GPU 0', computeTypes: ['float16'] }],
-        },
       },
     });
 
@@ -925,37 +820,5 @@ describe('workspace terminal event notifications', () => {
     inspectInputs.mockRestore();
     vi.mocked(desktopBridge.inspectOutputPaths).mockRestore();
     listModels.mockRestore();
-  });
-});
-
-describe('workspace hardware controls while tasks are active', () => {
-  beforeEach(() => {
-    useWorkspace.setState({
-      tasks: [structuredClone(RUNNING_TASK)],
-      selectedModelId: 'large-v3-turbo',
-      hardwarePreference: {
-        mode: 'auto',
-        gpuDeviceIndex: 0,
-        cudaComputeType: 'float16',
-        cpuComputeType: 'int8',
-        cpuThreads: 4,
-      },
-      pendingHardware: false,
-      lastError: null,
-    });
-  });
-
-  it('rejects hardware changes while a task is running', async () => {
-    await useWorkspace.getState().setHardwarePreference({
-      mode: 'cpu',
-      gpuDeviceIndex: 0,
-      cudaComputeType: 'float16',
-      cpuComputeType: 'float32',
-      cpuThreads: 2,
-    });
-
-    expect(useWorkspace.getState().hardwarePreference.mode).toBe('auto');
-    expect(useWorkspace.getState().pendingHardware).toBe(false);
-    expect(useWorkspace.getState().lastError).toContain('不能更改硬件配置');
   });
 });

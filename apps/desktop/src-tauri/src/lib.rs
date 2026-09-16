@@ -21,9 +21,8 @@ use tauri::{Emitter, Manager, State};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use worker_host::{
-    BridgeHardwarePreference, EventSink, HostError, HostStatus, InspectedInput,
-    LocalModelDescriptor, StartDraft, StartResult, WorkerManager, apply_media_inspections,
-    inspect_input_paths,
+    EventSink, HostError, HostStatus, InspectedInput, LocalModelDescriptor, StartDraft,
+    StartResult, WorkerManager, apply_media_inspections, inspect_input_paths,
 };
 
 struct HostState(Arc<WorkerManager>);
@@ -373,18 +372,6 @@ fn list_local_models(state: State<'_, HostState>) -> Vec<LocalModelDescriptor> {
 }
 
 #[tauri::command]
-async fn load_model(
-    state: State<'_, HostState>,
-    model_id: String,
-    hardware: Option<BridgeHardwarePreference>,
-) -> Result<Value, HostError> {
-    let manager = Arc::clone(&state.0);
-    tauri::async_runtime::spawn_blocking(move || manager.load_model(&model_id, hardware))
-        .await
-        .map_err(|error| HostError::new("host.task_failed", error.to_string()))?
-}
-
-#[tauri::command]
 async fn start_transcription(
     state: State<'_, HostState>,
     power_state: State<'_, PowerState>,
@@ -466,7 +453,6 @@ pub fn run() {
             worker_health,
             worker_metrics,
             list_local_models,
-            load_model,
             start_transcription,
             cancel_transcription,
         ])

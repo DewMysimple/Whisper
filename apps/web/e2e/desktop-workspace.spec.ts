@@ -111,30 +111,12 @@ test('does not expose the retired model switching workbench', async ({ page }) =
   await expect(page.getByRole('heading', { name: '当前模型参数' })).toHaveCount(0);
 });
 
-test('locks hardware changes while queued or running work exists', async ({ page }, testInfo) => {
+test('does not expose the retired hardware optimization workbench', async ({ page }) => {
   await expect(page.locator('[title]')).toHaveCount(0);
-  await page.getByRole('button', { name: '硬件优化' }).click();
-  await expect(page.getByRole('heading', { name: '硬件优化', level: 1 })).toBeVisible();
-  const hardware = page.locator('.hardware-optimizer');
-  await expect(hardware.getByRole('button', { name: '自动' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await expect(hardware.getByRole('combobox', { name: /^CUDA 计算精度/ })).toContainText(
-    'INT8 + FP16',
-  );
-
-  await expect(page.getByText('任务执行期间已锁定')).toHaveCount(1);
-  await expect(hardware.getByRole('button', { name: '自动' })).toBeDisabled();
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.waitForTimeout(250);
-  await page.screenshot({ fullPage: true, path: testInfo.outputPath('hardware-locked-light.png') });
-
-  await page.evaluate(() => {
-    document.documentElement.dataset.theme = 'dark';
-  });
-  await page.waitForTimeout(250);
-  await page.screenshot({ fullPage: true, path: testInfo.outputPath('hardware-locked-dark.png') });
+  const navigation = page.getByRole('navigation', { name: '主导航' });
+  await expect(navigation.getByRole('button', { name: '硬件优化' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '硬件优化' })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: '推理设备' })).toHaveCount(0);
 });
 
 test('creates a task from the complete desktop workspace path', async ({ page }, testInfo) => {
@@ -715,7 +697,6 @@ test('opens the independent Worker log workspace and exposes only the restored s
   const navigation = page.getByRole('navigation', { name: '主导航' });
   await expect(navigation.getByRole('button')).toHaveText([
     '转录工作台',
-    '硬件优化',
     '性能监控',
     /任务监控与记录/,
     'Worker 日志',

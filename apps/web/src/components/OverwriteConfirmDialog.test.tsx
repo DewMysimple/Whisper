@@ -36,7 +36,6 @@ describe('OverwriteConfirmDialog', () => {
             },
           ],
           modelId: state.selectedModelId,
-          hardware: state.hardwarePreference,
           basePresetId: state.selectedPresetId,
           profileMode: state.profileMode,
           overrides: state.overrides,

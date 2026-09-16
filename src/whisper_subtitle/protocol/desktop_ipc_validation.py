@@ -22,9 +22,6 @@ from .desktop_ipc import (
     TaskStage,
     _CANCEL_REASONS,
     _CONFLICT_POLICIES,
-    _CPU_COMPUTE_TYPES,
-    _CUDA_COMPUTE_TYPES,
-    _HARDWARE_MODES,
     _IDENTIFIER_PATTERN,
     _INPUT_KINDS,
     _INPUT_ORIGINS,
@@ -275,47 +272,11 @@ def _validate_subtitle_parameters(value: Any) -> None:
         )
 
 
-def _validate_hardware_preference(value: Any, field_name: str) -> None:
-    hardware = _require_object(value, field_name, code=ErrorCode.REQUEST_INVALID)
-    _require_fields(
-        hardware,
-        required={
-            "mode",
-            "gpu_device_index",
-            "cuda_compute_type",
-            "cpu_compute_type",
-            "cpu_threads",
-        },
-        field_name=field_name,
-        code=ErrorCode.REQUEST_INVALID,
-    )
-    if hardware["mode"] not in _HARDWARE_MODES:
-        raise ProtocolValidationError(
-            ErrorCode.REQUEST_INVALID, f"{field_name}.mode is unsupported"
-        )
-    if type(hardware["gpu_device_index"]) is not int or not 0 <= hardware["gpu_device_index"] <= 31:
-        raise ProtocolValidationError(
-            ErrorCode.REQUEST_INVALID, f"{field_name}.gpu_device_index is invalid"
-        )
-    if hardware["cuda_compute_type"] not in _CUDA_COMPUTE_TYPES:
-        raise ProtocolValidationError(
-            ErrorCode.REQUEST_INVALID, f"{field_name}.cuda_compute_type is unsupported"
-        )
-    if hardware["cpu_compute_type"] not in _CPU_COMPUTE_TYPES:
-        raise ProtocolValidationError(
-            ErrorCode.REQUEST_INVALID, f"{field_name}.cpu_compute_type is unsupported"
-        )
-    if type(hardware["cpu_threads"]) is not int or not 1 <= hardware["cpu_threads"] <= 256:
-        raise ProtocolValidationError(
-            ErrorCode.REQUEST_INVALID, f"{field_name}.cpu_threads is invalid"
-        )
-
-
 def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
     _require_fields(
         params,
         required={"inputs", "profile", "output"},
-        optional={"model_id", "hardware", "recognition_strategy"},
+        optional={"model_id", "recognition_strategy"},
         field_name="params",
         code=ErrorCode.REQUEST_INVALID,
     )
@@ -323,8 +284,6 @@ def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
         raise ProtocolValidationError(
             ErrorCode.REQUEST_INVALID, "params.model_id is unsupported"
         )
-    if "hardware" in params:
-        _validate_hardware_preference(params["hardware"], "params.hardware")
     inputs = params["inputs"]
     if not isinstance(inputs, Sequence) or isinstance(inputs, (str, bytes)) or not inputs:
         raise ProtocolValidationError(
@@ -458,7 +417,6 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
         CommandMethod.SYSTEM_HEALTH,
         CommandMethod.SYSTEM_ENVIRONMENT,
         CommandMethod.SYSTEM_METRICS,
-        CommandMethod.MODEL_UNLOAD,
         CommandMethod.WORKER_SHUTDOWN,
     }:
         _require_fields(
@@ -467,18 +425,6 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
             field_name="params",
             code=ErrorCode.REQUEST_INVALID,
         )
-    elif method is CommandMethod.MODEL_LOAD:
-        _require_fields(
-            params,
-            required=set(),
-            optional={"model_id", "hardware"},
-            field_name="params",
-            code=ErrorCode.REQUEST_INVALID,
-        )
-        if "model_id" in params:
-            _require_nonempty_string(params["model_id"], "params.model_id")
-        if "hardware" in params:
-            _validate_hardware_preference(params["hardware"], "params.hardware")
     elif method is CommandMethod.MEDIA_INSPECT:
         _require_fields(
             params,

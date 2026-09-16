@@ -178,17 +178,8 @@ def test_schema_is_self_contained_and_has_no_unresolved_local_refs():
     assert output_policy["allOf"][0]["anyOf"]
     assert output_policy["allOf"][1]["if"]["properties"]["mode"]["const"] == "custom"
 
-    hardware = schema["$defs"]["HardwarePreference"]
-    assert hardware["properties"]["mode"]["enum"] == ["auto", "cuda", "cpu"]
-    assert hardware["properties"]["cuda_compute_type"]["enum"] == [
-        "float16",
-        "int8_float16",
-        "float32",
-    ]
-    assert (
-        schema["$defs"]["TranscriptionStartParams"]["properties"]["hardware"]["$ref"]
-        == "#/$defs/HardwarePreference"
-    )
+    assert "HardwarePreference" not in schema["$defs"]
+    assert "hardware" not in schema["$defs"]["TranscriptionStartParams"]["properties"]
     assert (
         schema["$defs"]["TaskQueuedData"]["properties"]["hardware"]["$ref"]
         == "#/$defs/ResolvedHardware"
@@ -367,32 +358,16 @@ def test_mixed_recognition_strategy_is_frozen_and_limited_to_v3_chinese_presets(
     assert command.params["recognition_strategy"] == "zh_detail_review"
 
 
-def test_hardware_preference_is_optional_and_frozen_in_task_event():
-    legacy = CommandMessage(
-        "req-legacy-hardware", CommandMethod.TRANSCRIPTION_START, start_params()
-    )
-    assert "hardware" not in legacy.params
-
-    preference = {
-        "mode": "cuda",
-        "gpu_device_index": 1,
-        "cuda_compute_type": "int8_float16",
-        "cpu_compute_type": "int8",
-        "cpu_threads": 4,
-    }
-    params = start_params()
-    params["hardware"] = preference
+def test_worker_resolves_task_hardware_without_accepting_a_preference():
     command = CommandMessage(
-        "req-hardware", CommandMethod.TRANSCRIPTION_START, params
+        "req-auto-hardware", CommandMethod.TRANSCRIPTION_START, start_params()
     )
-    assert dict(command.params["hardware"]) == preference
+    assert "hardware" not in command.params
 
-    model_load = CommandMessage(
-        "req-model-hardware",
-        CommandMethod.MODEL_LOAD,
-        {"model_id": "large-v3-turbo", "hardware": preference},
-    )
-    assert dict(model_load.params["hardware"]) == preference
+    params = start_params()
+    params["hardware"] = {"mode": "cpu"}
+    with pytest.raises(ProtocolValidationError):
+        CommandMessage("req-retired-hardware", CommandMethod.TRANSCRIPTION_START, params)
 
     event = EventMessage(
         EventCode.TASK_QUEUED,
@@ -408,36 +383,10 @@ def test_hardware_preference_is_optional_and_frozen_in_task_event():
             },
             "effective_parameters": {"language": "en"},
         },
-        request_id="req-hardware",
+        request_id="req-auto-hardware",
         task_id="task-hardware",
     )
     assert event.data["hardware"]["device_index"] == 1
-
-
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("mode", "directml"),
-        ("gpu_device_index", -1),
-        ("cuda_compute_type", "int8"),
-        ("cpu_compute_type", "float16"),
-        ("cpu_threads", 0),
-    ],
-)
-def test_invalid_hardware_preferences_are_rejected(field, value):
-    params = start_params()
-    hardware = {
-        "mode": "auto",
-        "gpu_device_index": 0,
-        "cuda_compute_type": "float16",
-        "cpu_compute_type": "int8",
-        "cpu_threads": 4,
-    }
-    hardware[field] = value
-    params["hardware"] = hardware
-
-    with pytest.raises(ProtocolValidationError):
-        CommandMessage("req-invalid-hardware", CommandMethod.TRANSCRIPTION_START, params)
 
 
 def test_srt_output_accepts_complete_user_controlled_subtitle_parameters():
@@ -482,8 +431,6 @@ def test_markdown_source_copy_is_an_optional_boolean_v1_extension():
     [
         (CommandMethod.SYSTEM_HEALTH, {}),
         (CommandMethod.SYSTEM_ENVIRONMENT, {}),
-        (CommandMethod.MODEL_LOAD, {"model_id": "large-v3-turbo"}),
-        (CommandMethod.MODEL_UNLOAD, {}),
         (CommandMethod.TRANSCRIPTION_CANCEL, {"task_id": "task-1"}),
         (CommandMethod.WORKER_SHUTDOWN, {}),
     ],

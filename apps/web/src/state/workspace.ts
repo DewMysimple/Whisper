@@ -6,7 +6,6 @@ import type {
   DesktopEvent,
   EditableParameters,
   FinishAction,
-  HardwarePreference,
   HostStatus,
   InputSource,
   ModelId,
@@ -49,11 +48,6 @@ import {
   type ParameterProfiles,
   type RecognitionStrategyProfiles,
 } from './parameterProfiles';
-import {
-  DEFAULT_HARDWARE_PREFERENCE,
-  hardwarePreferenceSupported,
-  recommendedHardwarePreference,
-} from './hardware';
 import { parseWindowsClipboardPaths } from './clipboardPaths';
 import type { TaskDateRange } from './taskHistory';
 import { handleWorkspaceEvent } from './workspaceEvents';
@@ -154,7 +148,6 @@ const INITIAL_TASKS: TaskSnapshot[] = [
         preserveSourceMarkdown: false,
         conflictPolicy: 'confirm_overwrite',
       },
-      hardware: { ...DEFAULT_HARDWARE_PREFERENCE },
     },
   },
   {
@@ -197,15 +190,13 @@ const INITIAL_TASKS: TaskSnapshot[] = [
         preserveSourceMarkdown: false,
         conflictPolicy: 'confirm_overwrite',
       },
-      hardware: { ...DEFAULT_HARDWARE_PREFERENCE },
     },
   },
 ];
 
 export type TaskFilter = 'all' | TaskStatus;
 export type TaskWorkspaceMode = 'monitor' | 'history';
-export type WorkspaceViewId =
-  'workspace' | 'hardware' | 'performance' | 'tasks' | 'logs' | 'settings';
+export type WorkspaceViewId = 'workspace' | 'performance' | 'tasks' | 'logs' | 'settings';
 
 export interface PendingOverwrite {
   draft: TranscriptionDraft;
@@ -224,7 +215,6 @@ export interface PendingShutdownStart {
 export interface WorkspaceState {
   inputs: InputSource[];
   selectedModelId: ModelId;
-  hardwarePreference: HardwarePreference;
   selectedPresetId: PresetId;
   profileMode: ProfileMode;
   parameters: EditableParameters;
@@ -241,8 +231,6 @@ export interface WorkspaceState {
   hostStatus: HostStatus;
   environment: WorkerEnvironment | null;
   model: ModelStatus;
-  modelReloading: boolean;
-  pendingHardware: boolean;
   pendingOverwrite: PendingOverwrite | null;
   pendingShutdownStart: PendingShutdownStart | null;
   finishAction: FinishAction;
@@ -272,8 +260,6 @@ export interface WorkspaceState {
   configText: string;
   initialized: boolean;
   setActiveView(view: WorkspaceState['activeView']): void;
-  setHardwarePreference(preference: HardwarePreference): Promise<void>;
-  restoreHardwareDefaults(): Promise<void>;
   confirmOverwrite(): Promise<void>;
   cancelOverwrite(): void;
   confirmShutdownStart(): Promise<void>;
@@ -342,7 +328,6 @@ function mergeUniqueInputs(existing: InputSource[], incoming: InputSource[]): In
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
   inputs: [],
   selectedModelId: DEFAULT_MODEL_ID,
-  hardwarePreference: { ...DEFAULT_HARDWARE_PREFERENCE },
   selectedPresetId: 'en_v1',
   profileMode: 'transcript',
   parameters: { ...getPreset('en_v1').parameters },
@@ -380,8 +365,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     deviceIndex: null,
     cpuThreads: null,
   },
-  modelReloading: false,
-  pendingHardware: false,
   pendingOverwrite: null,
   pendingShutdownStart: null,
   finishAction: 'none',
@@ -430,49 +413,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     } catch (error) {
       set({ lastError: errorMessage(error) });
     }
-  },
-  setHardwarePreference: async (hardwarePreference) => {
-    const state = get();
-    const capabilities = state.environment?.hardware;
-    if (!hardwarePreferenceSupported(hardwarePreference, capabilities)) {
-      set({ lastError: '当前本机不支持所选硬件配置。', activeView: 'hardware' });
-      return;
-    }
-    const previous = state.hardwarePreference;
-    const busy = state.tasks.some((task) => task.status === 'queued' || task.status === 'running');
-    if (busy) {
-      set({ lastError: '任务执行或排队期间不能更改硬件配置。', activeView: 'hardware' });
-      return;
-    }
-    set({ hardwarePreference, pendingHardware: false, lastError: null });
-    persistLater(get);
-    set({ modelReloading: true, pendingHardware: true });
-    try {
-      await desktopBridge.loadModel(state.selectedModelId, hardwarePreference);
-      set({ pendingHardware: false });
-    } catch (error) {
-      set({ hardwarePreference: previous, pendingHardware: false, lastError: errorMessage(error) });
-      persistLater(get);
-      try {
-        await desktopBridge.loadModel(state.selectedModelId, previous);
-      } catch {
-        set({
-          model: {
-            state: 'unloaded',
-            modelId: null,
-            device: null,
-            computeType: null,
-            deviceIndex: null,
-            cpuThreads: null,
-          },
-        });
-      }
-    } finally {
-      set({ modelReloading: false });
-    }
-  },
-  restoreHardwareDefaults: async () => {
-    await get().setHardwarePreference(recommendedHardwarePreference(get().environment?.hardware));
   },
   setTheme: (theme) => {
     const next = { ...appearanceFromState(get()), theme };
@@ -706,13 +646,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ lastError: '本地推理 Worker 尚未就绪。' });
       return;
     }
-    if (!hardwarePreferenceSupported(state.hardwarePreference, state.environment?.hardware)) {
-      set({
-        lastError: '当前默认硬件配置在本机不可用，请重新选择。',
-        activeView: 'hardware',
-      });
-      return;
-    }
     try {
       const localModels = await desktopBridge.listLocalModels();
       if (!localModels.some((item) => item.id === state.selectedModelId && item.installed)) {
@@ -735,7 +668,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       effectiveParameters: state.parameters,
       subtitleParameters: state.subtitleParameters,
       output: state.output,
-      hardware: state.hardwarePreference,
     };
     if (state.finishAction === 'shutdown') {
       set({ pendingShutdownStart: { draft }, lastError: null });
@@ -990,7 +922,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({
         inputs,
         selectedModelId: retryDraftSnapshot.modelId,
-        hardwarePreference: { ...retryDraftSnapshot.hardware },
         selectedPresetId: retryDraftSnapshot.basePresetId,
         profileMode: retryDraftSnapshot.profileMode,
         parameters: { ...retryDraftSnapshot.effectiveParameters },
@@ -1036,13 +967,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     if (draftHasUnsupportedTranslation(resumeDraftSnapshot)) {
       set({
         lastError: '该历史任务使用 Large V3 Turbo 翻译，无法安全续接；请改用 Large V3 新建任务。',
-      });
-      return;
-    }
-    if (!hardwarePreferenceSupported(resumeDraftSnapshot.hardware, get().environment?.hardware)) {
-      set({
-        lastError: '原任务的硬件配置在当前设备上不可用。',
-        activeView: 'hardware',
       });
       return;
     }

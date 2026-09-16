@@ -48,7 +48,7 @@ def execute_task(runtime: "WorkerRuntime", task: WorkerTask) -> None:
         )
         with runtime._model_cache.acquire(
             task.model_id,
-            hardware_preference=task.hardware_preference,
+            hardware=task.hardware,
             request_id=task.request_id,
         ) as (engine, _hardware):
             service = TranscriptionService(

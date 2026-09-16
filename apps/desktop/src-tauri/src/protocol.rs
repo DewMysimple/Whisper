@@ -12,8 +12,6 @@ pub const COMMAND_METHODS: &[&str] = &[
     "system.environment",
     "system.metrics",
     "media.inspect",
-    "model.load",
-    "model.unload",
     "transcription.start",
     "transcription.cancel",
     "worker.shutdown",
