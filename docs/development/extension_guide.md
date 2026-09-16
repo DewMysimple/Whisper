@@ -16,7 +16,7 @@
 5. 运行 `python scripts/generate_preset_catalog.py` 更新 Web 参数投影，并确保 `corepack pnpm check:preset-catalog` 通过。
 6. 增加固定输出并运行 benchmark/golden 门禁。
 
-CLI choices、桌面列表、设置恢复和进程参数都从同一注册表派生。新增 preset 不应修改 `TranscriptionService` 主流程。
+CLI choices、桌面 preset 卡片、设置恢复和进程参数都从同一注册表派生。新增 preset 不应修改 `TranscriptionService` 主流程。
 
 显示标签和摘要可以在 `apps/web/src/data/presets.ts` 维护；推理参数不要在 TypeScript 中手工复制，统一从 Python 注册表生成。
 

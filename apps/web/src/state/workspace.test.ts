@@ -65,82 +65,6 @@ describe('workspace terminal event notifications', () => {
     expect(useWorkspace.getState().logs).toEqual([]);
   });
 
-  it('keeps parameter overrides isolated by V3 model and preset', async () => {
-    useWorkspace.setState({
-      tasks: [],
-      selectedModelId: 'large-v3-turbo',
-      selectedPresetId: 'en_v1',
-      profileMode: 'transcript',
-      parameters: { ...getPreset('en_v1', 'large-v3-turbo').parameters },
-      overrides: {},
-      parameterProfiles: {},
-      localModels: [
-        {
-          id: 'large-v3',
-          label: 'Large V3',
-          installed: true,
-          path: 'D:\\models\\large-v3',
-          sizeBytes: 1,
-          detail: 'ready',
-        },
-        {
-          id: 'large-v3-turbo',
-          label: 'Large V3 Turbo',
-          installed: true,
-          path: 'D:\\models\\large-v3-turbo',
-          sizeBytes: 1,
-          detail: 'ready',
-        },
-      ],
-    });
-
-    useWorkspace.getState().setParameter('beam_size', 7);
-    useWorkspace.getState().selectProfile('transcript', 'en_v2');
-    expect(useWorkspace.getState().parameters.beam_size).toBe(5);
-    useWorkspace.getState().selectProfile('transcript', 'en_v1');
-    expect(useWorkspace.getState().parameters.beam_size).toBe(7);
-
-    await useWorkspace.getState().selectModel('large-v3');
-    expect(useWorkspace.getState().parameters.beam_size).toBe(5);
-    useWorkspace.getState().setParameter('beam_size', 9);
-    await useWorkspace.getState().selectModel('large-v3-turbo');
-    expect(useWorkspace.getState().parameters.beam_size).toBe(7);
-  });
-
-  it('freezes explicit zero temperature and rejects unsupported translation combinations', () => {
-    useWorkspace.setState({
-      selectedModelId: 'large-v3-turbo',
-      selectedPresetId: 'en_v1',
-      parameters: { ...getPreset('en_v1', 'large-v3-turbo').parameters },
-      overrides: {},
-      parameterProfiles: {},
-      lastError: null,
-    });
-
-    useWorkspace.getState().setTemperatureMode('fixed');
-    expect(useWorkspace.getState().overrides).toHaveProperty('temperature', 0);
-    useWorkspace.getState().setTemperatureMode('model');
-    expect(useWorkspace.getState().overrides).not.toHaveProperty('temperature');
-
-    useWorkspace.getState().setParameter('task', 'translate');
-    expect(useWorkspace.getState().parameters.task).toBe('transcribe');
-    expect(useWorkspace.getState().lastError).toMatch(/Turbo/);
-
-    useWorkspace.setState({
-      selectedModelId: 'large-v3',
-      parameters: { ...getPreset('en_v1', 'large-v3').parameters },
-      overrides: {},
-      lastError: null,
-    });
-    useWorkspace.getState().setParameter('task', 'translate');
-    expect(useWorkspace.getState().parameters.task).toBe('translate');
-
-    useWorkspace.getState().selectProfile('transcript', 'cn2');
-    useWorkspace.getState().setParameter('task', 'translate');
-    expect(useWorkspace.getState().parameters.task).toBe('transcribe');
-    expect(useWorkspace.getState().lastError).toMatch(/仅在英文/);
-  });
-
   it('never treats task progress as cancellation', () => {
     useWorkspace.getState().handleEvent({
       type: 'task.progress',
@@ -1004,21 +928,11 @@ describe('workspace terminal event notifications', () => {
   });
 });
 
-describe('workspace inference controls while tasks are active', () => {
+describe('workspace hardware controls while tasks are active', () => {
   beforeEach(() => {
     useWorkspace.setState({
       tasks: [structuredClone(RUNNING_TASK)],
       selectedModelId: 'large-v3-turbo',
-      localModels: [
-        {
-          id: 'base',
-          label: 'Base',
-          installed: true,
-          path: 'F:\\Models\\base',
-          sizeBytes: 1,
-          detail: '已安装',
-        },
-      ],
       hardwarePreference: {
         mode: 'auto',
         gpuDeviceIndex: 0,
@@ -1026,18 +940,9 @@ describe('workspace inference controls while tasks are active', () => {
         cpuComputeType: 'int8',
         cpuThreads: 4,
       },
-      pendingModelId: null,
       pendingHardware: false,
       lastError: null,
     });
-  });
-
-  it('rejects model changes while a task is running', async () => {
-    await useWorkspace.getState().selectModel('base');
-
-    expect(useWorkspace.getState().selectedModelId).toBe('large-v3-turbo');
-    expect(useWorkspace.getState().pendingModelId).toBeNull();
-    expect(useWorkspace.getState().lastError).toContain('不能切换模型');
   });
 
   it('rejects hardware changes while a task is running', async () => {

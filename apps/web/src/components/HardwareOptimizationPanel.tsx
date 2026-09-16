@@ -21,7 +21,7 @@ export function HardwareOptimizationPanel() {
   const selected = useWorkspace((state) => state.hardwarePreference);
   const pendingHardware = useWorkspace((state) => state.pendingHardware);
   const model = useWorkspace((state) => state.model);
-  const modelSwitching = useWorkspace((state) => state.modelSwitching);
+  const modelReloading = useWorkspace((state) => state.modelReloading);
   const tasks = useWorkspace((state) => state.tasks);
   const setHardwarePreference = useWorkspace((state) => state.setHardwarePreference);
   const restoreHardwareDefaults = useWorkspace((state) => state.restoreHardwareDefaults);
@@ -105,7 +105,7 @@ export function HardwareOptimizationPanel() {
       </div>
 
       <div
-        aria-busy={modelSwitching}
+        aria-busy={modelReloading}
         aria-disabled={busy}
         className={`hardware-control-grid ${busy ? 'is-locked' : ''}`}
       >
@@ -258,7 +258,7 @@ export function HardwareOptimizationPanel() {
       <div className="hardware-optimizer-actions">
         <button
           className="quiet-button"
-          disabled={busy || modelSwitching || !dirty}
+          disabled={busy || modelReloading || !dirty}
           onClick={() => setDraft(selected)}
           type="button"
         >
@@ -266,7 +266,7 @@ export function HardwareOptimizationPanel() {
         </button>
         <button
           className="secondary-button"
-          disabled={busy || modelSwitching || capabilities === undefined}
+          disabled={busy || modelReloading || capabilities === undefined}
           onClick={() => {
             const recommended = recommendedHardwarePreference(capabilities);
             setDraft(recommended);
@@ -279,7 +279,7 @@ export function HardwareOptimizationPanel() {
         <button
           className="primary-button"
           disabled={
-            busy || capabilities === undefined || modelSwitching || !dirty || !draftSupported
+            busy || capabilities === undefined || modelReloading || !dirty || !draftSupported
           }
           onClick={() => void setHardwarePreference(draft)}
           type="button"

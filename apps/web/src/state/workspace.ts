@@ -9,7 +9,6 @@ import type {
   HardwarePreference,
   HostStatus,
   InputSource,
-  LocalModelDescriptor,
   ModelId,
   ModelStatus,
   OutputPreview,
@@ -43,7 +42,6 @@ import {
 } from './persistence';
 import {
   DEFAULT_RECOGNITION_STRATEGY,
-  normalizePromptText,
   profileOverrides,
   profileParameters,
   translationTaskSupported,
@@ -207,8 +205,7 @@ const INITIAL_TASKS: TaskSnapshot[] = [
 export type TaskFilter = 'all' | TaskStatus;
 export type TaskWorkspaceMode = 'monitor' | 'history';
 export type WorkspaceViewId =
-  'workspace' | 'models' | 'hardware' | 'performance' | 'tasks' | 'logs' | 'settings';
-export type ModelWorkspaceTab = 'library' | 'parameters';
+  'workspace' | 'hardware' | 'performance' | 'tasks' | 'logs' | 'settings';
 
 export interface PendingOverwrite {
   draft: TranscriptionDraft;
@@ -244,10 +241,7 @@ export interface WorkspaceState {
   hostStatus: HostStatus;
   environment: WorkerEnvironment | null;
   model: ModelStatus;
-  localModels: LocalModelDescriptor[];
-  modelsLoading: boolean;
-  modelSwitching: boolean;
-  pendingModelId: ModelId | null;
+  modelReloading: boolean;
   pendingHardware: boolean;
   pendingOverwrite: PendingOverwrite | null;
   pendingShutdownStart: PendingShutdownStart | null;
@@ -259,7 +253,6 @@ export interface WorkspaceState {
   lastError: string | null;
   startingTask: boolean;
   activeView: WorkspaceViewId;
-  modelWorkspaceTab: ModelWorkspaceTab;
   theme: ThemePreference;
   accentPreset: AccentPreset;
   customAccentColor: string;
@@ -279,10 +272,6 @@ export interface WorkspaceState {
   configText: string;
   initialized: boolean;
   setActiveView(view: WorkspaceState['activeView']): void;
-  setModelWorkspaceTab(tab: ModelWorkspaceTab): void;
-  refreshModels(): Promise<void>;
-  openModelDirectory(): Promise<void>;
-  selectModel(modelId: ModelId): Promise<void>;
   setHardwarePreference(preference: HardwarePreference): Promise<void>;
   restoreHardwareDefaults(): Promise<void>;
   confirmOverwrite(): Promise<void>;
@@ -311,8 +300,6 @@ export interface WorkspaceState {
   removeInput(id: string): void;
   clearInputs(): void;
   selectProfile(mode: ProfileMode, id: PresetId): void;
-  setParameter<K extends keyof EditableParameters>(key: K, value: EditableParameters[K]): void;
-  setTemperatureMode(mode: 'model' | 'fixed'): void;
   setSubtitleParameter<K extends keyof SubtitleParameters>(
     key: K,
     value: SubtitleParameters[K],
@@ -393,10 +380,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     deviceIndex: null,
     cpuThreads: null,
   },
-  localModels: [],
-  modelsLoading: false,
-  modelSwitching: false,
-  pendingModelId: null,
+  modelReloading: false,
   pendingHardware: false,
   pendingOverwrite: null,
   pendingShutdownStart: null,
@@ -413,7 +397,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   lastError: null,
   startingTask: false,
   activeView: 'workspace',
-  modelWorkspaceTab: 'library',
   ...DEFAULT_APPEARANCE,
   selectedTaskId: null,
   outputPreview: null,
@@ -430,7 +413,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   setActiveView: (activeView) =>
     set((state) => ({
       activeView,
-      modelWorkspaceTab: activeView === 'models' ? 'library' : state.modelWorkspaceTab,
       taskWorkspaceMode:
         activeView === 'tasks'
           ? state.tasks.some((task) => task.status === 'queued' || task.status === 'running')
@@ -440,7 +422,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
               : 'history'
           : state.taskWorkspaceMode,
     })),
-  setModelWorkspaceTab: (modelWorkspaceTab) => set({ modelWorkspaceTab }),
   setFinishAction: (finishAction) => set({ finishAction }),
   cancelPowerAction: async () => {
     try {
@@ -448,84 +429,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ powerActionStatus, shutdownArmed: false, lastError: null });
     } catch (error) {
       set({ lastError: errorMessage(error) });
-    }
-  },
-  refreshModels: async () => {
-    set({ modelsLoading: true });
-    try {
-      const localModels = await desktopBridge.listLocalModels();
-      set({ localModels, lastError: null });
-    } catch (error) {
-      set({ lastError: errorMessage(error) });
-    } finally {
-      set({ modelsLoading: false });
-    }
-  },
-  openModelDirectory: async () => {
-    try {
-      await desktopBridge.openModelDirectory();
-      set({ lastError: null });
-    } catch (error) {
-      set({ lastError: errorMessage(error) });
-    }
-  },
-  selectModel: async (modelId) => {
-    const state = get();
-    const descriptor = state.localModels.find((item) => item.id === modelId);
-    if (descriptor?.installed !== true) {
-      set({ lastError: `模型 ${modelId} 尚未完整安装。`, activeView: 'models' });
-      return;
-    }
-    const previous = state.selectedModelId;
-    const busy = state.tasks.some((task) => task.status === 'queued' || task.status === 'running');
-    if (busy) {
-      set({ lastError: '任务执行或排队期间不能切换模型。', activeView: 'models' });
-      return;
-    }
-    set({
-      selectedModelId: modelId,
-      parameters: profileParameters(state.parameterProfiles, modelId, state.selectedPresetId),
-      overrides: profileOverrides(state.parameterProfiles, modelId, state.selectedPresetId),
-      recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
-      pendingModelId: null,
-      lastError: null,
-    });
-    persistLater(get);
-    set({ modelSwitching: true });
-    try {
-      await desktopBridge.loadModel(modelId, state.hardwarePreference);
-      set({ pendingModelId: null });
-    } catch (error) {
-      set({
-        selectedModelId: previous,
-        parameters: profileParameters(state.parameterProfiles, previous, state.selectedPresetId),
-        overrides: profileOverrides(state.parameterProfiles, previous, state.selectedPresetId),
-        recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
-        pendingModelId: null,
-        lastError: errorMessage(error),
-      });
-      persistLater(get);
-      if (
-        previous !== modelId &&
-        state.localModels.some((item) => item.id === previous && item.installed)
-      ) {
-        try {
-          await desktopBridge.loadModel(previous, state.hardwarePreference);
-        } catch {
-          set({
-            model: {
-              state: 'unloaded',
-              modelId: null,
-              device: null,
-              computeType: null,
-              deviceIndex: null,
-              cpuThreads: null,
-            },
-          });
-        }
-      }
-    } finally {
-      set({ modelSwitching: false });
     }
   },
   setHardwarePreference: async (hardwarePreference) => {
@@ -543,7 +446,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
     set({ hardwarePreference, pendingHardware: false, lastError: null });
     persistLater(get);
-    set({ modelSwitching: true, pendingHardware: true });
+    set({ modelReloading: true, pendingHardware: true });
     try {
       await desktopBridge.loadModel(state.selectedModelId, hardwarePreference);
       set({ pendingHardware: false });
@@ -565,7 +468,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         });
       }
     } finally {
-      set({ modelSwitching: false });
+      set({ modelReloading: false });
     }
   },
   restoreHardwareDefaults: async () => {
@@ -731,67 +634,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     });
     persistLater(get);
   },
-  setParameter: (key, value) =>
-    set((state) => {
-      if (
-        key === 'task' &&
-        value === 'translate' &&
-        !translationTaskSupported(state.selectedModelId, state.selectedPresetId)
-      ) {
-        return {
-          lastError:
-            state.selectedModelId === 'large-v3-turbo'
-              ? 'Large V3 Turbo 未针对翻译任务训练；请切换到 Large V3 后再选择翻译为英语。'
-              : '翻译为英语仅在英文转录与英文防幻觉模式中开放。',
-        };
-      }
-      const normalizedValue =
-        (key === 'initial_prompt' || key === 'hotwords') && typeof value === 'string'
-          ? normalizePromptText(value)
-          : value;
-      const parameters = { ...state.parameters, [key]: normalizedValue };
-      const base = getPreset(state.selectedPresetId, state.selectedModelId).parameters;
-      const overrides = Object.fromEntries(
-        Object.entries(parameters).filter(([name, current]) => {
-          const parameterName = name as keyof EditableParameters;
-          if (
-            parameterName === 'temperature' &&
-            Object.prototype.hasOwnProperty.call(state.overrides, 'temperature')
-          ) {
-            return true;
-          }
-          return current !== base[parameterName];
-        }),
-      ) as Partial<EditableParameters>;
-      const parameterProfiles = withProfileOverrides(
-        state.parameterProfiles,
-        state.selectedModelId,
-        state.selectedPresetId,
-        overrides,
-      );
-      queueMicrotask(() => persistLater(get));
-      return { parameters, overrides, parameterProfiles, lastError: null };
-    }),
-  setTemperatureMode: (mode) =>
-    set((state) => {
-      const base = getPreset(state.selectedPresetId, state.selectedModelId).parameters;
-      const overrides = { ...state.overrides };
-      const parameters = { ...state.parameters };
-      if (mode === 'model') {
-        delete overrides.temperature;
-        parameters.temperature = base.temperature;
-      } else {
-        overrides.temperature = parameters.temperature;
-      }
-      const parameterProfiles = withProfileOverrides(
-        state.parameterProfiles,
-        state.selectedModelId,
-        state.selectedPresetId,
-        overrides,
-      );
-      queueMicrotask(() => persistLater(get));
-      return { parameters, overrides, parameterProfiles };
-    }),
   setSubtitleParameter: (key, value) =>
     set((state) => {
       const subtitleParameters = { ...state.subtitleParameters, [key]: value };
@@ -845,7 +687,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
           state.selectedModelId === 'large-v3-turbo'
             ? 'Large V3 Turbo 不支持可靠的语音翻译；请切换到 Large V3。'
             : '当前模型与识别模式组合不支持翻译为英语。',
-        activeView: 'models',
       });
       return;
     }
@@ -874,11 +715,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
     try {
       const localModels = await desktopBridge.listLocalModels();
-      set({ localModels });
       if (!localModels.some((item) => item.id === state.selectedModelId && item.installed)) {
         set({
           lastError: `模型 ${state.selectedModelId} 已缺失或安装不完整。`,
-          activeView: 'models',
         });
         return;
       }
@@ -1138,7 +977,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     if (draftHasUnsupportedTranslation(retryDraftSnapshot)) {
       set({
         lastError: '该历史任务使用 Large V3 Turbo 翻译，无法保证英语输出；请改用 Large V3。',
-        activeView: 'models',
       });
       return;
     }
@@ -1198,7 +1036,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     if (draftHasUnsupportedTranslation(resumeDraftSnapshot)) {
       set({
         lastError: '该历史任务使用 Large V3 Turbo 翻译，无法安全续接；请改用 Large V3 新建任务。',
-        activeView: 'models',
       });
       return;
     }
@@ -1213,7 +1050,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     let resumeDraft: TranscriptionDraft | null = null;
     try {
       const localModels = await desktopBridge.listLocalModels();
-      set({ localModels });
       if (!localModels.some((item) => item.id === resumeDraftSnapshot.modelId && item.installed)) {
         throw new Error(`原任务使用的模型 ${resumeDraftSnapshot.modelId} 已缺失或安装不完整。`);
       }
@@ -1367,7 +1203,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       .getHostStatus()
       .then((hostStatus) => set({ hostStatus }))
       .catch((error: unknown) => set({ lastError: errorMessage(error) }));
-    void get().refreshModels();
     void desktopBridge
       .getPowerCapabilities()
       .then((powerCapabilities) => set({ powerCapabilities }))

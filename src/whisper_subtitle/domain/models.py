@@ -16,7 +16,6 @@ class ModelDefinition:
     calibrated_parameters: bool = False
     secondary_recognition: bool = False
     translation: bool = True
-    visible: bool = False
 
 
 MODEL_DEFINITIONS = (
@@ -30,7 +29,6 @@ MODEL_DEFINITIONS = (
         ("Systran/faster-whisper-large-v3",),
         calibrated_parameters=True,
         secondary_recognition=True,
-        visible=True,
     ),
     ModelDefinition(
         "large-v3-turbo",
@@ -42,7 +40,6 @@ MODEL_DEFINITIONS = (
         calibrated_parameters=True,
         secondary_recognition=True,
         translation=False,
-        visible=True,
     ),
 )
 
@@ -60,4 +57,3 @@ SECONDARY_RECOGNITION_MODEL_IDS = frozenset(
 TRANSLATION_MODEL_IDS = frozenset(
     model.id for model in MODEL_DEFINITIONS if model.translation
 )
-VISIBLE_MODEL_IDS = tuple(model.id for model in MODEL_DEFINITIONS if model.visible)

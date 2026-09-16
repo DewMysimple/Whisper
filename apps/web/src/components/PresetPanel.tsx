@@ -8,8 +8,6 @@ export function PresetPanel() {
   const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
   const selectProfile = useWorkspace((state) => state.selectProfile);
   const overrides = useWorkspace((state) => state.overrides);
-  const setActiveView = useWorkspace((state) => state.setActiveView);
-  const setModelWorkspaceTab = useWorkspace((state) => state.setModelWorkspaceTab);
   const active = profileMode === 'transcript';
   const isCustom = active && Object.keys(overrides).length > 0;
 
@@ -55,17 +53,6 @@ export function PresetPanel() {
           </button>
         ))}
       </div>
-
-      <button
-        className="preset-parameter-link"
-        onClick={() => {
-          setActiveView('models');
-          setModelWorkspaceTab('parameters');
-        }}
-        type="button"
-      >
-        <span>查看并修改当前模型与模式使用{isCustom ? '自定义参数' : '正式默认参数'}</span>
-      </button>
     </section>
   );
 }

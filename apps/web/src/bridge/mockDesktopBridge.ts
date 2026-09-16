@@ -154,10 +154,6 @@ export class MockDesktopBridge implements DesktopBridge {
     }));
   }
 
-  async openModelDirectory(): Promise<string> {
-    return 'D:\\WhisperSubtitle\\models';
-  }
-
   async loadModel(modelId: ModelId, hardware?: HardwarePreference): Promise<void> {
     const preference = hardware ?? {
       mode: 'auto' as const,

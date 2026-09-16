@@ -4,7 +4,6 @@ import {
   MODEL_IDS,
   SECONDARY_RECOGNITION_MODEL_IDS,
   TRANSLATION_MODEL_IDS,
-  VISIBLE_MODEL_IDS,
 } from './modelCatalog.generated';
 
 export const PRESET_IDS = ['cn', 'cn2', 'en_v1', 'en_v2'] as const;
@@ -15,7 +14,6 @@ export {
   MODEL_IDS,
   SECONDARY_RECOGNITION_MODEL_IDS,
   TRANSLATION_MODEL_IDS,
-  VISIBLE_MODEL_IDS,
 };
 
 export type PresetId = (typeof PRESET_IDS)[number];
@@ -410,7 +408,6 @@ export interface DesktopBridge {
   getHostStatus(): Promise<HostStatus>;
   restartWorker(): Promise<HostStatus>;
   listLocalModels(): Promise<LocalModelDescriptor[]>;
-  openModelDirectory(): Promise<string>;
   loadModel(modelId: ModelId, hardware?: HardwarePreference): Promise<void>;
   getPowerCapabilities(): Promise<PowerCapabilities>;
   getPowerActionStatus(): Promise<PowerActionStatus>;

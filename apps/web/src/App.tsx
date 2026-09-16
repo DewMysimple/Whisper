@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { desktopBridge } from './bridge';
 import { HardwareOptimizationPanel } from './components/HardwareOptimizationPanel';
 import { LaunchCard } from './components/LaunchCard';
-import { ModelSwitchView } from './components/ModelSwitchView';
 import { OutputPanel } from './components/OutputPanel';
 import { OverwriteConfirmDialog } from './components/OverwriteConfirmDialog';
 import { PerformanceView } from './components/PerformanceStrip';
@@ -26,10 +25,6 @@ const PAGE_COPY: Record<WorkspaceViewId, { eyebrow: string; title: string }> = {
   workspace: {
     eyebrow: 'LOCAL TRANSCRIPTION',
     title: '转录工作台',
-  },
-  models: {
-    eyebrow: 'LOCAL MODEL LIBRARY',
-    title: '模型切换',
   },
   hardware: {
     eyebrow: 'LOCAL COMPUTE',
@@ -284,7 +279,6 @@ export default function App() {
           }
         >
           {activeView === 'workspace' && <WorkspaceView />}
-          {activeView === 'models' && <ModelSwitchView />}
           {activeView === 'hardware' && <HardwareView />}
           {activeView === 'performance' && <PerformanceView />}
           {activeView === 'tasks' && <TasksView />}

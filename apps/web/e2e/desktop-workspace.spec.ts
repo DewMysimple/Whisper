@@ -26,13 +26,6 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
     });
   const transcript = await measure();
   expect(transcript.source.height).toBeCloseTo(transcript.output.height, 1);
-  const parameterLink = page.locator(
-    '.preset-panel:not(.subtitle-profile-panel) .preset-parameter-link',
-  );
-  await expect(parameterLink).toHaveRole('button');
-  await expect(parameterLink.locator('button')).toHaveCount(0);
-  await expect(parameterLink).toContainText('查看并修改当前模型与模式使用正式默认参数');
-  await expect(parameterLink).toHaveCSS('justify-content', 'center');
 
   const intakeRatio = await page.evaluate(() => {
     const local = document.querySelector('.drop-zone')!.getBoundingClientRect();
@@ -109,43 +102,17 @@ test('uses the same subtle press feedback for selectable cards', async ({ page }
   await expect(markdownFormat.locator('.output-format-code')).toHaveCSS('outline-style', 'none');
 });
 
-test('hides retired recognition strategies from parameter configuration', async ({ page }) => {
-  await page
-    .locator('.preset-panel:not(.subtitle-profile-panel) .preset-card')
-    .filter({ hasText: '中文防幻觉' })
-    .click();
-  await page.getByRole('button', { name: /查看并修改当前模型与模式/ }).click();
-  await expect(page.getByRole('group', { name: '识别策略' })).toHaveCount(0);
-  await expect(page.getByText('复杂中英混合')).toHaveCount(0);
-  await expect(page.getByText('中文细节增强')).toHaveCount(0);
-  await page.getByRole('button', { name: '更换识别模式' }).click();
-  await expect(page.locator('.launch-summary')).not.toContainText('复杂中英混合');
-  await expect(page.locator('.launch-summary')).not.toContainText('中文细节增强');
+test('does not expose the retired model switching workbench', async ({ page }) => {
+  const navigation = page.getByRole('navigation', { name: '主导航' });
+  await expect(navigation.getByRole('button', { name: '模型切换' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /查看并修改当前模型与模式/ })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '当前推理模型' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '本地模型库' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '当前模型参数' })).toHaveCount(0);
 });
 
-test('locks model and hardware changes while queued or running work exists', async ({
-  page,
-}, testInfo) => {
-  await page.getByRole('button', { name: '模型切换' }).click();
-  await expect(page.getByRole('heading', { name: '当前推理模型' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '本地模型库' })).toBeVisible();
-  await expect(page.locator('.model-card')).toHaveCount(2);
-  await expect(page.getByText('1 / 2')).toBeVisible();
-  await expect(page.getByRole('button', { name: '打开模型目录' })).toBeVisible();
-  await expect(page.getByText('自定义模型尚未开放')).toBeVisible();
-  await expect(page.getByRole('heading', { name: '当前模型参数' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Tiny' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Medium' })).toHaveCount(0);
-
-  const turboCard = page
-    .locator('.model-card')
-    .filter({ has: page.getByRole('heading', { name: 'Large V3 Turbo' }) });
-  await expect(turboCard).toBeDisabled();
+test('locks hardware changes while queued or running work exists', async ({ page }, testInfo) => {
   await expect(page.locator('[title]')).toHaveCount(0);
-  await expect(page.getByText('任务执行期间已锁定')).toHaveCount(1);
-  await page.getByRole('tab', { name: /参数配置/ }).click();
-  await expect(page.getByRole('heading', { name: '当前模型参数' })).toBeVisible();
-
   await page.getByRole('button', { name: '硬件优化' }).click();
   await expect(page.getByRole('heading', { name: '硬件优化', level: 1 })).toBeVisible();
   const hardware = page.locator('.hardware-optimizer');
@@ -161,13 +128,13 @@ test('locks model and hardware changes while queued or running work exists', asy
   await expect(hardware.getByRole('button', { name: '自动' })).toBeDisabled();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
-  await page.screenshot({ fullPage: true, path: testInfo.outputPath('model-library-light.png') });
+  await page.screenshot({ fullPage: true, path: testInfo.outputPath('hardware-locked-light.png') });
 
   await page.evaluate(() => {
     document.documentElement.dataset.theme = 'dark';
   });
   await page.waitForTimeout(250);
-  await page.screenshot({ fullPage: true, path: testInfo.outputPath('model-library-dark.png') });
+  await page.screenshot({ fullPage: true, path: testInfo.outputPath('hardware-locked-dark.png') });
 });
 
 test('creates a task from the complete desktop workspace path', async ({ page }, testInfo) => {
@@ -192,12 +159,6 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   await expect(page.getByLabel('待转录媒体队列')).toContainText('P20-核心语法-整数类型.mp4');
   await page.getByRole('button', { name: '添加文件夹' }).click();
   await expect(page.getByLabel('待转录媒体队列')).toContainText('共 8 个媒体文件');
-
-  await page.getByRole('button', { name: /查看并修改当前模型与模式/ }).click();
-  const beamSize = page.getByRole('spinbutton', { name: 'Beam size' });
-  await beamSize.fill('6');
-  await expect(page.getByText('派生自定义')).toBeVisible();
-  await page.getByRole('button', { name: '更换识别模式' }).click();
 
   await expect(page.locator('.output-format-copy')).toHaveCount(0);
   await expect(page.locator('.output-format-list .output-format-option')).toHaveCount(2);
@@ -316,20 +277,6 @@ test('supports workspace navigation, theme and configuration export', async ({
       .first()
       .evaluate((element) => getComputedStyle(element).minHeight),
   ).resolves.toBe('98px');
-  await page.getByRole('button', { name: /查看并修改当前模型与模式/ }).click();
-  await expect(
-    page
-      .locator('.parameter-grid')
-      .first()
-      .evaluate((element) => getComputedStyle(element).rowGap),
-  ).resolves.toBe('10px');
-  await expect(
-    page
-      .locator('.parameter-field input')
-      .first()
-      .evaluate((element) => getComputedStyle(element).minHeight),
-  ).resolves.toBe('38px');
-  await page.getByRole('button', { name: '更换识别模式' }).click();
   await page.getByRole('button', { name: '性能监控' }).click();
   await expect(page.getByRole('heading', { name: '性能监控' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '实时性能趋势' })).toBeVisible();
@@ -441,7 +388,6 @@ test('supports workspace navigation, theme and configuration export', async ({
     page.locator('html').evaluate((element) => element.style.getPropertyValue('--log-font-size')),
   ).resolves.toBe('12px');
   await page.getByRole('button', { name: '转录工作台' }).click();
-  await expect(page.getByRole('button', { name: /查看并修改当前模型与模式/ })).toBeVisible();
   await expect(
     page
       .locator('.preset-panel')
@@ -503,7 +449,6 @@ test('supports workspace navigation, theme and configuration export', async ({
   await page.getByRole('button', { name: '增大日志字号' }).click();
   await expect(page.getByRole('group', { name: '日志字号' })).toContainText('13px');
   await page.getByRole('button', { name: '转录工作台' }).click();
-  await expect(page.getByRole('button', { name: /查看并修改当前模型与模式/ })).toBeVisible();
   await expect(
     page
       .locator('.preset-panel')
@@ -770,7 +715,6 @@ test('opens the independent Worker log workspace and exposes only the restored s
   const navigation = page.getByRole('navigation', { name: '主导航' });
   await expect(navigation.getByRole('button')).toHaveText([
     '转录工作台',
-    '模型切换',
     '硬件优化',
     '性能监控',
     /任务监控与记录/,

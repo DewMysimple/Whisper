@@ -26,7 +26,7 @@ It is designed for people who want to transcribe their own audio and video files
 | `en` | English standard | English speech with the standard context and post-processing strategy |
 | `en2` | English anti-hallucination | English speech with stricter thresholds and trailing hallucination cleanup |
 
-The default CLI preset is `en`. Desktop controls, generated Web settings, and Worker requests are derived from the same Python registry in `src/whisper_subtitle/domain/presets.py`. Supported model identities are maintained separately in `src/whisper_subtitle/domain/models.py` and projected into TypeScript and Rust by `scripts/generate_model_catalog.py`.
+The default CLI preset is `en`. Desktop preset selection and Worker requests are derived from the same Python registry in `src/whisper_subtitle/domain/presets.py`. Supported model identities are maintained separately in `src/whisper_subtitle/domain/models.py` and projected into TypeScript and Rust by `scripts/generate_model_catalog.py`. The desktop currently has no standalone model-switching or inference-parameter workbench; task model snapshots and runtime model validation remain supported.
 
 ## Architecture
 

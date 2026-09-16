@@ -80,10 +80,6 @@ export function handleWorkspaceEvent(
   if (event.type === 'model.status') {
     set({
       model: event.model,
-      pendingModelId:
-        event.model.state === 'ready' && event.model.modelId === get().selectedModelId
-          ? null
-          : get().pendingModelId,
       pendingHardware:
         event.model.state === 'ready' &&
         modelMatchesPreference(event.model, get().hardwarePreference, get().environment?.hardware)
@@ -234,14 +230,6 @@ export function handleWorkspaceEvent(
     }
   }
   persistLater(get);
-  if (
-    get().pendingModelId !== null &&
-    !get().tasks.some((task) => task.status === 'queued' || task.status === 'running')
-  ) {
-    const pending = get().pendingModelId;
-    if (pending !== null) void get().selectModel(pending);
-    return;
-  }
   if (
     get().pendingHardware &&
     !get().tasks.some((task) => task.status === 'queued' || task.status === 'running')

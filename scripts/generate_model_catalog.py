@@ -22,7 +22,6 @@ from whisper_subtitle.domain.models import (  # noqa: E402
     SECONDARY_RECOGNITION_MODEL_IDS,
     SUPPORTED_MODEL_IDS,
     TRANSLATION_MODEL_IDS,
-    VISIBLE_MODEL_IDS,
 )
 
 
@@ -66,7 +65,6 @@ def render_typescript() -> str:
                 _ordered(SECONDARY_RECOGNITION_MODEL_IDS),
             ),
             _typescript_array("TRANSLATION_MODEL_IDS", _ordered(TRANSLATION_MODEL_IDS)),
-            _typescript_array("VISIBLE_MODEL_IDS", VISIBLE_MODEL_IDS),
         )
     ) + "\n"
     corepack = shutil.which("corepack") or shutil.which("corepack.cmd")

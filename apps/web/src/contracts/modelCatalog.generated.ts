@@ -10,5 +10,3 @@ export const CALIBRATED_MODEL_IDS = ['large-v3', 'large-v3-turbo'] as const;
 export const SECONDARY_RECOGNITION_MODEL_IDS = ['large-v3', 'large-v3-turbo'] as const;
 
 export const TRANSLATION_MODEL_IDS = ['tiny', 'base', 'small', 'medium', 'large-v3'] as const;
-
-export const VISIBLE_MODEL_IDS = ['large-v3', 'large-v3-turbo'] as const;

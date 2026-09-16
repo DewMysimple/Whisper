@@ -20,15 +20,11 @@ describe('desktop workspace', () => {
       within(navigation)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual([
-      '转录工作台',
-      '模型切换',
-      '硬件优化',
-      '性能监控',
-      '任务监控与记录2',
-      'Worker 日志',
-      '偏好设置',
-    ]);
+    ).toEqual(['转录工作台', '硬件优化', '性能监控', '任务监控与记录2', 'Worker 日志', '偏好设置']);
+    expect(screen.queryByRole('button', { name: '模型切换' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /查看并修改当前模型与模式/ }),
+    ).not.toBeInTheDocument();
 
     const sidebarToggle = screen.getByRole('button', { name: '收起侧边栏' });
     await user.click(sidebarToggle);
@@ -40,7 +36,7 @@ describe('desktop workspace', () => {
     expect(screen.getByRole('button', { name: /切换为.+主题/ })).toBeInTheDocument();
   });
 
-  it('previews input, derived custom parameters, and output policy without a Worker', async () => {
+  it('previews input and output policy without a Worker', async () => {
     const user = userEvent.setup();
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
     render(<App />);
@@ -60,17 +56,6 @@ describe('desktop workspace', () => {
     await user.click(screen.getByRole('button', { name: '添加文件夹' }));
     expect(await screen.findByText('七月产品会议')).toBeInTheDocument();
     expect(screen.getByLabelText('待转录媒体队列')).toHaveTextContent('共 8 个媒体文件');
-
-    await user.click(screen.getByRole('button', { name: /查看并修改当前模型与模式/ }));
-    const beamSize = await screen.findByRole('spinbutton', { name: 'Beam size' });
-    await user.clear(beamSize);
-    await user.type(beamSize, '6');
-    expect(screen.getByText('派生自定义')).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: /模型选择/ }));
-    expect(screen.queryByRole('spinbutton', { name: 'Beam size' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: /参数配置/ }));
-    expect(screen.getByRole('spinbutton', { name: 'Beam size' })).toHaveValue(6);
-    await user.click(screen.getByRole('button', { name: '更换识别模式' }));
 
     await user.click(screen.getByRole('checkbox', { name: '生成 Markdown 格式' }));
     expect(screen.getByText('跟随媒体')).toBeInTheDocument();
@@ -105,14 +90,13 @@ describe('desktop workspace', () => {
     scrollTo.mockRestore();
   });
 
-  it('keeps retired recognition strategies out of parameter configuration', async () => {
+  it('keeps retired recognition strategies out of the transcription workspace', async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: '转录工作台' }));
     const presetPanel = screen.getByRole('heading', { name: '文本识别模式' }).closest('section');
     expect(presetPanel).not.toBeNull();
     await user.click(within(presetPanel!).getByRole('button', { name: /中文防幻觉/ }));
-    await user.click(screen.getByRole('button', { name: /查看并修改当前模型与模式/ }));
 
     expect(screen.queryByRole('group', { name: '识别策略' })).not.toBeInTheDocument();
     expect(screen.queryByText('复杂中英混合')).not.toBeInTheDocument();
@@ -206,17 +190,6 @@ describe('desktop workspace', () => {
   it('maps performance, task and runtime views to real workspace state', async () => {
     const user = userEvent.setup();
     render(<App />);
-
-    await user.click(screen.getByRole('button', { name: '模型切换' }));
-    expect(await screen.findByRole('heading', { name: '当前推理模型' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '本地模型库' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /模型选择/ })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText('1 / 2')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Medium' })).not.toBeInTheDocument();
-    expect(screen.getByText('自定义模型尚未开放')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '当前模型参数' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: /参数配置/ }));
-    expect(screen.getByRole('heading', { name: '当前模型参数' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '性能监控' }));
     expect(screen.getByRole('heading', { name: '任务进度监视' })).toBeInTheDocument();
@@ -350,11 +323,9 @@ describe('desktop workspace', () => {
     await user.type(maxCharacters, '22');
     expect(within(subtitlePanel!).getByText('字幕自定义')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '模型切换' }));
-    await user.click(screen.getByRole('tab', { name: /参数配置/ }));
-    expect(screen.getByRole('spinbutton', { name: 'Compression ratio' })).toHaveValue(2);
-    expect(screen.getByRole('spinbutton', { name: 'Log probability' })).toHaveValue(-1);
-    expect(screen.getByRole('spinbutton', { name: 'VAD 最短静音' })).toHaveValue(500);
+    expect(screen.queryByRole('spinbutton', { name: 'Compression ratio' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton', { name: 'Log probability' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton', { name: 'VAD 最短静音' })).not.toBeInTheDocument();
   });
 
   it('exposes runtime-supported hardware controls in an independent workbench', async () => {

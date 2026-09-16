@@ -219,11 +219,6 @@ export class TauriDesktopBridge implements DesktopBridge {
     return invoke<LocalModelDescriptor[]>('list_local_models');
   }
 
-  async openModelDirectory(): Promise<string> {
-    await this.ensureNativeListeners();
-    return invoke<string>('open_model_directory');
-  }
-
   async loadModel(modelId: ModelId, hardware?: HardwarePreference): Promise<void> {
     await this.ensureNativeListeners();
     await invoke('load_model', { modelId, hardware: toHostHardware(hardware) });

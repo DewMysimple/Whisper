@@ -3,7 +3,6 @@ import {
   AudioLines,
   ChartNoAxesCombined,
   ChevronLeft,
-  Cpu,
   Microchip,
   Layers3,
   ScrollText,
@@ -22,7 +21,6 @@ const NAVIGATION: Array<{
   icon: typeof AudioLines;
 }> = [
   { id: 'workspace', label: '转录工作台', icon: AudioLines },
-  { id: 'models', label: '模型切换', icon: Cpu },
   { id: 'hardware', label: '硬件优化', icon: Microchip },
   { id: 'performance', label: '性能监控', icon: ChartNoAxesCombined },
   { id: 'tasks', label: '任务监控与记录', icon: Layers3 },
