@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
-    "dev:assets": "vite build --watch --mode development",
+    "dev": "vite",
     "e2e": "corepack pnpm build && playwright test",
     "lint": "eslint . --max-warnings 0",
+    "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b --pretty false"

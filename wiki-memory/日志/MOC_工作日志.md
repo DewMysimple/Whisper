@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-17 | maintenance | 为频繁 UI 修改建立 localhost Vite/HMR 开发循环，同时评估 `apps/` 下的 Web 与 Desktop 目录是否需要重新组织，并把旧的“开发期也不使用开发服务器”描述收敛为只约束正式 Release。 | archived | vite-development-apps-layout | [[日志/2026-09-17-启用Vite开发服务器并审计Apps目录.md|启用 Vite 开发服务器并审计 Apps 目录]] |
 | 2026-09-17 | maintenance | 按用户明确授权，从正式工程删除“硬件优化”工作台及人工设备、精度和 CPU 线程配置，并检查删除过程中遗留的冗余代码；保留转录所需的自动硬件探测、任务级实际硬件记录和性能监控。 | archived | retire-hardware-optimization-workbench | [[日志/2026-09-17-删除硬件优化工作台.md|删除硬件优化工作台]] |
 | 2026-09-17 | bug | - | archived | fix-desktop-ipc-startup-failure | [[日志/2026-09-17-修复桌面IPC启动失败.md|修复桌面 IPC 启动失败]] |
 | 2026-09-17 | maintenance | 参考 ObManage 的“同名成品目录 + 同名 ZIP”交付方式，降低 WhisperSubtitle 完整版入口层级，同时审计仓库顶层目录、发布中间态和最终运行时目录，保持现有产品架构与功能契约不变。 | archived | repository-release-layout | [[日志/2026-09-17-优化仓库与发布目录结构.md|优化仓库与发布目录结构]] |

@@ -8,6 +8,7 @@ topic: desktop-entry-and-ipc
 source_logs:
   - "[[日志/2026-08-23-项目记忆重建]]"
   - "[[日志/2026-09-17-优化仓库与发布目录结构]]"
+  - "[[日志/2026-09-17-启用Vite开发服务器并审计Apps目录]]"
 supersedes: null
 ---
 
@@ -19,12 +20,12 @@ supersedes: null
 - 成品根目录只保留用户入口与说明，Worker、模型和发布元数据统一位于 `_internal/`；Host 保留旧根级布局的兼容回退。
 - Tauri Host 是 WebView 与 Worker 的唯一运行时边界。
 - Worker 通过 stdin/stdout 使用 Desktop IPC v1；Rust 先校验，再向 UI 转发。
-- UI 不直接启动进程、不执行任意 shell、不访问 localhost；Rust 只开放精确 command 和受限输出预览。
+- UI 不直接启动进程、不执行任意 shell；Rust 只开放精确 command 和受限输出预览。开发期由 Tauri CLI 管理固定 `127.0.0.1:1420` Vite/HMR，正式桌面不访问或监听 localhost。
 - Python CLI 继续保留，正式桌面不再使用 PyQt5 或 VBS 启动层。
 
 ## 不得混淆
 
-浏览器测试中的 mock bridge、Playwright 静态服务器和演示状态不等于正式桌面运行时。
+浏览器测试中的 mock bridge、开发期 Vite/HMR、Playwright 静态服务器和演示状态不等于正式桌面运行时。
 
 ## 来源
 

@@ -3,6 +3,8 @@
 | 位置 | 职责 | 保留策略 |
 | --- | --- | --- |
 | `src/` | 可安装生产代码与包资源 | 文件名小写 snake_case；禁止生成输出 |
+| `apps/web/` | React/TypeScript 界面、状态、bridge 与浏览器测试 | 源码保留；`dist/`、测试结果和依赖目录均为可再生内容 |
+| `apps/desktop/` | Tauri/Rust 桌面 Host、权限与 Windows 集成 | 保持标准 `src-tauri/` 布局；`target/`、`gen/` 和依赖目录均为可再生内容 |
 | `tests/fixtures/` | 小型固定输入 | 可版本化；替换时更新来源和元数据 |
 | `tests/golden/` | 语义输出与参数快照 | 行为变更必须显式评审，不能静默重写 |
 | `tests/benchmark/baseline.json` | 重构前性能/输出参考 | 保留为历史比较基准 |

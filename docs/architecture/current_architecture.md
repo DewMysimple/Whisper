@@ -87,7 +87,7 @@ apps/
 - protocol 不依赖桌面框架、faster-whisper 或具体传输，只表达版本化机器契约。
 - worker 组合 protocol、application、domain 和 infrastructure，stdout 只输出协议，普通日志写 stderr。
 - apps/web 组件只依赖 typed `DesktopBridge`；Tauri adapter 集中封装白名单 command/event 与原生通知，bridge 之外禁止直接导入 `@tauri-apps/*`，组件不直接导入 Python 或任意 shell。
-- apps/desktop 只加载本地静态 WebView 资源，CSP 的 `connect-src 'none'` 保持不变；Rust 只开放精确桌面 command，不开放通用 shell 或网络权限。
+- apps/desktop 的正式构建只加载本地静态 WebView 资源，CSP 的 `connect-src 'none'` 保持不变；开发态可从固定 loopback Vite 服务加载同一套 React UI。Rust 只开放精确桌面 command，不开放通用 shell 或生产网络权限。
 - apps/desktop 负责 Worker 进程和 Desktop IPC v1 校验，不实现 preset、转录、后处理或输出内容规则。
 - 默认输出把 TXT、Markdown、SRT 文件直接写入各媒体旁的 `Text`、`Markdown`、`SRT` 文件夹；自定义根目录使用同名一级文件夹，并可分别选择是否额外保留媒体旁 TXT/Markdown 副本，不再把两种副本绑定为同一个开关。
 - preset 只描述业务参数和后处理策略，不绑定 Python 脚本文件。
@@ -134,7 +134,7 @@ Web 工作台的事件归并位于 `apps/web/src/state/workspaceEvents.ts`，任
 - `contracts/desktop_ipc/v1/desktop_ipc.schema.json` 是桌面 IPC v1 的跨语言事实来源；Python 枚举、Worker 消息与 schema 由契约测试保持一致。
 - 当前 CLI `type: progress` JSONL 是保留的机器输出通道，不属于 desktop IPC v1；PyQt5 消费者已在批次 7 退役。
 - `python -m whisper_subtitle worker` 是无 GUI 常驻入口；它不打开端口、浏览器或 localhost 服务。
-- Tauri/React 桌面应用直接加载 `apps/web/dist`，不设置 `devUrl`，不监听 localhost；Host 通过受控 stdin/stdout 监管 Worker。
+- Tauri 开发模式通过 `devUrl=http://127.0.0.1:1420` 自动启动 Vite/HMR；正式构建仍从 `apps/web/dist` 嵌入静态资源，不启动 localhost。两种模式下 Host 都通过受控 stdin/stdout 监管 Worker。
 - `system.metrics` 是 Desktop IPC v1 的只读诊断 command；它使用 psutil/NVML 采样，不改变模型状态，失败不影响转录。
 - WebView 使用带版本号的 localStorage 保存设置和最多 100 条任务；这是本机桌面状态，不是浏览器 WebUI 后端或服务端数据库。
 - Rust `read_output_preview` 只允许规范化后的 `.txt`/`.md`/`.srt` 文件并限制为前 128 KiB，不暴露通用文件读取。

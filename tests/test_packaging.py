@@ -28,6 +28,37 @@ def test_release_versions_are_synchronized():
     } == {"0.1.0"}
 
 
+def test_tauri_development_uses_loopback_vite_and_release_keeps_static_assets():
+    root_package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+    web_package = json.loads(
+        (ROOT / "apps/web/package.json").read_text(encoding="utf-8")
+    )
+    tauri = json.loads(
+        (ROOT / "apps/desktop/src-tauri/tauri.conf.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    vite = (ROOT / "apps/web/vite.config.ts").read_text(encoding="utf-8")
+
+    assert web_package["scripts"]["dev"] == "vite"
+    assert root_package["scripts"]["web:dev"].endswith(
+        "--filter @whisper-subtitle/web dev"
+    )
+    assert root_package["scripts"]["desktop:dev"].endswith(
+        "--filter @whisper-subtitle/desktop tauri dev"
+    )
+    assert root_package["scripts"]["dev"] == "corepack pnpm desktop:dev"
+    assert "pnpm build" not in root_package["scripts"]["desktop:dev"]
+    assert tauri["build"] == {
+        "beforeDevCommand": "corepack pnpm --filter @whisper-subtitle/web dev",
+        "devUrl": "http://127.0.0.1:1420",
+        "frontendDist": "../../web/dist",
+    }
+    assert "host: '127.0.0.1'" in vite
+    assert "port: 1420" in vite
+    assert "strictPort: true" in vite
+
+
 def test_release_config_uses_external_offline_prerequisites_with_bounded_resources():
     config = json.loads(
         (ROOT / "apps/desktop/src-tauri/tauri.release.conf.json").read_text(

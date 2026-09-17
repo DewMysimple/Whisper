@@ -2,6 +2,8 @@
 
 This is the current Tauri 2 / Rust host. It loads prebuilt React assets directly in WebView2 and supervises the persistent Python Worker.
 
+For development, `corepack pnpm desktop:dev` starts the sibling Web package's loopback Vite server automatically and loads `http://127.0.0.1:1420` with HMR. Release builds ignore the development URL and continue embedding `apps/web/dist`; the shipped application starts no localhost server.
+
 Current boundary:
 
 - controlled Python Worker child process in development and packaged sibling Worker lookup in release builds;

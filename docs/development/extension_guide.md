@@ -42,10 +42,17 @@ CLI choices、桌面 preset 卡片、设置恢复和进程参数都从同一注�
 3. 只消费 `ProgressEvent` 和 `BatchResult`，不要解析 Core 脚本 stdout 或复制转录逻辑。
 4. React 状态和组件留在 `apps/web`；进程、窗口和原生权限留在 Tauri/Rust Host。Python `presentation/` 仅服务 CLI/JSONL 展示。
 
+## UI 开发循环
+
+- `corepack pnpm web:dev` 在 `http://127.0.0.1:1420` 启动 Vite/HMR，适合使用 mock bridge 快速调整纯界面。
+- `corepack pnpm desktop:dev` 由 Tauri 自动启动同一个 Vite 服务，适合验证真实文件选择、Worker、通知和其他原生桥接。
+- localhost 只属于开发模式；`corepack pnpm build`、桌面 Release 和最终 `dist/WhisperSubtitle/` 始终使用静态 `apps/web/dist/`，不会启动 Vite。
+- `apps/web` 与 `apps/desktop` 是有意保留的职责边界；不要为了缩短路径把 React、Rust 或生成目录混在一起。
+
 ## 验证清单
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+.\whisper_env\Scripts\python.exe -m pytest -q
 corepack pnpm check
 python tools/codegen/generate_model_catalog.py --check
 python tools/codegen/generate_preset_catalog.py --check

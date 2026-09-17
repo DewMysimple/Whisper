@@ -1,12 +1,13 @@
 # React WebView presentation
 
-This application is a desktop presentation surface, not a browser WebUI. Its production assets are compiled by Vite and loaded from `apps/web/dist` by the Tauri WebView.
+This application is a desktop presentation surface, not a production browser WebUI. During development Vite serves it on loopback with HMR; production assets are compiled into `apps/web/dist` and loaded directly by the Tauri WebView.
 
 Runtime rules:
 
 - `src/bridge/index.ts` selects `TauriDesktopBridge` only inside Tauri and retains `MockDesktopBridge` for browser tests/previews.
-- No HTTP/WebSocket client or localhost service is required.
-- Vite development assets use build-watch mode rather than a development server.
+- No HTTP/WebSocket client or localhost service is required by the production application.
+- `corepack pnpm web:dev` starts the loopback-only Vite server at `http://127.0.0.1:1420`; browser access uses the mock bridge.
+- `corepack pnpm desktop:dev` lets Tauri start that same server automatically and loads the real local bridge.
 - Real files, folders, drag/drop, pasted paths, outputs and tasks cross only the typed Tauri command/event boundary.
 - UI task state uses machine codes and identifiers, never localized Worker messages.
 - Preset parameters and model identities consumed by the presentation layer come from generated projections of the Python domain catalogs; TypeScript is not a second source of truth.
@@ -22,4 +23,6 @@ From the repository root:
 ```powershell
 corepack pnpm check
 corepack pnpm build
+corepack pnpm web:dev
+corepack pnpm desktop:dev
 ```

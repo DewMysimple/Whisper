@@ -142,6 +142,13 @@ That Cargo path is not the final application package. A complete user-facing bui
 Useful commands from the repository root:
 
 ```powershell
+# Browser/mock UI with Vite HMR on http://127.0.0.1:1420
+corepack pnpm web:dev
+
+# Real Tauri desktop + Worker with the same Vite HMR server
+corepack pnpm desktop:dev
+# Equivalent root shortcut: npm run dev
+
 # Frontend build
 corepack pnpm build
 

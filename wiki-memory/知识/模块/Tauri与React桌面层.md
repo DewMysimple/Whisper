@@ -11,6 +11,7 @@ source_logs:
   - "[[日志/2026-08-24-架构瘦身收口]]"
   - "[[日志/2026-09-09-工程定期维护]]"
   - "[[日志/2026-09-17-删除硬件优化工作台]]"
+  - "[[日志/2026-09-17-启用Vite开发服务器并审计Apps目录]]"
 supersedes: null
 ---
 
@@ -25,4 +26,4 @@ supersedes: null
 - 原生窗口提醒与电源倒计时通知同样由 `DesktopBridge` 暴露；eslint 禁止 bridge 之外直接导入 `@tauri-apps/*`。
 - `contracts/modelCatalog.generated.ts` 由 Python 模型注册表生成，Web 不手工维护模型能力列表。
 
-组件不直接导入 Python、执行 shell 或解析中文展示字符串判断状态。正式运行加载本地静态 WebView，不启动 localhost 服务。
+组件不直接导入 Python、执行 shell 或解析中文展示字符串判断状态。开发期由 Tauri 自动启动仅监听 `127.0.0.1:1420` 的 Vite/HMR；正式运行加载本地静态 WebView，不启动 localhost 服务。

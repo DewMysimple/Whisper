@@ -32,7 +32,7 @@ flowchart LR
 - React/TypeScript 仅渲染于 Tauri 内嵌 WebView2。
 - 不打开外部浏览器，不要求用户访问 URL。
 - 不使用 Gradio、Streamlit、NiceGUI。
-- 不默认启动 FastAPI、localhost HTTP 或 WebSocket 服务。
+- 正式产品不启动 FastAPI、localhost HTTP 或 WebSocket 服务；开发期允许 Tauri 通过固定 loopback Vite/HMR 服务加载 React 源码。
 
 ### 职责边界
 
@@ -67,7 +67,7 @@ Tauri 官方将外部可执行文件称为 sidecar，并明确支持把 Python C
 - 复用稳定 Python 核心，不扩大算法回归面。
 - 获得 React/TypeScript 的组件、样式、动画和测试生态。
 - 常驻 Worker 可以复用模型并形成清晰的崩溃、取消和关闭边界。
-- Tauri 权限和 sidecar 管理比开放本地服务端口更符合单机离线产品。
+- Tauri 权限和 sidecar 管理比在正式产品中开放本地服务端口更符合单机离线产品；开发用 Vite 端口不进入 Release。
 
 代价与风险：
 

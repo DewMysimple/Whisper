@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "identifier": "local.whispersubtitle.desktop",
   "build": {
+    "beforeDevCommand": "corepack pnpm --filter @whisper-subtitle/web dev",
+    "devUrl": "http://127.0.0.1:1420",
     "frontendDist": "../../web/dist"
   },
   "app": {
