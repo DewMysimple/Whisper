@@ -180,6 +180,7 @@ def test_schema_is_self_contained_and_has_no_unresolved_local_refs():
 
     assert "HardwarePreference" not in schema["$defs"]
     assert "hardware" not in schema["$defs"]["TranscriptionStartParams"]["properties"]
+    assert "hardware" not in schema["$defs"]["ModelLoadParams"]["properties"]
     assert (
         schema["$defs"]["TaskQueuedData"]["properties"]["hardware"]["$ref"]
         == "#/$defs/ResolvedHardware"
@@ -292,6 +293,23 @@ def test_transcription_model_id_is_optional_and_restricted_to_local_catalog():
     params["model_id"] = "unknown-model"
     with pytest.raises(ProtocolValidationError):
         CommandMessage("req-invalid-model", CommandMethod.TRANSCRIPTION_START, params)
+
+
+def test_v1_model_commands_remain_compatible_without_hardware_preferences():
+    model_load = CommandMessage(
+        "req-model-load",
+        CommandMethod.MODEL_LOAD,
+        {"model_id": "large-v3-turbo"},
+    )
+    assert model_load.params["model_id"] == "large-v3-turbo"
+    assert CommandMessage("req-model-unload", CommandMethod.MODEL_UNLOAD, {}).params == {}
+
+    with pytest.raises(ProtocolValidationError):
+        CommandMessage(
+            "req-model-hardware",
+            CommandMethod.MODEL_LOAD,
+            {"model_id": "large-v3-turbo", "hardware": {"mode": "auto"}},
+        )
 
 
 def test_task_queued_may_echo_the_frozen_model_id():

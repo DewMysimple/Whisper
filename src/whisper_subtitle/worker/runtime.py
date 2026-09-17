@@ -237,6 +237,21 @@ class WorkerRuntime:
                     "worker is shutting down",
                 )
 
+        if command.method is CommandMethod.MODEL_LOAD:
+            model_id = str(command.params.get("model_id") or DEFAULT_MODEL_NAME)
+            loaded_new = self._model_cache.load(
+                model_id,
+                request_id=command.request_id,
+            )
+            self._complete_command(
+                command,
+                {"model_id": model_id, "reused": not loaded_new},
+            )
+            return False
+        if command.method is CommandMethod.MODEL_UNLOAD:
+            unloaded = self._model_cache.unload()
+            self._complete_command(command, {"unloaded": unloaded})
+            return False
         if command.method is CommandMethod.TRANSCRIPTION_START:
             self._start_task(command)
             return False

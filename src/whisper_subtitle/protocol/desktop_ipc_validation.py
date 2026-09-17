@@ -417,6 +417,7 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
         CommandMethod.SYSTEM_HEALTH,
         CommandMethod.SYSTEM_ENVIRONMENT,
         CommandMethod.SYSTEM_METRICS,
+        CommandMethod.MODEL_UNLOAD,
         CommandMethod.WORKER_SHUTDOWN,
     }:
         _require_fields(
@@ -425,6 +426,16 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
             field_name="params",
             code=ErrorCode.REQUEST_INVALID,
         )
+    elif method is CommandMethod.MODEL_LOAD:
+        _require_fields(
+            params,
+            required=set(),
+            optional={"model_id"},
+            field_name="params",
+            code=ErrorCode.REQUEST_INVALID,
+        )
+        if "model_id" in params:
+            _require_nonempty_string(params["model_id"], "params.model_id")
     elif method is CommandMethod.MEDIA_INSPECT:
         _require_fields(
             params,

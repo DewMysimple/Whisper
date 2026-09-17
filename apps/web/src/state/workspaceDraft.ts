@@ -17,7 +17,21 @@ import {
 } from './parameterProfiles';
 
 export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error !== null) {
+    const candidate = error as Record<string, unknown>;
+    if (typeof candidate.message === 'string' && candidate.message.trim() !== '') {
+      return candidate.message;
+    }
+    if (typeof candidate.error === 'string' && candidate.error.trim() !== '') {
+      return candidate.error;
+    }
+    if (typeof candidate.code === 'string' && candidate.code.trim() !== '') {
+      return candidate.code;
+    }
+    return '桌面操作失败。';
+  }
+  return String(error);
 }
 
 export function outputConflictDetails(

@@ -110,7 +110,7 @@ CLI 或 Desktop IPC 输入
   → ProgressEvent / BatchResult
 ```
 
-CLI 和 Worker 共用同一 `TranscriptionService`；四个 preset 只改变注册表参数和后处理策略。`domain/presets.py` 是参数事实源，Web preset 选择和任务快照消费由 `scripts/generate_preset_catalog.py` 生成的 TypeScript 投影。`domain/models.py` 是模型身份与能力事实源，`scripts/generate_model_catalog.py` 将其投影到 Web TypeScript 和 Rust Host，并校验 IPC schema 中的模型枚举。当前桌面不提供独立模型切换、推理参数或硬件优化工作台；Worker 在任务开始时自动解析设备，任务快照只记录实际使用的模型和硬件。
+CLI 和 Worker 共用同一 `TranscriptionService`；四个 preset 只改变注册表参数和后处理策略。`domain/presets.py` 是参数事实源，Web preset 选择和任务快照消费由 `scripts/generate_preset_catalog.py` 生成的 TypeScript 投影。`domain/models.py` 是模型身份与能力事实源，`scripts/generate_model_catalog.py` 将其投影到 Web TypeScript 和 Rust Host，并校验 IPC schema 中的模型枚举。当前桌面不提供独立模型切换、推理参数或硬件优化工作台；Worker 在任务开始时自动解析设备，任务快照只记录实际使用的模型和硬件。`model.load`、`model.unload` 仅作为 Desktop IPC v1 冻结 Worker 兼容命令保留，当前 UI/bridge 不调用，且不再接受硬件偏好。
 
 Worker 流程为：
 

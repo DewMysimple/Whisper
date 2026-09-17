@@ -457,7 +457,41 @@ def test_media_inspect_uses_metadata_cache_and_returns_unknown_duration(tmp_path
     assert completed[0].data["result"]["items"][0]["duration_seconds"] is None
 
 
-def test_active_task_can_be_cancelled(tmp_path):
+def test_v1_model_commands_load_and_unload_with_automatic_hardware():
+    events = []
+    load_calls = []
+    runtime = make_runtime(events, FakeEngine(), load_calls, [])
+    try:
+        runtime.handle_command(
+            CommandMessage(
+                "req-model-load",
+                CommandMethod.MODEL_LOAD,
+                {"model_id": "large-v3-turbo"},
+            )
+        )
+        assert runtime.model_cache.loaded
+        runtime.handle_command(
+            CommandMessage("req-model-unload", CommandMethod.MODEL_UNLOAD, {})
+        )
+        assert not runtime.model_cache.loaded
+    finally:
+        assert runtime.close(timeout=3)
+
+    assert load_calls == ["large-v3-turbo"]
+    completed = [
+        event
+        for event in events
+        if isinstance(event, EventMessage) and event.event is EventCode.COMMAND_COMPLETED
+    ]
+    assert [event.data["method"] for event in completed] == ["model.load", "model.unload"]
+    assert completed[0].data["result"] == {
+        "model_id": "large-v3-turbo",
+        "reused": False,
+    }
+    assert completed[1].data["result"] == {"unloaded": True}
+
+
+def test_active_task_can_be_cancelled_and_v1_model_unload_remains_busy(tmp_path):
     media = make_media(tmp_path, "blocked.wav")
     started = threading.Event()
     release = threading.Event()
@@ -471,6 +505,12 @@ def test_active_task_can_be_cancelled(tmp_path):
     try:
         runtime.handle_command(start_command("req-start", media))
         assert started.wait(3)
+
+        with pytest.raises(WorkerCommandError) as captured:
+            runtime.handle_command(
+                CommandMessage("req-unload", CommandMethod.MODEL_UNLOAD, {})
+            )
+        assert captured.value.code is ErrorCode.WORKER_BUSY
 
         runtime.handle_command(
             CommandMessage(

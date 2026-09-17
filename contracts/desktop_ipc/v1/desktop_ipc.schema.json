@@ -23,6 +23,8 @@
         "system.environment",
         "system.metrics",
         "media.inspect",
+        "model.load",
+        "model.unload",
         "transcription.start",
         "transcription.cancel",
         "worker.shutdown"
@@ -317,6 +319,13 @@
         }
       }
     },
+    "ModelLoadParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model_id": { "type": "string", "minLength": 1 }
+      }
+    },
     "TranscriptionCancelParams": {
       "type": "object",
       "additionalProperties": false,
@@ -345,12 +354,17 @@
                   "system.health",
                   "system.environment",
                   "system.metrics",
+                  "model.unload",
                   "worker.shutdown"
                 ]
               }
             }
           },
           "then": { "properties": { "params": { "$ref": "#/$defs/EmptyObject" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "model.load" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/ModelLoadParams" } } }
         },
         {
           "if": { "properties": { "method": { "const": "media.inspect" } } },

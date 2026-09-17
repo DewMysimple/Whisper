@@ -11,6 +11,7 @@ source_logs:
   - "[[日志/2026-08-24-架构瘦身收口]]"
   - "[[日志/2026-09-09-工程定期维护]]"
   - "[[日志/2026-09-17-删除硬件优化工作台]]"
+  - "[[日志/2026-09-17-修复桌面IPC启动失败]]"
 supersedes: null
 ---
 
@@ -21,4 +22,4 @@ supersedes: null
 - `protocol/desktop_ipc.py` 保留 v1 command/event/error 对象与生命周期；`desktop_ipc_validation.py` 负责公共字段和事件结构，`desktop_ipc_quality.py` 负责质量诊断结构；它们与 `contracts/desktop_ipc/v1/desktop_ipc.schema.json` 一起构成协议校验面。
 - Rust `worker_host.rs` 启动和监管 Worker、发送命令；`worker_host/model_catalog.rs` 是生成的模型能力投影，`models.rs`、`media.rs`、`logs.rs` 和 `validation.rs` 分别负责模型、媒体、日志诊断和启动 draft 校验；`protocol_quality.rs` 负责 Rust 侧质量诊断校验；React 通过 typed `DesktopBridge` 消费结果。
 
-任务输入会冻结模型、Preset、输出计划和参数；Worker 在任务启动时自动解析硬件，再把实际硬件冻结并回传到任务快照。模型可连续复用，空闲后释放；当前协议不接受人工硬件偏好，也不提供显式模型加载/卸载命令。改变字段、错误码、事件顺序或生命周期必须同步更新跨语言测试。
+任务输入会冻结模型、Preset、输出计划和参数；Worker 在任务启动时自动解析硬件，再把实际硬件冻结并回传到任务快照。模型可连续复用，空闲后释放；当前协议不接受人工硬件偏好。`model.load`、`model.unload` 是冻结 Worker 仍会在握手中声明的 v1 兼容命令，不由当前 UI 调用，也不能附带硬件偏好。改变字段、错误码、事件顺序或生命周期必须同步更新跨语言测试和现有冻结 Worker 握手用例。

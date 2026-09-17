@@ -226,6 +226,17 @@ class ModelCache:
                 self._active_users -= 1
                 self._schedule_idle_release_locked()
 
+    def unload(self, *, reason: str = "explicit request") -> bool:
+        """Keep the Desktop IPC v1 unload command as a compatibility surface."""
+        with self._lock:
+            if self._active_users:
+                raise WorkerCommandError(
+                    ErrorCode.WORKER_BUSY,
+                    "cannot unload the model while a task is running",
+                )
+            self._cancel_timer_locked()
+            return self._release_locked(reason)
+
     def close(self) -> None:
         with self._lock:
             self._cancel_timer_locked()

@@ -12,6 +12,8 @@ pub const COMMAND_METHODS: &[&str] = &[
     "system.environment",
     "system.metrics",
     "media.inspect",
+    "model.load",
+    "model.unload",
     "transcription.start",
     "transcription.cancel",
     "worker.shutdown",
@@ -561,6 +563,45 @@ mod tests {
     use serde_json::json;
 
     use super::{ProtocolError, valid_identifier, validate_worker_message};
+
+    #[test]
+    fn accepts_v1_worker_capabilities_from_existing_frozen_sidecars() {
+        let value = json!({
+            "schema_version": 1,
+            "type": "event",
+            "event": "worker.ready",
+            "data": {
+                "pid": 5936,
+                "capabilities": {
+                    "methods": [
+                        "system.health",
+                        "system.environment",
+                        "system.metrics",
+                        "media.inspect",
+                        "model.load",
+                        "model.unload",
+                        "transcription.start",
+                        "transcription.cancel",
+                        "worker.shutdown"
+                    ],
+                    "events": [
+                        "worker.ready",
+                        "command.completed",
+                        "model.loading",
+                        "model.ready",
+                        "task.queued",
+                        "task.progress",
+                        "task.completed",
+                        "task.failed",
+                        "task.cancelled"
+                    ]
+                }
+            },
+            "message": "Worker ready"
+        });
+
+        validate_worker_message(&value).expect("existing Desktop IPC v1 Worker must remain valid");
+    }
 
     #[test]
     fn accepts_a_valid_task_progress_event() {

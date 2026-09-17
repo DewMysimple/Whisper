@@ -28,6 +28,8 @@ class CommandMethod(str, Enum):
     SYSTEM_ENVIRONMENT = "system.environment"
     SYSTEM_METRICS = "system.metrics"
     MEDIA_INSPECT = "media.inspect"
+    MODEL_LOAD = "model.load"
+    MODEL_UNLOAD = "model.unload"
     TRANSCRIPTION_START = "transcription.start"
     TRANSCRIPTION_CANCEL = "transcription.cancel"
     WORKER_SHUTDOWN = "worker.shutdown"

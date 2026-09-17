@@ -61,6 +61,8 @@ Schema source of truth: [`desktop_ipc.schema.json`](desktop_ipc.schema.json).
 - `system.environment`
 - `system.metrics`
 - `media.inspect`
+- `model.load` (v1 compatibility; no hardware preference)
+- `model.unload` (v1 compatibility)
 - `transcription.start`
 - `transcription.cancel`
 - `worker.shutdown`
@@ -154,8 +156,10 @@ task.queued
 ```
 
 Model events report automatic loading performed for transcription tasks and are
-not inserted into the task lifecycle sequence. Explicit model load/unload
-commands are not part of the current contract.
+not inserted into the task lifecycle sequence. `model.load` and `model.unload`
+remain as v1 compatibility commands for older frozen Workers and hosts, but the
+desktop UI does not call them. `model.load` accepts only an optional `model_id`;
+retired hardware preferences are rejected.
 
 `command.completed` is the request-correlated success acknowledgement for commands
 that do not naturally create a task terminal event. Its `data` contains the original

@@ -3,7 +3,17 @@ import { describe, expect, it } from 'vitest';
 import type { TranscriptionDraft } from '../contracts/desktop';
 import { getPreset } from '../data/presets';
 import { getSubtitlePreset } from '../data/subtitlePresets';
-import { normalizeDraft } from './workspaceDraft';
+import { errorMessage, normalizeDraft } from './workspaceDraft';
+
+describe('errorMessage', () => {
+  it('extracts structured Tauri command errors instead of rendering object noise', () => {
+    expect(errorMessage({ code: 'host.worker_start_failed', message: 'Worker 握手失败' })).toBe(
+      'Worker 握手失败',
+    );
+    expect(errorMessage({ code: 'host.worker_start_failed' })).toBe('host.worker_start_failed');
+    expect(errorMessage({})).toBe('桌面操作失败。');
+  });
+});
 
 describe('normalizeDraft', () => {
   it('drops retired hardware preferences from legacy task snapshots', () => {
