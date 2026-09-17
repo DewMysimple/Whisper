@@ -1,13 +1,21 @@
-import { ChevronRight, Layers3, Play, Trash2, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Files,
+  FolderOutput,
+  Keyboard,
+  Play,
+  Settings2,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { getPreset, transcriptionTaskLabel } from '../data/presets';
 import { getModelLabel } from '../data/models';
-import {
-  formatDurationSummary,
-  formatMediaDuration,
-  summarizeInputDurations,
-} from '../state/mediaDuration';
+import { formatMediaDuration, summarizeInputDurations } from '../state/mediaDuration';
 import { useWorkspace } from '../state/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -17,6 +25,31 @@ function sourceBadge(path: string, kind: 'file' | 'directory'): string {
   const extension = name.includes('.') ? name.split('.').at(-1) : 'MEDIA';
   return (extension ?? 'MEDIA').slice(0, 5).toUpperCase();
 }
+
+function durationChecklistLabel(knownSeconds: number, unknownCount: number): string {
+  const roundedSeconds = Math.max(0, Math.round(knownSeconds));
+  const exactSeconds = `${roundedSeconds.toLocaleString('zh-CN')} 秒`;
+  if (unknownCount > 0) {
+    return roundedSeconds > 0
+      ? `${formatMediaDuration(roundedSeconds)} · 已知 ${exactSeconds}，另有 ${unknownCount} 个未知`
+      : `${unknownCount} 个媒体时长未知`;
+  }
+  return `${formatMediaDuration(roundedSeconds)} · ${exactSeconds}`;
+}
+
+const CONFLICT_POLICY_LABEL = {
+  confirm_overwrite: '同名时执行前确认覆盖',
+  confirm_skip: '同名时执行前确认跳过',
+  auto_rename: '同名时自动安全重命名',
+} as const;
+
+const HOST_STATUS_LABEL = {
+  starting: '本地 Worker 启动中',
+  ready: '本地 Worker 已就绪',
+  stopping: '本地 Worker 正在停止',
+  stopped: '本地 Worker 已停止',
+  failed: '本地 Worker 连接失败',
+} as const;
 
 export function LaunchCard() {
   const inputs = useWorkspace((state) => state.inputs);
@@ -34,6 +67,7 @@ export function LaunchCard() {
   const selectedModelId = useWorkspace((state) => state.selectedModelId);
   const pendingOverwrite = useWorkspace((state) => state.pendingOverwrite);
   const pendingShutdownStart = useWorkspace((state) => state.pendingShutdownStart);
+  const finishAction = useWorkspace((state) => state.finishAction);
   const [presetConfirmationOpen, setPresetConfirmationOpen] = useState(false);
   const hasInvalidInput = inputs.some((input) => !input.valid);
   const needsOutputRoot = output.mode === 'custom' && output.rootDirectory === null;
@@ -56,6 +90,33 @@ export function LaunchCard() {
   const preset = getPreset(selectedPresetId);
   const mediaCount = inputs.reduce((total, input) => total + (input.mediaCount ?? 1), 0);
   const durationSummary = summarizeInputDurations(inputs);
+  const durationChecklist = durationChecklistLabel(
+    durationSummary.knownSeconds,
+    durationSummary.unknownCount,
+  );
+  const usesCustomOutput = output.mode === 'custom';
+  const outputLocationLabel = usesCustomOutput
+    ? (output.rootDirectory ?? '尚未选择自选目录')
+    : '跟随每个媒体文件';
+  const checklistPending = pendingOverwrite !== null || pendingShutdownStart !== null;
+  const checklistStatus = startingTask
+    ? '正在准备'
+    : checklistPending
+      ? '等待确认'
+      : canStart
+        ? '可以执行'
+        : '待补充';
+  const readinessMessage = needsOutputRoot
+    ? '还需选择真实输出目录，完成后即可执行。'
+    : hasInvalidInput
+      ? '输入中存在无效路径，请先在清单中处理。'
+      : !hasOutputTarget
+        ? '还需启用至少一种输出格式，完成后即可执行。'
+        : inputs.length === 0
+          ? null
+          : hostStatus.state !== 'ready'
+            ? `${HOST_STATUS_LABEL[hostStatus.state]}，暂时无法执行任务。`
+            : '任务清单已更新，确认无误后开始本地处理。';
 
   const requestStart = useCallback(() => {
     if (!canStart) return;
@@ -98,102 +159,151 @@ export function LaunchCard() {
 
   return (
     <section className="launch-card" aria-labelledby="launch-title">
-      <div className="launch-action">
-        <div className="launch-action-heading">
-          <p className="step-label">READY TO TRANSCRIBE</p>
-          <kbd>CTRL + ENTER</kbd>
+      <div className="launch-unified">
+        <div className="panel-heading launch-heading">
+          <div>
+            <p className="step-label">PRE-FLIGHT CHECKLIST</p>
+            <h2 id="launch-title">{inputs.length > 0 ? '任务清单已就绪' : '等待输入来源'}</h2>
+          </div>
+          <span className={`preflight-status ${canStart ? 'is-ready' : ''}`}>
+            {canStart ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+            {checklistStatus}
+          </span>
         </div>
-        <h2>{inputs.length > 0 ? `${mediaCount} 个媒体已就绪` : '等待输入来源'}</h2>
-        <p className="launch-summary">
-          {needsOutputRoot ? (
-            '请选择真实输出目录'
-          ) : hasInvalidInput ? (
-            '请先处理无效输入'
-          ) : !hasOutputTarget ? (
-            '请至少启用一种输出格式'
-          ) : (
-            <>
-              <span>
-                版本：{preset.label}
-                {Object.keys(overrides).length > 0 ? '（自定义参数）' : ''} · 输出：
-                {outputSummary} · {transcriptionTaskLabel(parameters.task)} ·{' '}
-                {formatDurationSummary(durationSummary)}
-              </span>
-              <span>模型：{getModelLabel(selectedModelId)} · 本地离线处理</span>
-            </>
-          )}
-        </p>
+        <div aria-label="执行前清单" className="preflight-list">
+          <div className="preflight-item">
+            <span className="preflight-icon" aria-hidden="true">
+              <Settings2 size={16} />
+            </span>
+            <div className="preflight-copy">
+              <span className="preflight-key">版本与模型</span>
+              <strong>
+                {preset.label}
+                {Object.keys(overrides).length > 0 ? ' · 自定义参数' : ''}
+              </strong>
+              <small>{getModelLabel(selectedModelId)} · 本地离线处理</small>
+            </div>
+          </div>
+
+          <div
+            className={`preflight-item ${inputs.length === 0 || hasInvalidInput ? 'needs-attention' : ''}`}
+          >
+            <span className="preflight-icon" aria-hidden="true">
+              <Files size={16} />
+            </span>
+            <div className="preflight-copy">
+              <span className="preflight-key">媒体信息</span>
+              <strong>{mediaCount} 个媒体</strong>
+              <small>
+                {inputs.length} 项输入来源 · {durationChecklist}
+              </small>
+            </div>
+          </div>
+
+          <div
+            className={`preflight-item ${needsOutputRoot || !hasOutputTarget ? 'needs-attention' : ''}`}
+          >
+            <span className="preflight-icon" aria-hidden="true">
+              <FolderOutput size={16} />
+            </span>
+            <div className="preflight-copy">
+              <span className="preflight-key">输出策略</span>
+              <strong>{outputSummary || '尚未选择输出格式'}</strong>
+              <small className={usesCustomOutput ? 'preflight-path' : undefined}>
+                {outputLocationLabel} · {CONFLICT_POLICY_LABEL[output.conflictPolicy]}
+              </small>
+            </div>
+          </div>
+
+          <div
+            className={`preflight-item ${hostStatus.state !== 'ready' ? 'needs-attention' : ''}`}
+          >
+            <span className="preflight-icon" aria-hidden="true">
+              {hostStatus.state === 'ready' ? (
+                <CheckCircle2 size={16} />
+              ) : (
+                <AlertTriangle size={16} />
+              )}
+            </span>
+            <div className="preflight-copy">
+              <span className="preflight-key">执行方式</span>
+              <strong>{transcriptionTaskLabel(parameters.task)}</strong>
+              <small>
+                {finishAction === 'shutdown' ? '完成后关机' : '完成后无操作'} ·{' '}
+                {HOST_STATUS_LABEL[hostStatus.state]}
+              </small>
+            </div>
+          </div>
+        </div>
+
+        {readinessMessage && <p className="launch-summary">{readinessMessage}</p>}
+
+        {inputs.length > 0 && (
+          <details className="preflight-sources">
+            <summary>
+              <span>查看并管理 {inputs.length} 项输入来源</span>
+              <ChevronDown aria-hidden="true" size={15} />
+            </summary>
+            <div aria-label="待转录输入来源" className="preflight-source-list">
+              <div className="preflight-source-tools">
+                <span>{mediaCount} 个媒体将按清单设置统一处理</span>
+                <button onClick={clearInputs} type="button">
+                  <Trash2 size={13} /> 清空输入
+                </button>
+              </div>
+              {inputs.map((source) => (
+                <div
+                  className={`preflight-source ${source.valid ? '' : 'is-invalid'}`}
+                  key={source.id}
+                >
+                  <span className="file-badge">{sourceBadge(source.path, source.kind)}</span>
+                  <span className="preflight-source-copy">
+                    <strong>{source.path.split(/[/\\]/).at(-1)}</strong>
+                    <small>
+                      {source.kind === 'directory' && source.mediaCount !== undefined
+                        ? `${source.mediaCount} 个媒体`
+                        : source.detail || '单个媒体'}
+                      {' · '}
+                      {source.unknownDurationCount && source.unknownDurationCount > 0
+                        ? source.durationSeconds !== undefined
+                          ? `已知 ${formatMediaDuration(source.durationSeconds)}，另有 ${source.unknownDurationCount} 个未知`
+                          : `${source.unknownDurationCount} 个时长未知`
+                        : formatMediaDuration(source.durationSeconds)}
+                    </small>
+                  </span>
+                  <button
+                    aria-label={`移除 ${source.path}`}
+                    className="icon-button"
+                    onClick={() => removeInput(source.id)}
+                    type="button"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+
         <button
-          className="primary-button"
+          className="primary-button launch-submit"
           disabled={!canStart}
           onClick={requestStart}
           type="button"
         >
-          <Play fill="currentColor" size={17} />
-          {startingTask
-            ? '正在准备本地模型…'
-            : profileMode === 'subtitle'
-              ? `开始生成 ${outputSummary}`
-              : '开始本地转录'}
-          <ChevronRight size={17} />
+          <span className="launch-submit-label">
+            <Play fill="currentColor" size={17} />
+            {startingTask
+              ? '正在准备本地模型…'
+              : profileMode === 'subtitle'
+                ? `开始生成 ${outputSummary}`
+                : '开始本地转录'}
+            <ChevronRight size={17} />
+          </span>
+          <kbd aria-hidden="true" className="launch-shortcut">
+            <Keyboard size={13} /> CTRL + ENTER
+          </kbd>
         </button>
-      </div>
-      <div className="launch-queue">
-        <div className="launch-queue-heading">
-          <div>
-            <p className="step-label">MEDIA QUEUE</p>
-            <h3 id="launch-title">媒体队列</h3>
-          </div>
-          <div className="launch-queue-tools">
-            <span>
-              {inputs.length} 项 · {mediaCount} 个媒体 · {formatDurationSummary(durationSummary)}
-            </span>
-            {inputs.length > 0 && (
-              <button className="launch-queue-clear" onClick={clearInputs} type="button">
-                <Trash2 size={14} /> 清空队列
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="launch-queue-list" aria-label="待转录媒体队列" tabIndex={0}>
-          {inputs.length === 0 ? (
-            <div className="launch-queue-empty">
-              <Layers3 size={19} />
-              <span>尚未加入媒体</span>
-            </div>
-          ) : (
-            inputs.map((source) => (
-              <div className={`source-row ${source.valid ? '' : 'is-invalid'}`} key={source.id}>
-                <div className="file-badge">{sourceBadge(source.path, source.kind)}</div>
-                <div className="source-copy">
-                  <strong>{source.path.split(/[/\\]/).at(-1)}</strong>
-                  <span>
-                    {source.path}
-                    {source.kind === 'directory' && source.mediaCount !== undefined
-                      ? ` · 共 ${source.mediaCount} 个媒体文件`
-                      : source.detail
-                        ? ` · ${source.detail}`
-                        : ''}
-                    {' · '}
-                    {source.unknownDurationCount && source.unknownDurationCount > 0
-                      ? source.durationSeconds !== undefined
-                        ? `已知 ${formatMediaDuration(source.durationSeconds)} + ${source.unknownDurationCount} 个未知`
-                        : `${source.unknownDurationCount} 个时长未知`
-                      : `时长 ${formatMediaDuration(source.durationSeconds)}`}
-                  </span>
-                </div>
-                <button
-                  aria-label={`移除 ${source.path}`}
-                  className="icon-button"
-                  onClick={() => removeInput(source.id)}
-                  type="button"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ))
-          )}
-        </div>
       </div>
       <ConfirmDialog
         confirmLabel="继续转录"

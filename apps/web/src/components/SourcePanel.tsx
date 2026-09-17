@@ -54,7 +54,7 @@ export function SourcePanel() {
         role="group"
       >
         <div className="source-intake-copy">
-          <strong>{dragActive ? '松开即可添加到媒体队列' : '添加本地媒体'}</strong>
+          <strong>{dragActive ? '松开即可加入任务清单' : '添加本地媒体'}</strong>
           <span>可选择文件、递归扫描文件夹，或直接拖放到此处</span>
         </div>
         <div className="source-actions" aria-label="添加输入来源">
@@ -95,7 +95,7 @@ export function SourcePanel() {
         </span>
         <span className="path-entry-idle-copy">
           <strong>{clipboardBusy ? '正在检查路径' : '点击读取文件或文件夹路径'}</strong>
-          <span>自动读取当前剪贴板，检查后直接加入媒体队列。</span>
+          <span>自动读取当前剪贴板，检查后直接加入任务清单。</span>
         </span>
       </button>
     </section>

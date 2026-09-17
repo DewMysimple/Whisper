@@ -26,6 +26,7 @@ const SAMPLE_FILES: InputSource[] = [
     kind: 'file',
     origin: 'dialog',
     valid: true,
+    durationSeconds: 323,
   },
   {
     id: 'source-interview',
@@ -33,6 +34,7 @@ const SAMPLE_FILES: InputSource[] = [
     kind: 'file',
     origin: 'dialog',
     valid: true,
+    durationSeconds: 967,
   },
 ];
 
@@ -43,6 +45,7 @@ const SAMPLE_DIRECTORY: InputSource = {
   origin: 'dialog',
   valid: true,
   mediaCount: 8,
+  durationSeconds: 3600,
   detail: '递归发现 8 个媒体文件',
 };
 
@@ -84,6 +87,7 @@ export class MockDesktopBridge implements DesktopBridge {
       origin,
       valid: true,
       mediaCount: 1,
+      durationSeconds: 240 + index * 95,
     }));
   }
 

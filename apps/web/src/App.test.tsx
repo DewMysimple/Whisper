@@ -14,7 +14,8 @@ describe('desktop workspace', () => {
     expect(
       screen.queryByRole('button', { name: '打开 Mysimple 个人主页' }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText('CTRL + ENTER')).toBeInTheDocument();
+    const startButton = screen.getByRole('button', { name: /开始本地转录/ });
+    expect(within(startButton).getByText('CTRL + ENTER')).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: '主导航' });
     expect(
       within(navigation)
@@ -48,15 +49,27 @@ describe('desktop workspace', () => {
     expect(screen.getByRole('button', { name: '无操作' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '关机' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '休眠' })).not.toBeInTheDocument();
-    expect(screen.getByText(/^版本：/)).toBeInTheDocument();
-    expect(screen.getByText(/^模型：/)).toBeInTheDocument();
+    const checklist = screen.getByLabelText('执行前清单');
+    expect(checklist).toHaveTextContent('版本与模型');
+    expect(checklist).toHaveTextContent('英文转录');
+    expect(checklist).toHaveTextContent('Large V3 Turbo');
+    expect(checklist).toHaveTextContent('媒体信息0 个媒体0 项输入来源 · 00:00 · 0 秒');
+    expect(checklist).toHaveTextContent('输出策略TXT跟随每个媒体文件');
+    expect(checklist).toHaveTextContent('执行方式原声转录完成后无操作 · 本地 Worker 已就绪');
+    expect(
+      screen.queryByText('添加媒体后，这里会汇总本次任务的完整配置。'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '媒体队列' })).not.toBeInTheDocument();
     expect(screen.queryByText(/中／英文版本只决定断句/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
     expect(await screen.findByText('P20-核心语法-整数类型.mp4')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '添加文件夹' }));
     expect(await screen.findByText('七月产品会议')).toBeInTheDocument();
-    expect(screen.getByLabelText('待转录媒体队列')).toHaveTextContent('共 8 个媒体文件');
+    expect(screen.getByLabelText('执行前清单')).toHaveTextContent(
+      '媒体信息10 个媒体3 项输入来源 · 01:21:30 · 4,890 秒',
+    );
+    expect(screen.getByLabelText('待转录输入来源')).toHaveTextContent('8 个媒体 · 01:00:00');
 
     await user.click(screen.getByRole('checkbox', { name: '生成 Markdown 格式' }));
     expect(screen.getByText('跟随媒体')).toBeInTheDocument();
@@ -131,7 +144,7 @@ describe('desktop workspace', () => {
 
     await user.click(screen.getByRole('button', { name: '取消' }));
     expect(screen.queryByRole('heading', { name: '性能监控' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('待转录媒体队列')).toHaveTextContent('P20-核心语法-整数类型.mp4');
+    expect(screen.getByLabelText('待转录输入来源')).toHaveTextContent('P20-核心语法-整数类型.mp4');
     expect(screen.getByRole('button', { name: '关机' })).toHaveAttribute('aria-pressed', 'true');
 
     await user.keyboard('{Control>}{Enter}{/Control}');
@@ -156,7 +169,10 @@ describe('desktop workspace', () => {
     await user.click(screen.getByRole('button', { name: '转录工作台' }));
     await user.click(screen.getByRole('button', { name: '粘贴 Windows 路径' }));
     expect(await screen.findByText('剪贴板课程 01.mp4')).toBeInTheDocument();
-    expect(screen.getByLabelText('待转录媒体队列')).toHaveTextContent('剪贴板课程 02.wav');
+    expect(screen.getByLabelText('执行前清单')).toHaveTextContent(
+      '媒体信息2 个媒体2 项输入来源 · 09:35 · 575 秒',
+    );
+    expect(screen.getByLabelText('待转录输入来源')).toHaveTextContent('剪贴板课程 02.wav');
   });
 
   it('routes Ctrl+Enter through the standard preset confirmation', async () => {

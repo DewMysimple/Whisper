@@ -26,6 +26,74 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
     });
   const transcript = await measure();
   expect(transcript.source.height).toBeCloseTo(transcript.output.height, 1);
+  const headingGaps = await page.evaluate(() => {
+    const gap = (labelSelector: string, headingSelector: string) => {
+      const label = document.querySelector(labelSelector)!.getBoundingClientRect();
+      const heading = document.querySelector(headingSelector)!.getBoundingClientRect();
+      return heading.top - label.bottom;
+    };
+    return {
+      source: gap('.source-panel .step-label', '.source-panel h2'),
+      output: gap('.output-panel .step-label', '.output-panel h2'),
+      launch: gap('.launch-card .step-label', '.launch-card h2'),
+    };
+  });
+  expect(headingGaps.launch).toBeCloseTo(headingGaps.source, 1);
+  expect(headingGaps.launch).toBeCloseTo(headingGaps.output, 1);
+  const launchHeadingAlignment = await page.evaluate(() => {
+    const label = document.querySelector('.launch-card .step-label')!.getBoundingClientRect();
+    const title = document.querySelector('.launch-card h2')!.getBoundingClientRect();
+    const status = document.querySelector('.preflight-status')!.getBoundingClientRect();
+    return {
+      labelTop: label.top,
+      titleTop: title.top,
+      statusTop: status.top,
+    };
+  });
+  expect(launchHeadingAlignment.statusTop).toBeCloseTo(launchHeadingAlignment.labelTop, 1);
+  expect(launchHeadingAlignment.statusTop).toBeLessThan(launchHeadingAlignment.titleTop);
+  const preflightLayout = await page.evaluate(() => {
+    const list = document.querySelector('.preflight-list')!;
+    const presetGrid = document.querySelector(
+      '.preset-panel:not(.subtitle-profile-panel) .preset-grid',
+    )!;
+    const items = [...document.querySelectorAll('.preflight-item')].map((item) =>
+      item.getBoundingClientRect().toJSON(),
+    );
+    const firstItem = document.querySelector('.preflight-item')!;
+    const attentionItem = document.querySelector('.preflight-item.needs-attention')!;
+    const icon = firstItem.querySelector('.preflight-icon')!.getBoundingClientRect();
+    const copy = firstItem.querySelector('.preflight-copy')!.getBoundingClientRect();
+    return {
+      firstItemHeight: firstItem.getBoundingClientRect().height,
+      listTop: list.getBoundingClientRect().top,
+      presetGridTop: presetGrid.getBoundingClientRect().top,
+      listGap: Number.parseFloat(getComputedStyle(list).rowGap),
+      columnCount: getComputedStyle(list).gridTemplateColumns.split(' ').length,
+      itemBorderStyle: getComputedStyle(firstItem).borderTopStyle,
+      itemRadius: Number.parseFloat(getComputedStyle(firstItem).borderTopLeftRadius),
+      itemBackground: getComputedStyle(firstItem).backgroundColor,
+      attentionBackground: getComputedStyle(attentionItem).backgroundColor,
+      items,
+      iconBottom: icon.bottom,
+      copyTop: copy.top,
+    };
+  });
+  expect(preflightLayout.firstItemHeight).toBeGreaterThanOrEqual(138);
+  expect(preflightLayout.listTop).toBeCloseTo(preflightLayout.presetGridTop, 1);
+  expect(preflightLayout.listGap).toBeGreaterThanOrEqual(8);
+  expect(preflightLayout.columnCount).toBe(2);
+  expect(preflightLayout.items).toHaveLength(4);
+  expect(preflightLayout.items[0].top).toBeCloseTo(preflightLayout.items[1].top, 1);
+  expect(preflightLayout.items[2].top).toBeCloseTo(preflightLayout.items[3].top, 1);
+  expect(preflightLayout.items[2].top).toBeGreaterThan(preflightLayout.items[0].top);
+  expect(preflightLayout.items[0].left).toBeCloseTo(preflightLayout.items[2].left, 1);
+  expect(preflightLayout.items[1].left).toBeCloseTo(preflightLayout.items[3].left, 1);
+  expect(preflightLayout.items[1].left).toBeGreaterThan(preflightLayout.items[0].left);
+  expect(preflightLayout.copyTop).toBeGreaterThanOrEqual(preflightLayout.iconBottom);
+  expect(preflightLayout.itemBorderStyle).toBe('solid');
+  expect(preflightLayout.itemRadius).toBeGreaterThanOrEqual(10);
+  expect(preflightLayout.attentionBackground).not.toBe(preflightLayout.itemBackground);
 
   const intakeRatio = await page.evaluate(() => {
     const local = document.querySelector('.drop-zone')!.getBoundingClientRect();
@@ -35,15 +103,17 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   expect(intakeRatio).toBeGreaterThan(1.8);
   expect(intakeRatio).toBeLessThan(2.8);
   await page.getByRole('button', { name: '粘贴 Windows 路径' }).click();
-  await expect(page.getByLabel('待转录媒体队列')).toContainText('剪贴板课程 01.mp4');
+  await expect(page.getByLabel('执行前清单')).toContainText(
+    '媒体信息2 个媒体2 项输入来源 · 09:35 · 575 秒',
+  );
+  await expect(page.getByLabel('待转录输入来源')).toContainText('剪贴板课程 01.mp4');
   await expect(page.getByRole('textbox', { name: '粘贴 Windows 路径' })).toHaveCount(0);
 
   await page.locator('.subtitle-profile-panel .preset-card').first().click();
   const subtitle = await measure();
   expect(subtitle.source.height).toBeCloseTo(subtitle.output.height, 1);
   expect(subtitle.preset.height).toBeCloseTo(subtitle.launch.height, 1);
-  expect(subtitle.preset.height).toBeCloseTo(transcript.preset.height, 1);
-  expect(subtitle.launch.height).toBeCloseTo(transcript.launch.height, 1);
+  expect(subtitle.launch.height).toBeGreaterThan(transcript.launch.height);
   await expect(
     page.locator('.subtitle-parameter-field > .parameter-field-label').first(),
   ).toHaveCSS('display', 'flex');
@@ -137,10 +207,15 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   await expect(page.getByRole('button', { name: '添加文件夹' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: '粘贴 Windows 路径' })).toHaveCount(0);
   await page.getByRole('button', { name: '选择媒体文件' }).click();
+  await page.getByText('查看并管理 2 项输入来源').click();
   await expect(page.getByText('P20-核心语法-整数类型.mp4', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('待转录媒体队列')).toContainText('P20-核心语法-整数类型.mp4');
+  await expect(page.getByLabel('待转录输入来源')).toContainText('P20-核心语法-整数类型.mp4');
   await page.getByRole('button', { name: '添加文件夹' }).click();
-  await expect(page.getByLabel('待转录媒体队列')).toContainText('共 8 个媒体文件');
+  await expect(page.getByLabel('执行前清单')).toContainText(
+    '媒体信息10 个媒体3 项输入来源 · 01:21:30 · 4,890 秒',
+  );
+  await expect(page.getByLabel('待转录输入来源')).toContainText('8 个媒体 · 01:00:00');
+  await expect(page.getByRole('heading', { name: '媒体队列' })).toHaveCount(0);
 
   await expect(page.locator('.output-format-copy')).toHaveCount(0);
   await expect(page.locator('.output-format-list .output-format-option')).toHaveCount(2);
@@ -148,7 +223,7 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   await page.getByRole('checkbox', { name: '生成 Markdown 格式' }).check();
   await expect(page.getByText('跟随媒体')).toBeVisible();
   await page.getByRole('button', { name: '选择输出文件夹' }).click();
-  await expect(page.getByText('D:\\字幕项目\\2026-07')).toBeVisible();
+  await expect(page.getByText('D:\\字幕项目\\2026-07', { exact: true })).toBeVisible();
   await expect(
     page.getByText('Text、Markdown 文件直接写入所选目录，不创建格式子文件夹'),
   ).toBeVisible();
@@ -232,7 +307,7 @@ test('confirms the one-time shutdown action without exposing hibernate', async (
     path: testInfo.outputPath('shutdown-confirmation.png'),
   });
   await page.getByRole('button', { name: '取消' }).click();
-  await expect(page.getByLabel('待转录媒体队列')).toContainText('P20-核心语法-整数类型.mp4');
+  await expect(page.getByLabel('执行前清单')).toContainText('媒体信息2 个媒体');
   await expect(page.getByRole('button', { name: '关机' })).toHaveAttribute('aria-pressed', 'true');
 
   await page
@@ -446,7 +521,7 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.locator('.output-panel')).toBeVisible();
   await expect(page.locator('.launch-card')).toBeVisible();
   await page.getByRole('button', { name: '粘贴 Windows 路径' }).click();
-  await expect(page.getByLabel('待转录媒体队列')).toContainText('剪贴板课程 01.mp4');
+  await expect(page.getByLabel('执行前清单')).toContainText('媒体信息2 个媒体');
   await expect(page.getByRole('button', { name: '休眠' })).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
