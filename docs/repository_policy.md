@@ -8,15 +8,16 @@
 | `tests/benchmark/baseline.json` | 重构前性能/输出参考 | 保留为历史比较基准 |
 | `tests/benchmark/runs/` | benchmark 临时输出 | 忽略，不纳入版本控制 |
 | `docs/` | 当前架构、开发和迁移文档 | 当前文档使用英文 snake_case 路径 |
+| `tools/` | 代码生成、仓库维护和 Windows 发布自动化 | 按 `codegen/`、`maintenance/`、`release/` 分责；不放产品运行时代码 |
 | `docs/archive/` | 重构前资料 | 只读追溯，不代表当前实现 |
 | `wiki-memory/历史归档/90-原始需求/` | 用户提供的阶段需求原文 | 不改写；新增需求单独保存并更新索引 |
 | `wiki-memory/` | 当前项目记忆、决策、知识和新任务日志 | 只保留精炼结论；旧阶段和执行证据放入 `历史归档/` |
 | `wiki-memory/历史归档/` | 迁移前 `Log` 的完整审计资料 | 只读追溯；历史描述不代表当前实现 |
-| `assets/` | 便携启动资源源文件 | 与包内资源保持来源关系 |
 | `models/` | 本地大模型 | 忽略，不提交 |
 | `whisper_env/` | 本地虚拟环境 | 忽略，不提交 |
 | `build/`、`target/`、缓存、`__pycache__/` | 可再生产物 | 忽略；定期维护不自动删除，清理需明确授权 |
-| `dist/release/` | 本地发布与验收产物 | 忽略；保留最近验收产物，清理需明确授权 |
+| `dist/WhisperSubtitle/`、`dist/WhisperSubtitle.zip` | 完整便携版目录与同内容 ZIP | 忽略；用户只从这里启动或复制完整版本 |
+| `dist/installer/` | 可选离线安装介质 | 仅由显式 installer 构建生成，和便携版隔离 |
 | `requirements.txt` | pip 兼容入口 | 只委托到 `pyproject.toml`，不重复维护依赖清单 |
 | `*.lnk` | 机器相关快捷方式 | 忽略且不提交；正式入口由安装/打包流程创建 |
 | `.agents/`、`.claude/`、`.workbuddy/` | 本地 Agent/工具状态，不参与产品运行 | 不属于仓库产品边界；不需要时可清理，不纳入提交 |

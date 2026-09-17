@@ -11,6 +11,7 @@
 - [批次 7 正式切换与 PyQt5 退役执行报告](../wiki-memory/历史归档/20-第二阶段-Tauri桌面架构迁移/批次7-正式切换与PyQt5退役/执行报告.md)
 - [扩展开发指南](development/extension_guide.md)
 - [定期工程维护指南](development/maintenance_guide.md)
+- [Windows 发布与成品目录](../tools/release/README.md)
 - [仓库资料与产物策略](repository_policy.md)
 - [旧入口迁移映射](migration/legacy_entrypoints.md)
 

@@ -26,7 +26,7 @@ It is designed for people who want to transcribe their own audio and video files
 | `en` | English standard | English speech with the standard context and post-processing strategy |
 | `en2` | English anti-hallucination | English speech with stricter thresholds and trailing hallucination cleanup |
 
-The default CLI preset is `en`. Desktop preset selection and Worker requests are derived from the same Python registry in `src/whisper_subtitle/domain/presets.py`. Supported model identities are maintained separately in `src/whisper_subtitle/domain/models.py` and projected into TypeScript and Rust by `scripts/generate_model_catalog.py`. The desktop currently has no standalone model-switching or inference-parameter workbench; task model snapshots and runtime model validation remain supported.
+The default CLI preset is `en`. Desktop preset selection and Worker requests are derived from the same Python registry in `src/whisper_subtitle/domain/presets.py`. Supported model identities are maintained separately in `src/whisper_subtitle/domain/models.py` and projected into TypeScript and Rust by `tools/codegen/generate_model_catalog.py`. The desktop currently has no standalone model-switching or inference-parameter workbench; task model snapshots and runtime model validation remain supported.
 
 ## Architecture
 
@@ -129,11 +129,13 @@ To build the local desktop executable without creating an installer:
 corepack pnpm desktop:build
 ```
 
-The current desktop acceptance executable is:
+This command produces a developer acceptance executable at:
 
 ```text
 apps/desktop/src-tauri/target/release/whisper-subtitle-desktop.exe
 ```
+
+That Cargo path is not the final application package. A complete user-facing build is always assembled directly under `dist/` as described below.
 
 ## Development
 
@@ -148,7 +150,7 @@ corepack pnpm build
 corepack pnpm check
 
 # Python tests (use an interpreter where this project is installed)
-.\.venv\Scripts\python.exe -m pytest -q
+.\whisper_env\Scripts\python.exe -m pytest -q
 
 # Rust host checks
 Push-Location apps/desktop/src-tauri
@@ -165,13 +167,20 @@ The frontend's Vite/Playwright loopback server exists only for development and t
 
 ## Windows packaging
 
-The release pipeline can produce an offline current-user NSIS installer and a complete portable directory:
+Build the complete portable directory and adjacent ZIP:
 
 ```powershell
 corepack pnpm release:build
 ```
 
-Release output is written under `dist/release/` and includes the desktop application, packaged Worker, direct model layout, distribution metadata, SHA-256 manifest, and Python SBOM. Target machines do not need Python, Node.js, or Rust, but they still need Windows 11, the required WebView2 runtime, a compatible NVIDIA driver, and the packaged model layout described in [packaging/README.md](packaging/README.md).
+The two user-facing artifacts are deliberately shallow:
+
+```text
+dist/WhisperSubtitle/WhisperSubtitle.exe
+dist/WhisperSubtitle.zip
+```
+
+The directory and ZIP contain the same complete runtime. Technical Worker, CUDA, model, manifest, and SBOM files are grouped below `WhisperSubtitle/_internal/`; do not distribute the raw executable from Cargo `target/`. To additionally create the offline current-user NSIS medium under `dist/installer/`, run `corepack pnpm release:build:installer`. Target machines do not need Python, Node.js, or Rust, but they still need Windows 11, WebView2, and a compatible NVIDIA GPU/driver. See [the release guide](tools/release/README.md).
 
 ## Repository layout
 
@@ -182,8 +191,9 @@ apps/desktop/src-tauri/     Tauri 2 / Rust host and Worker supervisor
 contracts/                  Versioned Desktop IPC schemas
 tests/                      Python, protocol, architecture, UI, and integration tests
 docs/                       Current architecture, development, migration, and packaging docs
-packaging/                  Windows offline installer and portable-build scripts
-assets/                     Source assets copied into installable packages
+tools/codegen/              Generated catalog projection tools
+tools/maintenance/          Repository policy and hygiene tools
+tools/release/              Windows portable ZIP and optional installer pipeline
 wiki-memory/                Current engineering memory and historical audit records
 AGENTS.md                   Agent startup, validation, memory, and delivery gates
 ```
@@ -195,7 +205,7 @@ Local models, virtual environments, caches, generated build output, and local Ag
 - [Current architecture](docs/architecture/current_architecture.md)
 - [Extension guide](docs/development/extension_guide.md)
 - [Periodic maintenance guide](docs/development/maintenance_guide.md)
-- [Windows packaging](packaging/README.md)
+- [Windows packaging](tools/release/README.md)
 - [Repository policy](docs/repository_policy.md)
 - [Project documentation index](docs/README.md)
 - [Engineering memory](wiki-memory/README.md)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-HYGIENE_SCRIPT = PROJECT_ROOT / "scripts" / "check_repository_hygiene.py"
+HYGIENE_SCRIPT = PROJECT_ROOT / "tools" / "maintenance" / "check_repository_hygiene.py"
 
 
 def test_repository_hygiene_policy_is_satisfied():

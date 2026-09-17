@@ -1,4 +1,4 @@
-"""Generate deterministic file inventory and SHA-256 checksums for a release tree."""
+"""Generate a deterministic file inventory for one assembled release tree."""
 
 from __future__ import annotations
 

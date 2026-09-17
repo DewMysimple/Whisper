@@ -3,12 +3,13 @@ type: knowledge
 status: active
 kind: module
 importance: high
-updated: 2026-09-09
+updated: 2026-09-17
 topic: python-transcription-core
 source_logs:
   - "[[日志/2026-08-23-项目记忆重建]]"
   - "[[日志/2026-08-24-架构瘦身实施]]"
   - "[[日志/2026-09-09-工程定期维护]]"
+  - "[[日志/2026-09-17-优化仓库与发布目录结构]]"
 supersedes: null
 ---
 
@@ -25,7 +26,7 @@ supersedes: null
 
 ## 修改规则
 
-新增模型先改 `domain/models.py`，再运行 `scripts/generate_model_catalog.py` 更新 Web/Rust 投影；新增 preset 先改注册表和契约测试，再运行 `scripts/generate_preset_catalog.py` 更新 Web 投影。新增后处理必须保持纯函数，不访问磁盘、Qt 或 CTranslate2。不要通过新增脚本复制转录主流程。
+新增模型先改 `domain/models.py`，再运行 `tools/codegen/generate_model_catalog.py` 更新 Web/Rust 投影；新增 preset 先改注册表和契约测试，再运行 `tools/codegen/generate_preset_catalog.py` 更新 Web 投影。新增后处理必须保持纯函数，不访问磁盘、Qt 或 CTranslate2。不要通过新增脚本复制转录主流程。
 
 ## 入口
 

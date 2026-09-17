@@ -3,10 +3,11 @@ type: decision
 status: active
 kind: architecture
 importance: high
-updated: 2026-08-23
+updated: 2026-09-17
 topic: desktop-entry-and-ipc
 source_logs:
   - "[[日志/2026-08-23-项目记忆重建]]"
+  - "[[日志/2026-09-17-优化仓库与发布目录结构]]"
 supersedes: null
 ---
 
@@ -14,7 +15,8 @@ supersedes: null
 
 ## 决策
 
-- 当前唯一开发和验收桌面入口为 `apps/desktop/src-tauri/target/release/whisper-subtitle-desktop.exe`。
+- 完整便携版入口为 `dist/WhisperSubtitle/WhisperSubtitle.exe`，同内容压缩包为 `dist/WhisperSubtitle.zip`；Cargo `target/release` EXE 只用于开发编译验收。
+- 成品根目录只保留用户入口与说明，Worker、模型和发布元数据统一位于 `_internal/`；Host 保留旧根级布局的兼容回退。
 - Tauri Host 是 WebView 与 Worker 的唯一运行时边界。
 - Worker 通过 stdin/stdout 使用 Desktop IPC v1；Rust 先校验，再向 UI 转发。
 - UI 不直接启动进程、不执行任意 shell、不访问 localhost；Rust 只开放精确 command 和受限输出预览。

@@ -3,14 +3,14 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "icon": ["../../../assets/logo.ico"],
+    "icon": ["icons/icon.ico"],
     "resources": {
-      "../../../build/release/stage/worker/": "worker/",
-      "../../../build/release/stage/distribution/": "distribution/"
+      "../../../build/release/stage/_internal/worker/": "_internal/worker/",
+      "../../../build/release/stage/_internal/distribution/": "_internal/distribution/"
     },
     "windows": {
       "webviewInstallMode": {
-        "type": "offlineInstaller"
+        "type": "skip"
       },
       "nsis": {
         "installMode": "currentUser",

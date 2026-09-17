@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, mpsc};
@@ -421,12 +421,9 @@ impl WorkerManager {
     pub fn model_root(&self) -> PathBuf {
         if let Ok(current_exe) = env::current_exe()
             && let Some(directory) = current_exe.parent()
-            && directory
-                .join("worker")
-                .join("whisper-subtitle-worker.exe")
-                .is_file()
+            && let Some(runtime_root) = packaged_runtime_root(directory)
         {
-            return directory.join("models");
+            return runtime_root.join("models");
         }
         self.repository_root.join("models").join("huggingface")
     }
@@ -607,17 +604,17 @@ impl WorkerManager {
     fn resolve_launch(&self) -> Result<WorkerLaunch, HostError> {
         if let Ok(current_exe) = env::current_exe()
             && let Some(directory) = current_exe.parent()
+            && let Some(runtime_root) = packaged_runtime_root(directory)
         {
-            let packaged = directory.join("worker").join("whisper-subtitle-worker.exe");
-            if packaged.is_file() {
-                return Ok(WorkerLaunch {
-                    program: packaged,
-                    arguments: Vec::new(),
-                    working_directory: directory.to_path_buf(),
-                    environment: packaged_worker_environment(directory),
-                    kind: "packaged-sidecar".to_owned(),
-                });
-            }
+            return Ok(WorkerLaunch {
+                program: runtime_root
+                    .join("worker")
+                    .join("whisper-subtitle-worker.exe"),
+                arguments: Vec::new(),
+                working_directory: directory.to_path_buf(),
+                environment: packaged_worker_environment(directory, &runtime_root),
+                kind: "packaged-sidecar".to_owned(),
+            });
         }
 
         if let Some(program) = env::var_os("WHISPER_SUBTITLE_WORKER_PYTHON").map(PathBuf::from) {
@@ -931,6 +928,20 @@ impl WorkerManager {
     }
 }
 
+fn packaged_runtime_root(application_root: &Path) -> Option<PathBuf> {
+    [
+        application_root.join("_internal"),
+        application_root.to_path_buf(),
+    ]
+    .into_iter()
+    .find(|candidate| {
+        candidate
+            .join("worker")
+            .join("whisper-subtitle-worker.exe")
+            .is_file()
+    })
+}
+
 mod validation;
 use validation::validate_start_draft;
 
@@ -979,8 +990,8 @@ mod tests {
         BridgeInputSource, BridgeOutputPolicy, BridgeSubtitleParameters, MediaInspectionItem,
         StartDraft, WORKER_LOGS_CLEARED_EVENT, WORKER_MESSAGE_EVENT, WorkerManager,
         apply_media_inspections, draft_to_protocol_params, inspect_input_paths,
-        inspect_local_models, validate_start_draft, worker_log_summary,
-        worker_quality_diagnostic_log_lines,
+        inspect_local_models, packaged_runtime_root, packaged_worker_environment,
+        validate_start_draft, worker_log_summary, worker_quality_diagnostic_log_lines,
     };
 
     fn subtitle_parameters() -> BridgeSubtitleParameters {
@@ -1019,6 +1030,47 @@ mod tests {
                 subtitle: subtitle_parameters(),
             },
         }
+    }
+
+    #[test]
+    fn packaged_runtime_prefers_the_internal_release_layout() {
+        let root = env::temp_dir().join(format!(
+            "whisper-subtitle-layout-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        let internal_worker = root.join("_internal").join("worker");
+        let legacy_worker = root.join("worker");
+        fs::create_dir_all(&internal_worker).expect("internal worker directory");
+        fs::create_dir_all(&legacy_worker).expect("legacy worker directory");
+        fs::write(
+            internal_worker.join("whisper-subtitle-worker.exe"),
+            b"internal",
+        )
+        .expect("internal worker marker");
+        fs::write(legacy_worker.join("whisper-subtitle-worker.exe"), b"legacy")
+            .expect("legacy worker marker");
+
+        assert_eq!(packaged_runtime_root(&root), Some(root.join("_internal")));
+
+        let environment = packaged_worker_environment(&root, &root.join("_internal"));
+        assert_eq!(
+            environment,
+            vec![
+                ("WHISPER_SUBTITLE_HOME".into(), root.as_os_str().to_owned(),),
+                (
+                    "WHISPER_SUBTITLE_MODEL_DIR".into(),
+                    root.join("_internal").join("models").into_os_string(),
+                ),
+            ]
+        );
+
+        fs::remove_dir_all(root.join("_internal")).expect("remove internal layout");
+        assert_eq!(packaged_runtime_root(&root), Some(root.clone()));
+        fs::remove_dir_all(root).expect("cleanup layout fixture");
     }
 
     #[test]

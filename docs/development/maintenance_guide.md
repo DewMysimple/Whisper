@@ -23,9 +23,9 @@
 从仓库根目录运行：
 
 ```powershell
-python scripts/generate_model_catalog.py --check
-python scripts/generate_preset_catalog.py --check
-python scripts/check_repository_hygiene.py
+python tools/codegen/generate_model_catalog.py --check
+python tools/codegen/generate_preset_catalog.py --check
+python tools/maintenance/check_repository_hygiene.py
 corepack pnpm check
 .\whisper_env\Scripts\python.exe -m pytest -q
 python wiki-memory/工具/memory_lint.py index

@@ -6,15 +6,18 @@ use std::path::{Path, PathBuf};
 use super::LocalModelDescriptor;
 use super::model_catalog::MODEL_CATALOG;
 
-pub(super) fn packaged_worker_environment(directory: &Path) -> Vec<(OsString, OsString)> {
+pub(super) fn packaged_worker_environment(
+    application_root: &Path,
+    runtime_root: &Path,
+) -> Vec<(OsString, OsString)> {
     vec![
         (
             OsString::from("WHISPER_SUBTITLE_HOME"),
-            directory.as_os_str().to_owned(),
+            application_root.as_os_str().to_owned(),
         ),
         (
             OsString::from("WHISPER_SUBTITLE_MODEL_DIR"),
-            directory.join("models").into_os_string(),
+            runtime_root.join("models").into_os_string(),
         ),
     ]
 }

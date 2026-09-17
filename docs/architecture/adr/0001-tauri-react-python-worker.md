@@ -79,9 +79,9 @@ Tauri 官方将外部可执行文件称为 sidecar，并明确支持把 Python C
 ## 批次 6 落地决定
 
 - Worker 使用 PyInstaller 6.21.0 onedir，显式排除 Tk 和测试依赖；批次 7 后发布依赖中已不存在 PyQt5。
-- 模型使用 setup 相邻的直接离线快照；安装钩子校验、复制并在卸载时移除安装目录内模型。
-- WebView2 使用 NSIS `offlineInstaller`；安装范围为 current-user。
-- 发布同时提供完整便携目录、manifest、SHA-256 和 CycloneDX Python SBOM。
+- 模型使用 `_internal/models/large-v3-turbo/` 的直接离线快照；安装钩子校验 setup 相邻介质、复制并在卸载时移除安装目录内模型。
+- WebView2 使用安装介质相邻的微软签名 x64 离线安装器，并由 NSIS 钩子受控执行；Tauri bundler 使用 `skip` 避免打包阶段联网，安装范围为 current-user。
+- 发布同时提供根级 `dist/WhisperSubtitle/` 完整便携目录、同名 ZIP、manifest、SHA-256 和 CycloneDX Python SBOM；技术运行时统一收口到 `_internal/`。
 - 自动更新保持 P2 禁用；稳定 identifier 的离线覆盖升级已验证。
 - 当前产物没有 Authenticode 签名，因为未提供证书；签名配置入口已实现。
 

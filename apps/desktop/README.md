@@ -12,4 +12,4 @@ Current boundary:
 - graceful Worker shutdown on normal application exit.
 - read-only CPU/memory/GPU/VRAM sampling through the validated Worker protocol.
 
-The packaging pipeline constructs a PyInstaller onedir Worker, a two-part offline NSIS medium and a complete portable directory. `whisper-subtitle-desktop.exe` is the sole desktop entry; VBS and PyQt5 are absent from the release dependency graph. See [the packaging guide](../../packaging/README.md).
+The packaging pipeline constructs a PyInstaller onedir Worker and assembles `dist/WhisperSubtitle/WhisperSubtitle.exe` plus `dist/WhisperSubtitle.zip`; an offline NSIS medium is optional. The portable runtime is grouped under `_internal/`, while `whisper-subtitle-desktop.exe` below Cargo `target/` remains a developer artifact. VBS and PyQt5 are absent from the release dependency graph. See [the packaging guide](../../tools/release/README.md).

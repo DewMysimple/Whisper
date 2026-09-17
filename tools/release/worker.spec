@@ -5,7 +5,8 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_data_files, copy_metadata
 
 
-PROJECT_ROOT = Path(SPEC).resolve().parent.parent
+PROJECT_ROOT = Path(SPEC).resolve().parents[2]
+RELEASE_TOOLS = PROJECT_ROOT / "tools" / "release"
 SOURCE_ROOT = PROJECT_ROOT / "src"
 
 datas = collect_data_files("whisper_subtitle")
@@ -44,7 +45,7 @@ for package in (
     hiddenimports += package_hiddenimports
 
 a = Analysis(
-    [str(PROJECT_ROOT / "packaging" / "worker_entry.py")],
+    [str(RELEASE_TOOLS / "worker_entry.py")],
     pathex=[str(SOURCE_ROOT)],
     binaries=binaries,
     datas=datas,
@@ -77,7 +78,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version=str(PROJECT_ROOT / "packaging" / "windows_version_info.txt"),
+    version=str(RELEASE_TOOLS / "windows_version_info.txt"),
 )
 coll = COLLECT(
     exe,

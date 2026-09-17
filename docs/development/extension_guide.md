@@ -4,8 +4,8 @@
 
 1. 在 `src/whisper_subtitle/domain/models.py` 更新模型定义、能力和默认值。
 2. 如模型身份需要跨进程传输，同步评审 `contracts/desktop_ipc/v1/desktop_ipc.schema.json`。
-3. 运行 `python scripts/generate_model_catalog.py`，更新 TypeScript 与 Rust 投影。
-4. 运行 `python scripts/generate_model_catalog.py --check` 和跨语言测试，禁止在 Web、Rust 或 Worker 中另建手工模型列表。
+3. 运行 `python tools/codegen/generate_model_catalog.py`，更新 TypeScript 与 Rust 投影。
+4. 运行 `python tools/codegen/generate_model_catalog.py --check` 和跨语言测试，禁止在 Web、Rust 或 Worker 中另建手工模型列表。
 
 ## 新增 preset
 
@@ -13,7 +13,7 @@
 2. 为它设置唯一 `id`、CLI `cli_alias`、显示信息、推理参数和 `postprocess_strategy`。
 3. 若现有后处理链可复用，直接选择已有策略；无需创建脚本、应用服务或 GUI 分支。
 4. 在 `tests/test_registry.py`、`tests/test_presets.py` 增加注册表与参数差异断言。
-5. 运行 `python scripts/generate_preset_catalog.py` 更新 Web 参数投影，并确保 `corepack pnpm check:preset-catalog` 通过。
+5. 运行 `python tools/codegen/generate_preset_catalog.py` 更新 Web 参数投影，并确保 `corepack pnpm check:preset-catalog` 通过。
 6. 增加固定输出并运行 benchmark/golden 门禁。
 
 CLI choices、桌面 preset 卡片、设置恢复和进程参数都从同一注册表派生。新增 preset 不应修改 `TranscriptionService` 主流程。
@@ -47,9 +47,9 @@ CLI choices、桌面 preset 卡片、设置恢复和进程参数都从同一注�
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 corepack pnpm check
-python scripts/generate_model_catalog.py --check
-python scripts/generate_preset_catalog.py --check
-python scripts/check_repository_hygiene.py
+python tools/codegen/generate_model_catalog.py --check
+python tools/codegen/generate_preset_catalog.py --check
+python tools/maintenance/check_repository_hygiene.py
 python wiki-memory/工具/memory_lint.py check
 python -m tests.benchmark.run_benchmark --output final-benchmark.json
 ```

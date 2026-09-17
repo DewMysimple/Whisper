@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GENERATED_PREFIXES = (
     "build/",
     "dist/",
@@ -25,7 +25,8 @@ GENERATED_PREFIXES = (
 )
 IGNORE_PROBES = (
     "build/.repository-hygiene-probe",
-    "dist/release/.repository-hygiene-probe",
+    "dist/WhisperSubtitle/.repository-hygiene-probe",
+    "dist/WhisperSubtitle.zip",
     "models/.repository-hygiene-probe",
     "node_modules/.repository-hygiene-probe",
     "whisper_env/.repository-hygiene-probe",
@@ -77,6 +78,7 @@ def _readme_paths(paths: tuple[str, ...]) -> tuple[Path, ...]:
         for path in paths
         if path.endswith("README.md")
         and not any(path.startswith(prefix) for prefix in README_EXCLUDED_PREFIXES)
+        and (PROJECT_ROOT / path).is_file()
     )
 
 

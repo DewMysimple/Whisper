@@ -3,18 +3,17 @@ param(
     [string]$BootstrapPython = "",
     [string]$ModelDir = "",
     [string]$SigningConfig = "",
-    [switch]$SkipInstaller
+    [string]$WebView2Installer = "",
+    [switch]$IncludeInstaller
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $BuildRoot = Join-Path $RepositoryRoot "build\release"
 $StageRoot = Join-Path $BuildRoot "stage"
-$ReleaseRoot = Join-Path $RepositoryRoot "dist\release"
-$PortableRoot = Join-Path $ReleaseRoot "WhisperSubtitle-portable"
-$Version = "0.1.0"
+$DistRoot = Join-Path $RepositoryRoot "dist"
 
 function Send-ToRecycleBin([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return }
@@ -65,10 +64,10 @@ try {
     $tauri = Get-Content -Encoding utf8 -Raw "apps/desktop/src-tauri/tauri.conf.json" | ConvertFrom-Json
     $cargo = Get-Content -Encoding utf8 -Raw "apps/desktop/src-tauri/Cargo.toml"
     $package = Get-Content -Encoding utf8 -Raw "package.json" | ConvertFrom-Json
+    $Version = [string]$package.version
     if ($pyproject -notmatch "(?m)^version = `"$([regex]::Escape($Version))`"$" -or
         $tauri.version -ne $Version -or
-        $cargo -notmatch "(?m)^version = `"$([regex]::Escape($Version))`"$" -or
-        $package.version -ne $Version) {
+        $cargo -notmatch "(?m)^version = `"$([regex]::Escape($Version))`"$") {
         throw "Release version $Version is not synchronized across Python, Tauri, Cargo and npm metadata"
     }
 
@@ -77,16 +76,24 @@ try {
     $DirectModel = Resolve-DirectModel $ModelDir
 
     Send-ToRecycleBin $BuildRoot
-    Send-ToRecycleBin $ReleaseRoot
-    New-Item -ItemType Directory -Force -Path $BuildRoot, $StageRoot, $ReleaseRoot | Out-Null
+    foreach ($generated in @(
+        (Join-Path $DistRoot "WhisperSubtitle"),
+        (Join-Path $DistRoot "WhisperSubtitle.zip"),
+        (Join-Path $DistRoot "WhisperSubtitle.sha256"),
+        (Join-Path $DistRoot "installer"),
+        (Join-Path $DistRoot "release")
+    )) {
+        Send-ToRecycleBin $generated
+    }
+    New-Item -ItemType Directory -Force -Path $BuildRoot, $StageRoot, $DistRoot | Out-Null
 
-    $BuildEnv = Join-Path $BuildRoot "build-env"
+    $BuildEnv = Join-Path $BuildRoot "environment"
     & $BootstrapPython -m venv $BuildEnv
     Assert-LastExitCode "fresh build environment creation"
     $Python = Join-Path $BuildEnv "Scripts\python.exe"
     & $Python -m pip install --disable-pip-version-check --timeout 60 --retries 8 --upgrade pip
     Assert-LastExitCode "pip bootstrap"
-    & $Python -m pip install --disable-pip-version-check --timeout 60 --retries 8 -r "packaging/requirements-worker.txt" -r "packaging/requirements-build.txt"
+    & $Python -m pip install --disable-pip-version-check --timeout 60 --retries 8 -r "tools/release/requirements-worker.txt" -r "tools/release/requirements-build.txt"
     Assert-LastExitCode "pinned release dependencies"
 
     $WheelRoot = Join-Path $BuildRoot "wheels"
@@ -95,37 +102,33 @@ try {
     Assert-LastExitCode "project wheel build"
     $Wheels = @(Get-ChildItem -LiteralPath $WheelRoot -Filter "whisper_subtitle-$Version-*.whl")
     if ($Wheels.Count -ne 1) { throw "Expected exactly one project wheel, found $($Wheels.Count)" }
-    $Wheel = $Wheels[0]
-    & $Python -m pip install --no-deps $Wheel.FullName
+    & $Python -m pip install --no-deps $Wheels[0].FullName
     Assert-LastExitCode "project wheel install"
     & $Python -m pip check
     Assert-LastExitCode "fresh build environment pip check"
 
-    $WorkerDist = Join-Path $BuildRoot "worker-dist"
-    $WorkerWork = Join-Path $BuildRoot "worker-work"
-    & $Python -m PyInstaller --clean --noconfirm --distpath $WorkerDist --workpath $WorkerWork "packaging/worker.spec"
+    $PyInstallerRoot = Join-Path $BuildRoot "pyinstaller"
+    $WorkerDist = Join-Path $PyInstallerRoot "dist"
+    $WorkerWork = Join-Path $PyInstallerRoot "work"
+    & $Python -m PyInstaller --clean --noconfirm --distpath $WorkerDist --workpath $WorkerWork "tools/release/worker.spec"
     Assert-LastExitCode "PyInstaller Worker build"
     $WorkerSource = Join-Path $WorkerDist "whisper-subtitle-worker"
-    $WorkerExe = Join-Path $WorkerSource "whisper-subtitle-worker.exe"
-    if (-not (Test-Path -LiteralPath $WorkerExe)) { throw "Frozen Worker executable was not produced" }
-
-    $DistributionStage = Join-Path $StageRoot "distribution"
-    New-Item -ItemType Directory -Force -Path $DistributionStage | Out-Null
-    $PythonSbom = Join-Path $DistributionStage "sbom-python.cdx.json"
-    & $Python -m cyclonedx_py environment --output-reproducible --spec-version 1.6 --output-format JSON --output-file $PythonSbom --pyproject "pyproject.toml" $Python
-    Assert-LastExitCode "CycloneDX SBOM generation"
-    Copy-Item -LiteralPath "packaging/README.md" -Destination (Join-Path $DistributionStage "README.md")
-
-    Copy-Item -LiteralPath $WorkerSource -Destination (Join-Path $StageRoot "worker") -Recurse
-    Copy-Item -LiteralPath $DirectModel -Destination (Join-Path $StageRoot "model") -Recurse
-
-    $FinishArguments = @{
-        BuildRoot = $BuildRoot
-        SigningConfig = $SigningConfig
-        SkipInstaller = $SkipInstaller
+    if (-not (Test-Path -LiteralPath (Join-Path $WorkerSource "whisper-subtitle-worker.exe"))) {
+        throw "Frozen Worker executable was not produced"
     }
-    & (Join-Path $PSScriptRoot "finish_release.ps1") @FinishArguments
-    Assert-LastExitCode "release finishing stage"
+
+    $InternalStage = Join-Path $StageRoot "_internal"
+    $DistributionStage = Join-Path $InternalStage "distribution"
+    New-Item -ItemType Directory -Force -Path $DistributionStage | Out-Null
+    & $Python -m cyclonedx_py environment --output-reproducible --spec-version 1.6 --output-format JSON --output-file (Join-Path $DistributionStage "sbom-python.cdx.json") --pyproject "pyproject.toml" $Python
+    Assert-LastExitCode "CycloneDX SBOM generation"
+    Copy-Item -LiteralPath "tools/release/README.md" -Destination (Join-Path $DistributionStage "README.md")
+    Copy-Item -LiteralPath $WorkerSource -Destination (Join-Path $InternalStage "worker") -Recurse
+    New-Item -ItemType Directory -Force -Path (Join-Path $InternalStage "models") | Out-Null
+    Copy-Item -LiteralPath $DirectModel -Destination (Join-Path $InternalStage "models\large-v3-turbo") -Recurse
+
+    & (Join-Path $PSScriptRoot "assemble.ps1") -BuildRoot $BuildRoot -SigningConfig $SigningConfig -WebView2Installer $WebView2Installer -IncludeInstaller:$IncludeInstaller
+    Assert-LastExitCode "release assembly"
 } finally {
     Pop-Location
 }

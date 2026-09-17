@@ -25,7 +25,7 @@ def test_model_catalog_has_unique_supported_default():
 
 def test_generated_model_catalogs_and_desktop_schema_are_current():
     result = subprocess.run(
-        [sys.executable, "scripts/generate_model_catalog.py", "--check"],
+        [sys.executable, "tools/codegen/generate_model_catalog.py", "--check"],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,

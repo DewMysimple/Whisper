@@ -8,7 +8,7 @@
 | `core.WhisperProject2` | `whisper-subtitle transcribe INPUT --preset en2` |
 | `core.WhisperProjectCN` | `whisper-subtitle transcribe INPUT --preset cn` |
 | `core.WhisperProjectCN2` | `whisper-subtitle transcribe INPUT --preset cn2` |
-| `gui.WhisperPyQtGUI` | 批次 7 后使用安装快捷方式或便携版 `whisper-subtitle-desktop.exe` |
+| `gui.WhisperPyQtGUI` | 批次 7 后使用安装快捷方式或完整便携版 `dist/WhisperSubtitle/WhisperSubtitle.exe` |
 | 旧模块后处理函数 | `whisper_subtitle.domain.postprocess` |
 | 旧模块 `process_video/main` | `TranscriptionRequest` + `TranscriptionService` |
 | `core.presets` 字典 | `whisper_subtitle.domain.presets` 类型化注册表 |

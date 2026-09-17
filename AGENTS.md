@@ -20,11 +20,11 @@
 
 ## 验证路由
 
-- 通用工程检查：`corepack pnpm check`、`python scripts/check_repository_hygiene.py`、`python wiki-memory/工具/memory_lint.py check`。
+- 通用工程检查：`corepack pnpm check`、`python tools/maintenance/check_repository_hygiene.py`、`python wiki-memory/工具/memory_lint.py check`。
 - Python 变更：使用已安装本项目的解释器运行 `python -m pytest -q`。若裸系统 Python 未安装工程，先选择活动虚拟环境，不把纯导入失败误判为回归。
 - React/TypeScript 变更：`corepack pnpm check`；涉及交互时加 `corepack pnpm e2e`。
 - Rust/Tauri 变更：在 `apps/desktop/src-tauri` 运行 `cargo fmt --check`、`cargo test --locked`和适用的 `cargo clippy --locked --all-targets -- -D warnings`。
-- 模型目录修改：先改 `src/whisper_subtitle/domain/models.py`，再运行 `python scripts/generate_model_catalog.py`。Preset 修改同理运行 `python scripts/generate_preset_catalog.py`。
+- 模型目录修改：先改 `src/whisper_subtitle/domain/models.py`，再运行 `python tools/codegen/generate_model_catalog.py`。Preset 修改同理运行 `python tools/codegen/generate_preset_catalog.py`。
 - 涉及桌面产物、打包或 UI 正式验收时，补充 Tauri Release 构建和 EXE 启动烟测。涉及 GPU、模型或识别输出时，补充真实媒体与必要的 benchmark/golden 验证。
 
 ## 完成门禁

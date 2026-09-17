@@ -52,4 +52,4 @@ target/
 apps/desktop/src-tauri/gen/
 
 # Local signing material and generated release outputs
-packaging/signing.local.json
+tools/release/signing.local.json

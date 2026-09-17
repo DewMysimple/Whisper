@@ -110,7 +110,7 @@ CLI 或 Desktop IPC 输入
   → ProgressEvent / BatchResult
 ```
 
-CLI 和 Worker 共用同一 `TranscriptionService`；四个 preset 只改变注册表参数和后处理策略。`domain/presets.py` 是参数事实源，Web preset 选择和任务快照消费由 `scripts/generate_preset_catalog.py` 生成的 TypeScript 投影。`domain/models.py` 是模型身份与能力事实源，`scripts/generate_model_catalog.py` 将其投影到 Web TypeScript 和 Rust Host，并校验 IPC schema 中的模型枚举。当前桌面不提供独立模型切换、推理参数或硬件优化工作台；Worker 在任务开始时自动解析设备，任务快照只记录实际使用的模型和硬件。`model.load`、`model.unload` 仅作为 Desktop IPC v1 冻结 Worker 兼容命令保留，当前 UI/bridge 不调用，且不再接受硬件偏好。
+CLI 和 Worker 共用同一 `TranscriptionService`；四个 preset 只改变注册表参数和后处理策略。`domain/presets.py` 是参数事实源，Web preset 选择和任务快照消费由 `tools/codegen/generate_preset_catalog.py` 生成的 TypeScript 投影。`domain/models.py` 是模型身份与能力事实源，`tools/codegen/generate_model_catalog.py` 将其投影到 Web TypeScript 和 Rust Host，并校验 IPC schema 中的模型枚举。当前桌面不提供独立模型切换、推理参数或硬件优化工作台；Worker 在任务开始时自动解析设备，任务快照只记录实际使用的模型和硬件。`model.load`、`model.unload` 仅作为 Desktop IPC v1 冻结 Worker 兼容命令保留，当前 UI/bridge 不调用，且不再接受硬件偏好。
 
 Worker 流程为：
 
@@ -127,8 +127,8 @@ Web 工作台的事件归并位于 `apps/web/src/state/workspaceEvents.ts`，任
 
 ## 运行与发布边界
 
-- 默认桌面入口：安装版使用 Windows 快捷方式或安装目录 `whisper-subtitle-desktop.exe`；便携版直接运行同名 EXE。VBS 启动层已退役。
-- 便携模式：完整目录包含桌面 EXE、Worker、CUDA 运行时和直接模型快照。
+- 默认桌面入口：安装版使用 Windows 快捷方式；完整便携版直接运行 `dist/WhisperSubtitle/WhisperSubtitle.exe`。Cargo `target/release/whisper-subtitle-desktop.exe` 仅是开发产物，VBS 启动层已退役。
+- 便携模式：成品根目录只暴露 `WhisperSubtitle.exe` 与使用说明，Worker、CUDA 运行时、直接模型快照和发布元数据统一位于 `_internal/`。
 - 安装模式：console script 为 `whisper-subtitle`，资源通过 `importlib.resources` 读取。
 - CUDA：CTranslate2 判断能力，NVML 提供元数据，`nvidia-cublas-cu12` 提供 Windows 原生运行时。
 - `contracts/desktop_ipc/v1/desktop_ipc.schema.json` 是桌面 IPC v1 的跨语言事实来源；Python 枚举、Worker 消息与 schema 由契约测试保持一致。
@@ -139,7 +139,7 @@ Web 工作台的事件归并位于 `apps/web/src/state/workspaceEvents.ts`，任
 - WebView 使用带版本号的 localStorage 保存设置和最多 100 条任务；这是本机桌面状态，不是浏览器 WebUI 后端或服务端数据库。
 - Rust `read_output_preview` 只允许规范化后的 `.txt`/`.md`/`.srt` 文件并限制为前 128 KiB，不暴露通用文件读取。
 - Playwright 可以在测试期间临时使用 `127.0.0.1` 提供静态构建产物；该测试基础设施不进入 production runtime。
-- 开发态 Host 可使用显式 Python 或工程 `whisper_env`；发布态 Host 从应用目录解析 `worker/whisper-subtitle-worker.exe`，并向 Worker 注入应用根目录和直接模型快照路径。
-- 正式安装介质为 NSIS current-user setup 与相邻 `models/large-v3-turbo/` 的两部分离线布局；setup 内置 WebView2 Evergreen offlineInstaller，不依赖网络安装。
+- 开发态 Host 可使用显式 Python 或工程 `whisper_env`；发布态 Host 优先从应用目录解析 `_internal/worker/whisper-subtitle-worker.exe`，并向 Worker 注入应用根目录与 `_internal/models` 路径；旧的根级 `worker/models` 仅保留运行时兼容解析。
+- 可选正式安装介质为 NSIS current-user setup 与相邻 `_internal/` 的两部分离线布局；模型位于 `_internal/models/`，微软签名的 WebView2 Evergreen 离线安装器位于 `_internal/distribution/` 并由受控 NSIS 钩子执行，打包和安装均不下载前置依赖。
 - 完整便携目录包含桌面 EXE、Worker、CUDA 用户态依赖、模型和 distribution 元数据；目标运行时不需要 Python、Node.js 或 Rust。
-- 发布清单、SHA-256 和 CycloneDX Python SBOM 位于 `dist/release/`。当前产物未签名；自动更新未启用，NSIS 覆盖升级已验证。
+- 最终便携目录和 ZIP 直接位于 `dist/WhisperSubtitle/`、`dist/WhisperSubtitle.zip`；清单与 CycloneDX Python SBOM 位于应用 `_internal/`，外层 `WhisperSubtitle.sha256` 校验关键产物。当前产物未签名；自动更新未启用。
