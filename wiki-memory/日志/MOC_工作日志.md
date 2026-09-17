@@ -17,6 +17,7 @@ supersedes: null
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-17 | ui | - | archived | preflight-task-checklist | [[日志/2026-09-17-重塑执行前任务清单.md|重塑执行前任务清单]] |
 | 2026-09-17 | maintenance | 在保留当前完整源码和唯一最新正式发布套件的前提下，删除长期累积的旧版本、旧构建和缓存，缓解工程所在磁盘压力，并建立可重复的安全清理入口。 | archived | workspace-cleanup | [[日志/2026-09-17-清理旧构建与工程瘦身.md|清理旧构建与工程瘦身]] |
+| 2026-09-17 | ui | 让 `PRE-FLIGHT CHECKLIST` 下的四张状态卡片具备与其他工作区卡片一致的点击机制，同时保持它们只汇总状态、不形成选中项。 | archived | preflight-card-shortcuts | [[日志/2026-09-17-执行清单卡片配置入口.md|执行清单卡片配置入口]] |
 | 2026-09-17 | ui | 继续精调执行前清单：使右侧四张内卡片等高等宽，并与左侧“文本识别模式”四张卡片在顶边、第一行底边和整体底边上对齐。同时固定输出与执行说明的分行，统一启动文案与快捷键字号，并删除键盘图标。 | archived | preflight-grid-alignment | [[日志/2026-09-17-对齐执行清单与识别模式卡片.md|对齐执行清单与识别模式卡片]] |
 | 2026-09-17 | maintenance | 为频繁 UI 修改建立 localhost Vite/HMR 开发循环，同时评估 `apps/` 下的 Web 与 Desktop 目录是否需要重新组织，并把旧的“开发期也不使用开发服务器”描述收敛为只约束正式 Release。 | archived | vite-development-apps-layout | [[日志/2026-09-17-启用Vite开发服务器并审计Apps目录.md|启用 Vite 开发服务器并审计 Apps 目录]] |
 | 2026-09-17 | maintenance | 按用户明确授权，从正式工程删除“硬件优化”工作台及人工设备、精度和 CPU 线程配置，并检查删除过程中遗留的冗余代码；保留转录所需的自动硬件探测、任务级实际硬件记录和性能监控。 | archived | retire-hardware-optimization-workbench | [[日志/2026-09-17-删除硬件优化工作台.md|删除硬件优化工作台]] |

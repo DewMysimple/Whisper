@@ -62,6 +62,30 @@ describe('desktop workspace', () => {
     ).toBeInTheDocument();
     expect(within(checklist).getByText('完成后无操作', { exact: true })).toBeInTheDocument();
     expect(within(checklist).getByText('本地 Worker 已就绪', { exact: true })).toBeInTheDocument();
+    const checklistLinks = [
+      within(checklist).getByRole('button', { name: '前往版本与模型配置' }),
+      within(checklist).getByRole('button', { name: '前往输入来源配置' }),
+      within(checklist).getByRole('button', { name: '前往输出策略配置' }),
+      within(checklist).getByRole('button', { name: '前往执行方式配置' }),
+    ];
+    for (const link of checklistLinks) {
+      expect(link).toHaveClass('selection-card');
+      expect(link).not.toHaveClass('is-selected');
+      expect(link).not.toHaveAttribute('aria-pressed');
+    }
+    await user.click(checklistLinks[0]!);
+    expect(
+      screen
+        .getByRole('heading', { name: '文本识别模式' })
+        .closest('section')
+        ?.querySelector('.preset-card[aria-pressed="true"]'),
+    ).toHaveFocus();
+    await user.click(checklistLinks[1]!);
+    expect(screen.getByRole('button', { name: '选择媒体文件' })).toHaveFocus();
+    await user.click(checklistLinks[2]!);
+    expect(screen.getByRole('button', { name: '选择输出文件夹' })).toHaveFocus();
+    await user.click(checklistLinks[3]!);
+    expect(screen.getByRole('button', { name: '无操作' })).toHaveFocus();
     expect(
       screen.queryByText('添加媒体后，这里会汇总本次任务的完整配置。'),
     ).not.toBeInTheDocument();

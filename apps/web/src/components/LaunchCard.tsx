@@ -50,6 +50,19 @@ const HOST_STATUS_LABEL = {
   failed: '本地 Worker 连接失败',
 } as const;
 
+function openChecklistTarget(panelSelector: string, controlSelector: string): void {
+  const panel = document.querySelector<HTMLElement>(panelSelector);
+  if (panel === null) return;
+
+  if (typeof panel.scrollIntoView === 'function') {
+    panel.scrollIntoView({
+      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'center',
+    });
+  }
+  panel.querySelector<HTMLElement>(controlSelector)?.focus({ preventScroll: true });
+}
+
 export function LaunchCard() {
   const inputs = useWorkspace((state) => state.inputs);
   const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
@@ -156,6 +169,14 @@ export function LaunchCard() {
     if (!startingTask) setPresetConfirmationOpen(false);
   }, [startingTask]);
 
+  const openProfileConfiguration = useCallback(() => {
+    const panelSelector =
+      profileMode === 'subtitle'
+        ? '.subtitle-profile-panel'
+        : '.preset-panel:not(.subtitle-profile-panel)';
+    openChecklistTarget(panelSelector, '.preset-card[aria-pressed="true"]');
+  }, [profileMode]);
+
   return (
     <section className="launch-card" aria-labelledby="launch-title">
       <div className="launch-unified">
@@ -170,7 +191,12 @@ export function LaunchCard() {
           </span>
         </div>
         <div aria-label="执行前清单" className="preflight-list">
-          <div className="preflight-item">
+          <button
+            aria-label="前往版本与模型配置"
+            className="selection-card preflight-item"
+            onClick={openProfileConfiguration}
+            type="button"
+          >
             <span className="preflight-icon" aria-hidden="true">
               <Settings2 size={16} />
             </span>
@@ -182,10 +208,13 @@ export function LaunchCard() {
               </strong>
               <small>{getModelLabel(selectedModelId)} · 本地离线处理</small>
             </div>
-          </div>
+          </button>
 
-          <div
-            className={`preflight-item ${inputs.length === 0 || hasInvalidInput ? 'needs-attention' : ''}`}
+          <button
+            aria-label="前往输入来源配置"
+            className={`selection-card preflight-item ${inputs.length === 0 || hasInvalidInput ? 'needs-attention' : ''}`}
+            onClick={() => openChecklistTarget('.source-panel', '.source-action-button.is-primary')}
+            type="button"
           >
             <span className="preflight-icon" aria-hidden="true">
               <Files size={16} />
@@ -197,10 +226,13 @@ export function LaunchCard() {
                 {inputs.length} 项输入来源 · {durationChecklist}
               </small>
             </div>
-          </div>
+          </button>
 
-          <div
-            className={`preflight-item ${needsOutputRoot || !hasOutputTarget ? 'needs-attention' : ''}`}
+          <button
+            aria-label="前往输出策略配置"
+            className={`selection-card preflight-item ${needsOutputRoot || !hasOutputTarget ? 'needs-attention' : ''}`}
+            onClick={() => openChecklistTarget('.output-panel', '.output-location-action')}
+            type="button"
           >
             <span className="preflight-icon" aria-hidden="true">
               <FolderOutput size={16} />
@@ -215,10 +247,18 @@ export function LaunchCard() {
                 <span>{CONFLICT_POLICY_LABEL[output.conflictPolicy]}</span>
               </small>
             </div>
-          </div>
+          </button>
 
-          <div
-            className={`preflight-item ${hostStatus.state !== 'ready' ? 'needs-attention' : ''}`}
+          <button
+            aria-label="前往执行方式配置"
+            className={`selection-card preflight-item ${hostStatus.state !== 'ready' ? 'needs-attention' : ''}`}
+            onClick={() =>
+              openChecklistTarget(
+                '.output-panel',
+                '.finish-action-options > button[aria-pressed="true"]',
+              )
+            }
+            type="button"
           >
             <span className="preflight-icon" aria-hidden="true">
               {hostStatus.state === 'ready' ? (
@@ -235,7 +275,7 @@ export function LaunchCard() {
                 <span>{HOST_STATUS_LABEL[hostStatus.state]}</span>
               </small>
             </div>
-          </div>
+          </button>
         </div>
 
         {readinessMessage && <p className="launch-summary">{readinessMessage}</p>}

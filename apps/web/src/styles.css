@@ -7464,6 +7464,7 @@ output,
 }
 
 .preflight-item {
+  appearance: none;
   display: grid;
   height: 100%;
   min-width: 0;
@@ -7477,6 +7478,9 @@ output,
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
 .preflight-item.needs-attention {

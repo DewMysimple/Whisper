@@ -209,17 +209,52 @@ test('uses the same subtle press feedback for selectable cards', async ({ page }
   const transcriptMode = page
     .locator('.preset-panel:not(.subtitle-profile-panel) .preset-card')
     .first();
+  const preflightProfile = page.getByRole('button', { name: '前往版本与模型配置' });
   const markdownFormat = page.locator('.output-format-list .output-format-option').nth(1);
   const finishAction = page.getByRole('button', { name: '无操作' });
 
   await expect(transcriptMode).toHaveClass(/selection-card/);
+  await expect(preflightProfile).toHaveClass(/selection-card/);
+  await expect(preflightProfile).not.toHaveClass(/is-selected/);
+  await expect(preflightProfile).not.toHaveAttribute('aria-pressed');
   await expect(markdownFormat).toHaveClass(/selection-card/);
   await expect(finishAction).toHaveClass(/selection-card/);
   await pressAndReadTransform(transcriptMode);
+  await pressAndReadTransform(preflightProfile);
   await pressAndReadTransform(markdownFormat);
   await pressAndReadTransform(finishAction);
 
   await expect(markdownFormat.locator('.output-format-code')).toHaveCSS('outline-style', 'none');
+});
+
+test('uses preflight cards as non-selecting configuration shortcuts', async ({ page }) => {
+  const routes = [
+    {
+      shortcut: page.getByRole('button', { name: '前往版本与模型配置' }),
+      target: page.locator(
+        '.preset-panel:not(.subtitle-profile-panel) .preset-card[aria-pressed="true"]',
+      ),
+    },
+    {
+      shortcut: page.getByRole('button', { name: '前往输入来源配置' }),
+      target: page.getByRole('button', { name: '选择媒体文件' }),
+    },
+    {
+      shortcut: page.getByRole('button', { name: '前往输出策略配置' }),
+      target: page.getByRole('button', { name: '选择输出文件夹' }),
+    },
+    {
+      shortcut: page.getByRole('button', { name: '前往执行方式配置' }),
+      target: page.getByRole('button', { name: '无操作' }),
+    },
+  ];
+
+  for (const { shortcut, target } of routes) {
+    await shortcut.click();
+    await expect(target).toBeFocused();
+    await expect(shortcut).not.toHaveClass(/is-selected/);
+    await expect(shortcut).not.toHaveAttribute('aria-pressed');
+  }
 });
 
 test('does not expose the retired model switching workbench', async ({ page }) => {
