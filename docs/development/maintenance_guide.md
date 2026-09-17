@@ -18,6 +18,15 @@
 
 `models/`、虚拟环境、`build/`、Rust `target/`、发布产物和用户输出均是受保护的本地资料。即使体积较大，周期维护也不自动删除；只有用户明确授权并确认目标后才能清理。
 
+获得明确清理授权后，先从仓库根目录预览白名单内的可再生产物，再显式执行永久清理：
+
+```powershell
+corepack pnpm workspace:clean
+corepack pnpm workspace:clean:apply
+```
+
+该入口只清理 `build/`、Rust `target/`、Tauri/Web 测试与构建输出、Vite/Python 缓存；不会删除 `dist/` 中的当前正式版、`models/`、`whisper_env/`、Node 依赖、源码、Git 历史或用户输出。应用清理会永久删除列出的目录，默认命令只预览。
+
 ## 常规门禁
 
 从仓库根目录运行：

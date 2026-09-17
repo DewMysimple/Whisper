@@ -17,7 +17,7 @@
 | `wiki-memory/历史归档/` | 迁移前 `Log` 的完整审计资料 | 只读追溯；历史描述不代表当前实现 |
 | `models/` | 本地大模型 | 忽略，不提交 |
 | `whisper_env/` | 本地虚拟环境 | 忽略，不提交 |
-| `build/`、`target/`、缓存、`__pycache__/` | 可再生产物 | 忽略；定期维护不自动删除，清理需明确授权 |
+| `build/`、`target/`、缓存、`__pycache__/` | 可再生产物 | 忽略；定期维护不自动删除，明确授权后先运行 `workspace:clean` 预览，再运行 `workspace:clean:apply` 永久清理 |
 | `dist/WhisperSubtitle/`、`dist/WhisperSubtitle.zip` | 完整便携版目录与同内容 ZIP | 忽略；用户只从这里启动或复制完整版本 |
 | `dist/installer/` | 可选离线安装介质 | 仅由显式 installer 构建生成，和便携版隔离 |
 | `requirements.txt` | pip 兼容入口 | 只委托到 `pyproject.toml`，不重复维护依赖清单 |

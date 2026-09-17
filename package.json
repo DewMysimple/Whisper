@@ -27,7 +27,9 @@
     "lint": "corepack pnpm --filter @whisper-subtitle/web lint",
     "test": "corepack pnpm --filter @whisper-subtitle/web test",
     "typecheck": "corepack pnpm --filter @whisper-subtitle/web typecheck",
-    "web:dev": "corepack pnpm --filter @whisper-subtitle/web dev"
+    "web:dev": "corepack pnpm --filter @whisper-subtitle/web dev",
+    "workspace:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/maintenance/clean_workspace.ps1",
+    "workspace:clean:apply": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/maintenance/clean_workspace.ps1 -Apply"
   },
   "devDependencies": {
     "prettier": "3.9.5"
