@@ -125,6 +125,7 @@ function WorkspaceView() {
 
 function TasksView() {
   const tasks = useWorkspace((state) => state.tasks);
+  const inputs = useWorkspace((state) => state.inputs);
   const mode = useWorkspace((state) => state.taskWorkspaceMode);
   const setMode = useWorkspace((state) => state.setTaskWorkspaceMode);
   const active = tasks.filter(
@@ -134,6 +135,10 @@ function TasksView() {
     (task) => task.status === 'completed' && task.outputAvailability !== 'missing',
   ).length;
   const attention = tasks.filter(isAbnormalTask).length;
+  const developmentPreviewCount =
+    desktopBridge.mode === 'mock'
+      ? inputs.reduce((total, input) => total + (input.mediaCount ?? 1), 0)
+      : 0;
 
   return (
     <div className="tasks-view">
@@ -147,7 +152,13 @@ function TasksView() {
           <Activity size={17} />
           <span>
             <strong>任务监控</strong>
-            <small>{active > 0 ? `${active} 项活动任务` : '当前空闲'}</small>
+            <small>
+              {developmentPreviewCount > 0
+                ? `${developmentPreviewCount} 个待处理媒体`
+                : active > 0
+                  ? `${active} 项活动任务`
+                  : '当前空闲'}
+            </small>
           </span>
         </button>
         <button
@@ -242,9 +253,7 @@ export default function App() {
   useEffect(() => initialize(), [initialize]);
 
   useEffect(() => {
-    if (activeView === 'performance') {
-      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [activeView]);
 
   return (

@@ -10,8 +10,9 @@ import {
   Square,
 } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
+import { desktopBridge } from '../bridge';
 import type { TaskMediaSnapshot, TaskSnapshot } from '../contracts/desktop';
 import { getModelLabel } from '../data/models';
 import { getPreset } from '../data/presets';
@@ -22,6 +23,10 @@ import {
 } from '../state/mediaDuration';
 import { formatTaskCreatedAt } from '../state/taskHistory';
 import { taskSourceSummary } from '../state/taskSourceSummary';
+import {
+  createDevelopmentInputPreview,
+  DEVELOPMENT_INPUT_PREVIEW_ID,
+} from '../state/developmentInputPreview';
 import { useWorkspace } from '../state/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useAutoFollow } from './useAutoFollow';
@@ -54,19 +59,43 @@ function activeTaskFrom(tasks: TaskSnapshot[]): TaskSnapshot | undefined {
   );
 }
 
+export function resolveTaskMonitorTarget(
+  tasks: TaskSnapshot[],
+  monitoredTaskId: string | null,
+  developmentInputPreview: TaskSnapshot | null,
+): TaskSnapshot | undefined {
+  return (
+    developmentInputPreview ??
+    tasks.find((task) => task.id === monitoredTaskId) ??
+    activeTaskFrom(tasks)
+  );
+}
+
 export function TaskMonitor() {
   const tasks = useWorkspace((state) => state.tasks);
+  const inputs = useWorkspace((state) => state.inputs);
+  const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
+  const selectedModelId = useWorkspace((state) => state.selectedModelId);
   const monitoredTaskId = useWorkspace((state) => state.monitoredTaskId);
   const cancelTask = useWorkspace((state) => state.cancelTask);
   const openTaskOutputDirectory = useWorkspace((state) => state.openTaskOutputDirectory);
   const [terminationOpen, setTerminationOpen] = useState(false);
   const mediaRowRef = useRef<HTMLElement>(null);
   const reducedMotion = useReducedMotion();
-  const activeTask = tasks.find((task) => task.id === monitoredTaskId) ?? activeTaskFrom(tasks);
+  const developmentInputPreview = useMemo(
+    () =>
+      desktopBridge.mode === 'mock'
+        ? createDevelopmentInputPreview(inputs, selectedPresetId, selectedModelId)
+        : null,
+    [inputs, selectedModelId, selectedPresetId],
+  );
+  const activeTask = resolveTaskMonitorTarget(tasks, monitoredTaskId, developmentInputPreview);
+  const isDevelopmentInputPreview = activeTask?.id === DEVELOPMENT_INPUT_PREVIEW_ID;
   const waitingCount = tasks.filter(
     (task) =>
       task.status === 'queued' &&
       task.id !== activeTask?.id &&
+      !isDevelopmentInputPreview &&
       (activeTask?.status === 'running' || activeTask?.status === 'queued'),
   ).length;
   const mediaStates: TaskMediaSnapshot[] =
@@ -117,16 +146,21 @@ export function TaskMonitor() {
   }
 
   const processingTotal = activeTask.processingCount ?? activeTask.sourceCount;
-  const sourceSummary = taskSourceSummary(activeTask);
+  const sourceSummary = isDevelopmentInputPreview
+    ? `已展开 ${mediaStates.length} 个待处理媒体文件`
+    : taskSourceSummary(activeTask);
   const outputPaths = [
     ...new Set([
       ...(activeTask.outputs ?? []),
       ...mediaStates.flatMap((media) => media.outputPaths ?? []),
     ]),
   ];
-  const isActive = activeTask.status === 'running' || activeTask.status === 'queued';
-  const statusLabel =
-    activeTask.status === 'running'
+  const isActive =
+    !isDevelopmentInputPreview &&
+    (activeTask.status === 'running' || activeTask.status === 'queued');
+  const statusLabel = isDevelopmentInputPreview
+    ? '待开始'
+    : activeTask.status === 'running'
       ? '正在执行'
       : activeTask.status === 'queued'
         ? '等待调度'
@@ -142,7 +176,9 @@ export function TaskMonitor() {
         <section className="task-monitor-hero" aria-labelledby="task-monitor-title">
           <header>
             <div>
-              <p className="step-label">LIVE TASK MONITOR</p>
+              <p className="step-label">
+                {isDevelopmentInputPreview ? 'INPUT SOURCE PREVIEW' : 'LIVE TASK MONITOR'}
+              </p>
               <h2 id="task-monitor-title">{activeTask.title}</h2>
             </div>
             <div className="task-monitor-heading-actions">

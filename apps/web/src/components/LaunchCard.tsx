@@ -1,14 +1,11 @@
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   Files,
   FolderOutput,
   Play,
   Settings2,
-  Trash2,
-  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -17,13 +14,6 @@ import { getModelLabel } from '../data/models';
 import { formatMediaDuration, summarizeInputDurations } from '../state/mediaDuration';
 import { useWorkspace } from '../state/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
-
-function sourceBadge(path: string, kind: 'file' | 'directory'): string {
-  if (kind === 'directory') return 'DIR';
-  const name = path.split(/[/\\]/).at(-1) ?? path;
-  const extension = name.includes('.') ? name.split('.').at(-1) : 'MEDIA';
-  return (extension ?? 'MEDIA').slice(0, 5).toUpperCase();
-}
 
 function durationChecklistLabel(knownSeconds: number, unknownCount: number): string {
   const roundedSeconds = Math.max(0, Math.round(knownSeconds));
@@ -50,16 +40,9 @@ const HOST_STATUS_LABEL = {
   failed: '本地 Worker 连接失败',
 } as const;
 
-function openChecklistTarget(panelSelector: string, controlSelector: string): void {
+function focusChecklistTarget(panelSelector: string, controlSelector: string): void {
   const panel = document.querySelector<HTMLElement>(panelSelector);
   if (panel === null) return;
-
-  if (typeof panel.scrollIntoView === 'function') {
-    panel.scrollIntoView({
-      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      block: 'center',
-    });
-  }
   panel.querySelector<HTMLElement>(controlSelector)?.focus({ preventScroll: true });
 }
 
@@ -69,13 +52,13 @@ export function LaunchCard() {
   const overrides = useWorkspace((state) => state.overrides);
   const parameters = useWorkspace((state) => state.parameters);
   const startTask = useWorkspace((state) => state.startTask);
-  const removeInput = useWorkspace((state) => state.removeInput);
-  const clearInputs = useWorkspace((state) => state.clearInputs);
   const hostStatus = useWorkspace((state) => state.hostStatus);
   const startingTask = useWorkspace((state) => state.startingTask);
   const output = useWorkspace((state) => state.output);
   const profileMode = useWorkspace((state) => state.profileMode);
   const activeView = useWorkspace((state) => state.activeView);
+  const setActiveView = useWorkspace((state) => state.setActiveView);
+  const setTaskWorkspaceMode = useWorkspace((state) => state.setTaskWorkspaceMode);
   const selectedModelId = useWorkspace((state) => state.selectedModelId);
   const pendingOverwrite = useWorkspace((state) => state.pendingOverwrite);
   const pendingShutdownStart = useWorkspace((state) => state.pendingShutdownStart);
@@ -128,7 +111,7 @@ export function LaunchCard() {
           ? null
           : hostStatus.state !== 'ready'
             ? `${HOST_STATUS_LABEL[hostStatus.state]}，暂时无法执行任务。`
-            : '任务清单已更新，确认无误后开始本地处理。';
+            : null;
 
   const requestStart = useCallback(() => {
     if (!canStart) return;
@@ -174,8 +157,13 @@ export function LaunchCard() {
       profileMode === 'subtitle'
         ? '.subtitle-profile-panel'
         : '.preset-panel:not(.subtitle-profile-panel)';
-    openChecklistTarget(panelSelector, '.preset-card[aria-pressed="true"]');
+    focusChecklistTarget(panelSelector, '.preset-card[aria-pressed="true"]');
   }, [profileMode]);
+
+  const openInputMonitor = useCallback(() => {
+    setTaskWorkspaceMode('monitor');
+    setActiveView('tasks');
+  }, [setActiveView, setTaskWorkspaceMode]);
 
   return (
     <section className="launch-card" aria-labelledby="launch-title">
@@ -213,7 +201,9 @@ export function LaunchCard() {
           <button
             aria-label="前往输入来源配置"
             className={`selection-card preflight-item ${inputs.length === 0 || hasInvalidInput ? 'needs-attention' : ''}`}
-            onClick={() => openChecklistTarget('.source-panel', '.source-action-button.is-primary')}
+            onClick={() =>
+              focusChecklistTarget('.source-panel', '.source-action-button.is-primary')
+            }
             type="button"
           >
             <span className="preflight-icon" aria-hidden="true">
@@ -231,7 +221,7 @@ export function LaunchCard() {
           <button
             aria-label="前往输出策略配置"
             className={`selection-card preflight-item ${needsOutputRoot || !hasOutputTarget ? 'needs-attention' : ''}`}
-            onClick={() => openChecklistTarget('.output-panel', '.output-location-action')}
+            onClick={() => focusChecklistTarget('.output-panel', '.output-location-action')}
             type="button"
           >
             <span className="preflight-icon" aria-hidden="true">
@@ -253,7 +243,7 @@ export function LaunchCard() {
             aria-label="前往执行方式配置"
             className={`selection-card preflight-item ${hostStatus.state !== 'ready' ? 'needs-attention' : ''}`}
             onClick={() =>
-              openChecklistTarget(
+              focusChecklistTarget(
                 '.output-panel',
                 '.finish-action-options > button[aria-pressed="true"]',
               )
@@ -281,50 +271,15 @@ export function LaunchCard() {
         {readinessMessage && <p className="launch-summary">{readinessMessage}</p>}
 
         {inputs.length > 0 && (
-          <details className="preflight-sources">
-            <summary>
-              <span>查看并管理 {inputs.length} 项输入来源</span>
-              <ChevronDown aria-hidden="true" size={15} />
-            </summary>
-            <div aria-label="待转录输入来源" className="preflight-source-list">
-              <div className="preflight-source-tools">
-                <span>{mediaCount} 个媒体将按清单设置统一处理</span>
-                <button onClick={clearInputs} type="button">
-                  <Trash2 size={13} /> 清空输入
-                </button>
-              </div>
-              {inputs.map((source) => (
-                <div
-                  className={`preflight-source ${source.valid ? '' : 'is-invalid'}`}
-                  key={source.id}
-                >
-                  <span className="file-badge">{sourceBadge(source.path, source.kind)}</span>
-                  <span className="preflight-source-copy">
-                    <strong>{source.path.split(/[/\\]/).at(-1)}</strong>
-                    <small>
-                      {source.kind === 'directory' && source.mediaCount !== undefined
-                        ? `${source.mediaCount} 个媒体`
-                        : source.detail || '单个媒体'}
-                      {' · '}
-                      {source.unknownDurationCount && source.unknownDurationCount > 0
-                        ? source.durationSeconds !== undefined
-                          ? `已知 ${formatMediaDuration(source.durationSeconds)}，另有 ${source.unknownDurationCount} 个未知`
-                          : `${source.unknownDurationCount} 个时长未知`
-                        : formatMediaDuration(source.durationSeconds)}
-                    </small>
-                  </span>
-                  <button
-                    aria-label={`移除 ${source.path}`}
-                    className="icon-button"
-                    onClick={() => removeInput(source.id)}
-                    type="button"
-                  >
-                    <X size={15} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </details>
+          <button
+            aria-label={`查看 ${mediaCount} 个媒体文件进度`}
+            className="preflight-sources-link"
+            onClick={openInputMonitor}
+            type="button"
+          >
+            <span>查看媒体文件进度</span>
+            <ChevronRight aria-hidden="true" size={16} />
+          </button>
         )}
 
         <button

@@ -156,7 +156,7 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   await expect(page.getByLabel('执行前清单')).toContainText(
     '媒体信息2 个媒体2 项输入来源 · 09:35 · 575 秒',
   );
-  await expect(page.getByLabel('待转录输入来源')).toContainText('剪贴板课程 01.mp4');
+  await expect(page.getByRole('button', { name: '查看 2 个媒体文件进度' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: '粘贴 Windows 路径' })).toHaveCount(0);
 
   await page.locator('.subtitle-profile-panel .preset-card').first().click();
@@ -210,6 +210,7 @@ test('uses the same subtle press feedback for selectable cards', async ({ page }
     .locator('.preset-panel:not(.subtitle-profile-panel) .preset-card')
     .first();
   const preflightProfile = page.getByRole('button', { name: '前往版本与模型配置' });
+  const selectedFormat = page.locator('.output-format-list .output-format-option').first();
   const markdownFormat = page.locator('.output-format-list .output-format-option').nth(1);
   const finishAction = page.getByRole('button', { name: '无操作' });
 
@@ -224,6 +225,20 @@ test('uses the same subtle press feedback for selectable cards', async ({ page }
   await pressAndReadTransform(markdownFormat);
   await pressAndReadTransform(finishAction);
 
+  const selectedIcon = selectedFormat.locator('.output-format-code');
+  const selectedColors = await selectedIcon.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { backgroundColor: style.backgroundColor, color: style.color };
+  });
+  await selectedFormat.hover();
+  await expect
+    .poll(() =>
+      selectedIcon.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { backgroundColor: style.backgroundColor, color: style.color };
+      }),
+    )
+    .toEqual(selectedColors);
   await expect(markdownFormat.locator('.output-format-code')).toHaveCSS('outline-style', 'none');
 });
 
@@ -249,9 +264,11 @@ test('uses preflight cards as non-selecting configuration shortcuts', async ({ p
     },
   ];
 
+  await page.evaluate(() => window.scrollTo(0, 0));
   for (const { shortcut, target } of routes) {
-    await shortcut.click();
+    await shortcut.evaluate((element: HTMLButtonElement) => element.click());
     await expect(target).toBeFocused();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
     await expect(shortcut).not.toHaveClass(/is-selected/);
     await expect(shortcut).not.toHaveAttribute('aria-pressed');
   }
@@ -284,22 +301,60 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   ).resolves.toBe('13px');
   await expect(
     page
-      .locator('.output-section-heading')
+      .locator('.output-setting-card-heading small')
       .first()
       .evaluate((element) => getComputedStyle(element).fontSize),
   ).resolves.toBe('12px');
+  await expect(page.locator('.output-settings-grid > .output-setting-card')).toHaveCount(4);
+  await expect(
+    page
+      .locator('.output-settings-grid')
+      .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length),
+  ).resolves.toBe(1);
+  const outputCardOverflow = await page.locator('.output-setting-card').evaluateAll((cards) =>
+    cards.map((card) => ({
+      horizontal: card.scrollWidth - card.clientWidth,
+      vertical: card.scrollHeight - card.clientHeight,
+    })),
+  );
+  expect(
+    Math.max(...outputCardOverflow.map((overflow) => overflow.horizontal)),
+  ).toBeLessThanOrEqual(1);
+  expect(Math.max(...outputCardOverflow.map((overflow) => overflow.vertical))).toBeLessThanOrEqual(
+    1,
+  );
+  const conflictPolicy = page.getByRole('group', { name: '同名冲突策略' });
+  await expect(conflictPolicy.getByRole('button')).toHaveText(['覆盖', '跳过', '重命名']);
+  await expect(conflictPolicy.getByRole('button', { name: '覆盖' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await conflictPolicy.getByRole('button', { name: '跳过' }).click();
+  await expect(conflictPolicy.getByRole('button', { name: '跳过' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page.getByRole('button', { name: '选择媒体文件' })).toBeVisible();
   await expect(page.getByRole('button', { name: '添加文件夹' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: '粘贴 Windows 路径' })).toHaveCount(0);
   await page.getByRole('button', { name: '选择媒体文件' }).click();
-  await page.getByText('查看并管理 2 项输入来源').click();
-  await expect(page.getByText('P20-核心语法-整数类型.mp4', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('待转录输入来源')).toContainText('P20-核心语法-整数类型.mp4');
   await page.getByRole('button', { name: '添加文件夹' }).click();
   await expect(page.getByLabel('执行前清单')).toContainText(
     '媒体信息10 个媒体3 项输入来源 · 01:21:30 · 4,890 秒',
   );
-  await expect(page.getByLabel('待转录输入来源')).toContainText('8 个媒体 · 01:00:00');
+  await expect(page.getByText('任务清单已更新，确认无误后开始本地处理。')).toHaveCount(0);
+  await page.getByRole('button', { name: '查看 10 个媒体文件进度' }).click();
+  await expect(page.getByRole('heading', { name: '媒体文件进度' })).toBeVisible();
+  await expect(page.locator('.task-media-row')).toHaveCount(10);
+  await expect(page.getByText('P20-核心语法-整数类型.mp4', { exact: true })).toBeVisible();
+  await expect(page.getByText('七月产品会议-01.mp4', { exact: true })).toBeVisible();
+  await expect(page.getByText('七月产品会议-08.mp4', { exact: true })).toBeVisible();
+  await expect(page.getByText('已展开 10 个待处理媒体文件')).toBeVisible();
+  await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath('task-input-preview.png'),
+  });
+  await page.getByRole('button', { name: '转录工作台' }).click();
   await expect(page.getByRole('heading', { name: '媒体队列' })).toHaveCount(0);
 
   await expect(page.locator('.output-format-copy')).toHaveCount(0);
