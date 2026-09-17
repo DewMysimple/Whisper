@@ -7339,6 +7339,10 @@ output,
 
 /* Transcription workspace */
 .workspace-grid {
+  --workspace-card-grid-gap: 10px;
+  --workspace-card-row-height: calc(
+    (var(--ui-font-size) * 15) - 50px + (var(--content-card-bump) * 2.5)
+  );
   grid-template-columns: minmax(0, 1.58fr) minmax(360px, 0.82fr);
   gap: var(--space-5);
 }
@@ -7353,10 +7357,12 @@ output,
 }
 
 .workspace-grid .preset-panel:not(.subtitle-profile-panel) .preset-grid {
-  gap: var(--space-3);
+  grid-template-rows: repeat(2, var(--workspace-card-row-height));
+  gap: var(--workspace-card-grid-gap);
 }
 
 .workspace-grid .preset-panel:not(.subtitle-profile-panel) .preset-card {
+  height: 100%;
   min-height: 98px;
   padding: var(--space-4);
 }
@@ -7452,14 +7458,16 @@ output,
 .preflight-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-rows: repeat(2, var(--workspace-card-row-height));
+  gap: var(--workspace-card-grid-gap);
   margin-top: calc(17px + var(--content-space-bump));
 }
 
 .preflight-item {
   display: grid;
+  height: 100%;
   min-width: 0;
-  min-height: 138px;
+  min-height: 0;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   align-content: start;
@@ -7532,6 +7540,16 @@ output,
 .preflight-copy small.preflight-path {
   overflow-wrap: anywhere;
   white-space: normal;
+}
+
+.preflight-detail-lines {
+  display: grid;
+  gap: 2px;
+}
+
+.preflight-detail-lines > span {
+  display: block;
+  min-width: 0;
 }
 
 .preflight-sources {
@@ -7668,14 +7686,13 @@ output,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
   padding: 0;
   border: 0;
   color: inherit;
-  font-family: var(--mono);
-  font-size: max(9px, calc(var(--ui-font-size) - 5px));
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
   line-height: 1;
   white-space: nowrap;
   opacity: 0.76;

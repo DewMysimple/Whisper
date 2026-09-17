@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Files,
   FolderOutput,
-  Keyboard,
   Play,
   Settings2,
   Trash2,
@@ -209,8 +208,11 @@ export function LaunchCard() {
             <div className="preflight-copy">
               <span className="preflight-key">输出策略</span>
               <strong>{outputSummary || '尚未选择输出格式'}</strong>
-              <small className={usesCustomOutput ? 'preflight-path' : undefined}>
-                {outputLocationLabel} · {CONFLICT_POLICY_LABEL[output.conflictPolicy]}
+              <small
+                className={`preflight-detail-lines ${usesCustomOutput ? 'preflight-path' : ''}`}
+              >
+                <span>{outputLocationLabel}</span>
+                <span>{CONFLICT_POLICY_LABEL[output.conflictPolicy]}</span>
               </small>
             </div>
           </div>
@@ -228,9 +230,9 @@ export function LaunchCard() {
             <div className="preflight-copy">
               <span className="preflight-key">执行方式</span>
               <strong>{transcriptionTaskLabel(parameters.task)}</strong>
-              <small>
-                {finishAction === 'shutdown' ? '完成后关机' : '完成后无操作'} ·{' '}
-                {HOST_STATUS_LABEL[hostStatus.state]}
+              <small className="preflight-detail-lines">
+                <span>{finishAction === 'shutdown' ? '完成后关机' : '完成后无操作'}</span>
+                <span>{HOST_STATUS_LABEL[hostStatus.state]}</span>
               </small>
             </div>
           </div>
@@ -301,7 +303,7 @@ export function LaunchCard() {
             <ChevronRight size={17} />
           </span>
           <kbd aria-hidden="true" className="launch-shortcut">
-            <Keyboard size={13} /> CTRL + ENTER
+            CTRL + ENTER
           </kbd>
         </button>
       </div>

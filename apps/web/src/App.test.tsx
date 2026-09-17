@@ -55,7 +55,13 @@ describe('desktop workspace', () => {
     expect(checklist).toHaveTextContent('Large V3 Turbo');
     expect(checklist).toHaveTextContent('媒体信息0 个媒体0 项输入来源 · 00:00 · 0 秒');
     expect(checklist).toHaveTextContent('输出策略TXT跟随每个媒体文件');
-    expect(checklist).toHaveTextContent('执行方式原声转录完成后无操作 · 本地 Worker 已就绪');
+    expect(checklist).toHaveTextContent('执行方式原声转录完成后无操作本地 Worker 已就绪');
+    expect(within(checklist).getByText('跟随每个媒体文件', { exact: true })).toBeInTheDocument();
+    expect(
+      within(checklist).getByText('同名时执行前确认覆盖', { exact: true }),
+    ).toBeInTheDocument();
+    expect(within(checklist).getByText('完成后无操作', { exact: true })).toBeInTheDocument();
+    expect(within(checklist).getByText('本地 Worker 已就绪', { exact: true })).toBeInTheDocument();
     expect(
       screen.queryByText('添加媒体后，这里会汇总本次任务的完整配置。'),
     ).not.toBeInTheDocument();
@@ -74,7 +80,7 @@ describe('desktop workspace', () => {
     await user.click(screen.getByRole('checkbox', { name: '生成 Markdown 格式' }));
     expect(screen.getByText('跟随媒体')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '选择输出文件夹' }));
-    expect(screen.getByText('D:\\字幕项目\\2026-07')).toBeInTheDocument();
+    expect(screen.getAllByText('D:\\字幕项目\\2026-07')).toHaveLength(2);
     expect(screen.getByText('自选目录')).toBeInTheDocument();
     const txtCopy = screen.getByRole('checkbox', { name: '同时在媒体旁保存 TXT 副本' });
     const markdownCopy = screen.getByRole('checkbox', {

@@ -26,6 +26,8 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
     });
   const transcript = await measure();
   expect(transcript.source.height).toBeCloseTo(transcript.output.height, 1);
+  expect(transcript.preset.y).toBeCloseTo(transcript.launch.y, 1);
+  expect(transcript.preset.height).toBeCloseTo(transcript.launch.height, 1);
   const headingGaps = await page.evaluate(() => {
     const gap = (labelSelector: string, headingSelector: string) => {
       const label = document.querySelector(labelSelector)!.getBoundingClientRect();
@@ -60,37 +62,85 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
     const items = [...document.querySelectorAll('.preflight-item')].map((item) =>
       item.getBoundingClientRect().toJSON(),
     );
+    const presetItems = [
+      ...document.querySelectorAll('.preset-panel:not(.subtitle-profile-panel) .preset-card'),
+    ].map((item) => item.getBoundingClientRect().toJSON());
     const firstItem = document.querySelector('.preflight-item')!;
     const attentionItem = document.querySelector('.preflight-item.needs-attention')!;
     const icon = firstItem.querySelector('.preflight-icon')!.getBoundingClientRect();
     const copy = firstItem.querySelector('.preflight-copy')!.getBoundingClientRect();
+    const detailLines = [...document.querySelectorAll('.preflight-detail-lines')].map((detail) =>
+      [...detail.children].map((line) => line.getBoundingClientRect().toJSON()),
+    );
+    const detailLineHeight = Number.parseFloat(
+      getComputedStyle(document.querySelector('.preflight-detail-lines')!).lineHeight,
+    );
+    const submitLabel = document.querySelector('.launch-submit-label')!;
+    const shortcut = document.querySelector('.launch-shortcut')!;
     return {
       firstItemHeight: firstItem.getBoundingClientRect().height,
       listTop: list.getBoundingClientRect().top,
+      listBottom: list.getBoundingClientRect().bottom,
       presetGridTop: presetGrid.getBoundingClientRect().top,
+      presetGridBottom: presetGrid.getBoundingClientRect().bottom,
       listGap: Number.parseFloat(getComputedStyle(list).rowGap),
+      presetGridGap: Number.parseFloat(getComputedStyle(presetGrid).rowGap),
       columnCount: getComputedStyle(list).gridTemplateColumns.split(' ').length,
       itemBorderStyle: getComputedStyle(firstItem).borderTopStyle,
       itemRadius: Number.parseFloat(getComputedStyle(firstItem).borderTopLeftRadius),
       itemBackground: getComputedStyle(firstItem).backgroundColor,
       attentionBackground: getComputedStyle(attentionItem).backgroundColor,
       items,
+      presetItems,
       iconBottom: icon.bottom,
       copyTop: copy.top,
+      detailLines,
+      detailLineHeight,
+      submitLabelFontSize: Number.parseFloat(getComputedStyle(submitLabel).fontSize),
+      shortcutFontSize: Number.parseFloat(getComputedStyle(shortcut).fontSize),
+      shortcutIconCount: shortcut.querySelectorAll('svg').length,
     };
   });
-  expect(preflightLayout.firstItemHeight).toBeGreaterThanOrEqual(138);
+  expect(preflightLayout.firstItemHeight).toBeCloseTo(160, 1);
   expect(preflightLayout.listTop).toBeCloseTo(preflightLayout.presetGridTop, 1);
+  expect(preflightLayout.listBottom).toBeCloseTo(preflightLayout.presetGridBottom, 1);
   expect(preflightLayout.listGap).toBeGreaterThanOrEqual(8);
+  expect(preflightLayout.listGap).toBeCloseTo(preflightLayout.presetGridGap, 1);
   expect(preflightLayout.columnCount).toBe(2);
   expect(preflightLayout.items).toHaveLength(4);
+  expect(preflightLayout.presetItems).toHaveLength(4);
+  expect(
+    Math.max(...preflightLayout.items.map((item) => item.height)) -
+      Math.min(...preflightLayout.items.map((item) => item.height)),
+  ).toBeLessThan(0.1);
+  expect(
+    Math.max(...preflightLayout.items.map((item) => item.width)) -
+      Math.min(...preflightLayout.items.map((item) => item.width)),
+  ).toBeLessThan(0.1);
+  expect(
+    Math.max(...preflightLayout.presetItems.map((item) => item.height)) -
+      Math.min(...preflightLayout.presetItems.map((item) => item.height)),
+  ).toBeLessThan(0.1);
   expect(preflightLayout.items[0].top).toBeCloseTo(preflightLayout.items[1].top, 1);
   expect(preflightLayout.items[2].top).toBeCloseTo(preflightLayout.items[3].top, 1);
   expect(preflightLayout.items[2].top).toBeGreaterThan(preflightLayout.items[0].top);
   expect(preflightLayout.items[0].left).toBeCloseTo(preflightLayout.items[2].left, 1);
   expect(preflightLayout.items[1].left).toBeCloseTo(preflightLayout.items[3].left, 1);
   expect(preflightLayout.items[1].left).toBeGreaterThan(preflightLayout.items[0].left);
+  expect(preflightLayout.items[0].top).toBeCloseTo(preflightLayout.presetItems[0].top, 1);
+  expect(preflightLayout.items[0].bottom).toBeCloseTo(preflightLayout.presetItems[0].bottom, 1);
+  expect(preflightLayout.items[2].top).toBeCloseTo(preflightLayout.presetItems[2].top, 1);
+  expect(preflightLayout.items[2].bottom).toBeCloseTo(preflightLayout.presetItems[2].bottom, 1);
   expect(preflightLayout.copyTop).toBeGreaterThanOrEqual(preflightLayout.iconBottom);
+  expect(preflightLayout.detailLines).toHaveLength(2);
+  for (const lines of preflightLayout.detailLines) {
+    expect(lines).toHaveLength(2);
+    expect(lines[0].height).toBeCloseTo(preflightLayout.detailLineHeight, 1);
+    expect(lines[1].height).toBeCloseTo(preflightLayout.detailLineHeight, 1);
+    expect(lines[1].top).toBeGreaterThanOrEqual(lines[0].bottom);
+  }
+  expect(preflightLayout.shortcutFontSize).toBeCloseTo(preflightLayout.submitLabelFontSize, 1);
+  expect(preflightLayout.shortcutIconCount).toBe(0);
   expect(preflightLayout.itemBorderStyle).toBe('solid');
   expect(preflightLayout.itemRadius).toBeGreaterThanOrEqual(10);
   expect(preflightLayout.attentionBackground).not.toBe(preflightLayout.itemBackground);
@@ -223,7 +273,9 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   await page.getByRole('checkbox', { name: '生成 Markdown 格式' }).check();
   await expect(page.getByText('跟随媒体')).toBeVisible();
   await page.getByRole('button', { name: '选择输出文件夹' }).click();
-  await expect(page.getByText('D:\\字幕项目\\2026-07', { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel('文件输出').getByText('D:\\字幕项目\\2026-07', { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByText('Text、Markdown 文件直接写入所选目录，不创建格式子文件夹'),
   ).toBeVisible();
@@ -523,6 +575,20 @@ test('supports workspace navigation, theme and configuration export', async ({
   await page.getByRole('button', { name: '粘贴 Windows 路径' }).click();
   await expect(page.getByLabel('执行前清单')).toContainText('媒体信息2 个媒体');
   await expect(page.getByRole('button', { name: '休眠' })).toHaveCount(0);
+  const largeCardOverflow = await page
+    .locator('.preset-panel:not(.subtitle-profile-panel) .preset-card, .preflight-item')
+    .evaluateAll((cards) =>
+      cards.map((card) => ({
+        horizontal: card.scrollWidth - card.clientWidth,
+        vertical: card.scrollHeight - card.clientHeight,
+      })),
+    );
+  expect(Math.max(...largeCardOverflow.map((overflow) => overflow.horizontal))).toBeLessThanOrEqual(
+    1,
+  );
+  expect(Math.max(...largeCardOverflow.map((overflow) => overflow.vertical))).toBeLessThanOrEqual(
+    1,
+  );
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('workspace-large.png') });
