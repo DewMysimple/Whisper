@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { InputSource } from '../contracts/desktop';
-import {
-  createDevelopmentInputPreview,
-  DEVELOPMENT_INPUT_PREVIEW_ID,
-} from './developmentInputPreview';
+import { createInputTaskPreview, INPUT_TASK_PREVIEW_ID } from './inputTaskPreview';
 
-describe('development input preview', () => {
-  it('expands mock directories into individual pending media rows', () => {
+describe('input task preview', () => {
+  it('expands selected directories into individual pending media rows', () => {
     const inputs: InputSource[] = [
       {
         id: 'file-1',
@@ -28,10 +25,10 @@ describe('development input preview', () => {
       },
     ];
 
-    const preview = createDevelopmentInputPreview(inputs, 'cn2', 'large-v3-turbo');
+    const preview = createInputTaskPreview(inputs, 'cn2', 'large-v3-turbo');
 
     expect(preview).toMatchObject({
-      id: DEVELOPMENT_INPUT_PREVIEW_ID,
+      id: INPUT_TASK_PREVIEW_ID,
       title: '4 个待处理媒体',
       sourceCount: 4,
       status: 'queued',
@@ -50,6 +47,6 @@ describe('development input preview', () => {
   });
 
   it('leaves the previous task monitor untouched when no new inputs exist', () => {
-    expect(createDevelopmentInputPreview([], 'en_v1', 'large-v3-turbo')).toBeNull();
+    expect(createInputTaskPreview([], 'en_v1', 'large-v3-turbo')).toBeNull();
   });
 });

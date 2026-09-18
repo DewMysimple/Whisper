@@ -11,7 +11,7 @@ import {
   Type,
   Upload,
 } from 'lucide-react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import {
@@ -27,11 +27,20 @@ import {
 } from '../state/persistence';
 import { useWorkspace } from '../state/workspace';
 
-const ACCENTS: Array<{ id: Exclude<AccentPreset, 'custom'>; label: string; color: string }> = [
-  { id: 'orange', label: '橙色', color: '#FF5B04' },
-  { id: 'blue', label: '蓝色', color: '#3478C7' },
-  { id: 'green', label: '绿色', color: '#16845F' },
-  { id: 'purple', label: '紫色', color: '#6E5AE6' },
+const ACCENT_PALETTE: Array<{
+  id: string;
+  preset?: Exclude<AccentPreset, 'custom'>;
+  label: string;
+  color: string;
+}> = [
+  { id: 'orange', preset: 'orange', label: '橙色', color: '#FF5B04' },
+  { id: 'blue', preset: 'blue', label: '蓝色', color: '#3478C7' },
+  { id: 'green', preset: 'green', label: '绿色', color: '#16845F' },
+  { id: 'purple', preset: 'purple', label: '紫色', color: '#6E5AE6' },
+  { id: 'coral', label: '珊瑚红', color: '#E5484D' },
+  { id: 'magenta', label: '洋红', color: '#B44BC8' },
+  { id: 'gold', label: '琥珀金', color: '#8A6414' },
+  { id: 'graphite', label: '石墨灰', color: '#495057' },
 ];
 
 const UI_FONTS: Array<{ id: UiFontFamily; label: string }> = [
@@ -61,17 +70,6 @@ const THEMES = [
     id: 'dark',
     label: '深色',
   },
-] as const;
-
-const CUSTOM_COLOR_SUGGESTIONS = [
-  '#FF5B04',
-  '#E5484D',
-  '#B44BC8',
-  '#6E5AE6',
-  '#3478C7',
-  '#16845F',
-  '#8A6414',
-  '#495057',
 ] as const;
 
 function RoundedSelect<T extends string>({
@@ -162,10 +160,64 @@ function rgbToHex(channels: [number, number, number]): string {
   return `#${channels.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
 }
 
+interface HsvColor {
+  h: number;
+  s: number;
+  v: number;
+}
+
+function rgbToHsv([red, green, blue]: [number, number, number]): HsvColor {
+  const r = red / 255;
+  const g = green / 255;
+  const b = blue / 255;
+  const maximum = Math.max(r, g, b);
+  const minimum = Math.min(r, g, b);
+  const delta = maximum - minimum;
+  let hue = 0;
+
+  if (delta !== 0) {
+    if (maximum === r) hue = 60 * (((g - b) / delta) % 6);
+    else if (maximum === g) hue = 60 * ((b - r) / delta + 2);
+    else hue = 60 * ((r - g) / delta + 4);
+  }
+
+  return {
+    h: hue < 0 ? hue + 360 : hue,
+    s: maximum === 0 ? 0 : delta / maximum,
+    v: maximum,
+  };
+}
+
+function hsvToRgb({ h, s, v }: HsvColor): [number, number, number] {
+  const normalizedHue = ((h % 360) + 360) % 360;
+  const chroma = v * s;
+  const secondary = chroma * (1 - Math.abs(((normalizedHue / 60) % 2) - 1));
+  const match = v - chroma;
+  let channels: [number, number, number];
+
+  if (normalizedHue < 60) channels = [chroma, secondary, 0];
+  else if (normalizedHue < 120) channels = [secondary, chroma, 0];
+  else if (normalizedHue < 180) channels = [0, chroma, secondary];
+  else if (normalizedHue < 240) channels = [0, secondary, chroma];
+  else if (normalizedHue < 300) channels = [secondary, 0, chroma];
+  else channels = [chroma, 0, secondary];
+
+  return channels.map((channel) => Math.round((channel + match) * 255)) as [number, number, number];
+}
+
 function CustomColorPicker({ onChange, value }: { onChange(value: string): void; value: string }) {
   const [open, setOpen] = useState(false);
+  const [hue, setHue] = useState(() => rgbToHsv(hexToRgb(value)).h);
   const containerRef = useRef<HTMLDivElement>(null);
+  const saturationRef = useRef<HTMLDivElement>(null);
   const channels = hexToRgb(value);
+  const colorHsv = rgbToHsv(channels);
+  const hsv = { ...colorHsv, h: hue };
+
+  useEffect(() => {
+    const nextColor = rgbToHsv(hexToRgb(value));
+    if (nextColor.s > 0) setHue(nextColor.h);
+  }, [value]);
 
   useEffect(() => {
     if (!open) return;
@@ -192,6 +244,26 @@ function CustomColorPicker({ onChange, value }: { onChange(value: string): void;
     onChange(rgbToHex(nextChannels));
   };
 
+  const updateHsv = (nextColor: Partial<HsvColor>) => {
+    onChange(rgbToHex(hsvToRgb({ ...hsv, ...nextColor })));
+  };
+
+  const updateSaturationValue = (clientX: number, clientY: number) => {
+    const bounds = saturationRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const saturation = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width));
+    const brightness = 1 - Math.min(1, Math.max(0, (clientY - bounds.top) / bounds.height));
+    updateHsv({ s: saturation, v: brightness });
+  };
+
+  const handleSaturationPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.type === 'pointerdown') event.currentTarget.setPointerCapture(event.pointerId);
+    if (event.type === 'pointermove' && !event.currentTarget.hasPointerCapture(event.pointerId)) {
+      return;
+    }
+    updateSaturationValue(event.clientX, event.clientY);
+  };
+
   return (
     <div className={`custom-color-picker ${open ? 'is-open' : ''}`} ref={containerRef}>
       <button
@@ -214,17 +286,70 @@ function CustomColorPicker({ onChange, value }: { onChange(value: string): void;
               <small>{value}</small>
             </div>
           </div>
-          <div className="custom-color-suggestions" role="group" aria-label="常用强调色">
-            {CUSTOM_COLOR_SUGGESTIONS.map((color) => (
-              <button
-                aria-label={`选择颜色 ${color}`}
-                aria-pressed={color === value}
-                key={color}
-                onClick={() => onChange(color)}
-                style={{ '--custom-color': color } as CSSProperties}
-                type="button"
-              />
-            ))}
+          <div
+            aria-label="调节饱和度与明度"
+            aria-valuemax={100}
+            aria-valuemin={0}
+            aria-valuenow={Math.round(hsv.s * 100)}
+            aria-valuetext={`饱和度 ${Math.round(hsv.s * 100)}%，明度 ${Math.round(hsv.v * 100)}%`}
+            className="custom-color-saturation"
+            onKeyDown={(event) => {
+              const step = event.shiftKey ? 0.1 : 0.02;
+              if (event.key === 'ArrowLeft') updateHsv({ s: Math.max(0, hsv.s - step) });
+              else if (event.key === 'ArrowRight') updateHsv({ s: Math.min(1, hsv.s + step) });
+              else if (event.key === 'ArrowDown') updateHsv({ v: Math.max(0, hsv.v - step) });
+              else if (event.key === 'ArrowUp') updateHsv({ v: Math.min(1, hsv.v + step) });
+              else return;
+              event.preventDefault();
+            }}
+            onPointerDown={handleSaturationPointer}
+            onPointerMove={handleSaturationPointer}
+            ref={saturationRef}
+            role="slider"
+            style={
+              {
+                '--picker-hue': `hsl(${hue} 100% 50%)`,
+                '--picker-x': `${hsv.s * 100}%`,
+                '--picker-y': `${(1 - hsv.v) * 100}%`,
+              } as CSSProperties
+            }
+            tabIndex={0}
+          >
+            <span className="custom-color-saturation-thumb" />
+          </div>
+          <div className="custom-color-slider-row">
+            <span className="custom-color-slider-icon" aria-hidden="true" />
+            <input
+              aria-label="自定义强调色色相"
+              className="custom-color-hue"
+              max={360}
+              min={0}
+              onChange={(event) => {
+                const nextHue = event.currentTarget.valueAsNumber;
+                setHue(nextHue);
+                updateHsv({ h: nextHue });
+              }}
+              type="range"
+              value={Math.round(hue)}
+            />
+          </div>
+          <div className="custom-color-slider-row custom-color-alpha-row">
+            <span className="custom-color-checker" aria-hidden="true" />
+            <div
+              aria-label="强调色不透明度固定为 100%"
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={100}
+              className="custom-color-alpha"
+              role="meter"
+              style={{ '--custom-color': value } as CSSProperties}
+            >
+              <span />
+            </div>
+          </div>
+          <div className="custom-color-channel-heading">
+            <strong>RGB</strong>
+            <span>不透明度固定为 100%</span>
           </div>
           <div className="custom-color-channels">
             {(['R', 'G', 'B'] as const).map((channel, channelIndex) => (
@@ -242,6 +367,9 @@ function CustomColorPicker({ onChange, value }: { onChange(value: string): void;
                 />
               </label>
             ))}
+            <div aria-label="不透明度 100%" className="custom-color-opacity-value">
+              100%
+            </div>
           </div>
         </div>
       )}
@@ -578,61 +706,76 @@ export function SettingsView() {
           </fieldset>
 
           <div className="accent-setting-row">
-            <div className="accent-swatches" role="group" aria-label="强调色预设">
-              {ACCENTS.map((accent) => (
-                <button
-                  aria-label={`${accent.label}强调色`}
-                  aria-pressed={accentPreset === accent.id}
-                  key={accent.id}
-                  onClick={() => setAccentPreset(accent.id)}
-                  style={{ '--swatch': accent.color } as CSSProperties}
-                  type="button"
-                >
-                  <span />
-                </button>
-              ))}
+            <div className="accent-palette-heading">
+              <div>
+                <strong>工作台调色板</strong>
+                <small>均已适配浅色与深色界面；成功、警告和错误色保持固定语义。</small>
+              </div>
+              <span>{ACCENT_PALETTE.length} 组推荐色</span>
+            </div>
+            <div className="accent-palette-grid" role="group" aria-label="工作台强调色调色板">
+              {ACCENT_PALETTE.map((accent) => {
+                const selected = accent.preset
+                  ? accentPreset === accent.preset
+                  : accentPreset === 'custom' && customAccentColor === accent.color;
+                return (
+                  <button
+                    aria-label={`${accent.label}强调色`}
+                    aria-pressed={selected}
+                    className="accent-palette-option"
+                    key={accent.id}
+                    onClick={() =>
+                      accent.preset
+                        ? setAccentPreset(accent.preset)
+                        : setCustomAccentColor(accent.color)
+                    }
+                    style={{ '--swatch': accent.color } as CSSProperties}
+                    type="button"
+                  >
+                    <span className="accent-palette-swatch" aria-hidden="true">
+                      {selected && <Check size={14} />}
+                    </span>
+                    <span className="accent-palette-copy">
+                      <strong>{accent.label}</strong>
+                      <small>{accent.color}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="accent-custom-row">
+              <div className="custom-color-control">
+                <span>自定义颜色</span>
+                <CustomColorPicker
+                  onChange={(value) => {
+                    setAccentDraft(value);
+                    setCustomAccentColor(value);
+                  }}
+                  value={normalizedAccent ?? customAccentColor}
+                />
+                <input
+                  aria-describedby={normalizedAccent === null ? 'accent-color-error' : undefined}
+                  aria-invalid={normalizedAccent === null}
+                  aria-label="自定义强调色十六进制"
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setAccentDraft(value);
+                    const normalized = normalizeHexColor(value);
+                    if (normalized !== null) setCustomAccentColor(normalized);
+                  }}
+                  spellCheck={false}
+                  value={accentDraft}
+                />
+              </div>
               <button
-                aria-label="自定义强调色"
-                aria-pressed={accentPreset === 'custom'}
-                className="is-custom"
-                onClick={() => setAccentPreset('custom')}
-                style={{ '--swatch': customAccentColor } as CSSProperties}
+                className="quiet-button restore-orange"
+                disabled={accentPreset === 'orange'}
+                onClick={() => setAccentPreset('orange')}
                 type="button"
               >
-                <span />
+                <RotateCcw size={14} /> 恢复橙色
               </button>
             </div>
-            <div className="custom-color-control">
-              <span>自定义</span>
-              <CustomColorPicker
-                onChange={(value) => {
-                  setAccentDraft(value);
-                  setCustomAccentColor(value);
-                }}
-                value={normalizedAccent ?? customAccentColor}
-              />
-              <input
-                aria-describedby={normalizedAccent === null ? 'accent-color-error' : undefined}
-                aria-invalid={normalizedAccent === null}
-                aria-label="自定义强调色十六进制"
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setAccentDraft(value);
-                  const normalized = normalizeHexColor(value);
-                  if (normalized !== null) setCustomAccentColor(normalized);
-                }}
-                spellCheck={false}
-                value={accentDraft}
-              />
-            </div>
-            <button
-              className="quiet-button restore-orange"
-              disabled={accentPreset === 'orange'}
-              onClick={() => setAccentPreset('orange')}
-              type="button"
-            >
-              <RotateCcw size={14} /> 恢复橙色
-            </button>
           </div>
           {normalizedAccent === null && (
             <p className="appearance-inline-error" id="accent-color-error" role="alert">

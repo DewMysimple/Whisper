@@ -19,7 +19,7 @@ const COMPLETED_TASK: TaskSnapshot = {
 
 const INPUT_PREVIEW: TaskSnapshot = {
   ...COMPLETED_TASK,
-  id: 'development-input-preview',
+  id: 'input-task-preview',
   title: '新的待处理输入',
   status: 'queued',
   progress: 0,
@@ -33,7 +33,7 @@ describe('task monitor target', () => {
     );
   });
 
-  it('switches to the latest development input preview without replacing task history', () => {
+  it('switches to the latest selected-input preview without replacing task history', () => {
     expect(resolveTaskMonitorTarget([COMPLETED_TASK], COMPLETED_TASK.id, INPUT_PREVIEW)).toBe(
       INPUT_PREVIEW,
     );

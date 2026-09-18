@@ -333,6 +333,29 @@ test('uses preflight cards as non-selecting configuration shortcuts', async ({ p
   }
 });
 
+test('keeps the selected-media preview synchronized and clearable from both workspaces', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: '选择媒体文件' }).click();
+  await expect(page.getByRole('button', { name: '查看 2 个媒体文件进度' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '清除任务清单中的 2 个媒体文件' })).toBeVisible();
+
+  await page.getByRole('button', { name: '清除任务清单中的 2 个媒体文件' }).click();
+  await expect(page.getByRole('button', { name: /查看 \d+ 个媒体文件进度/ })).toHaveCount(0);
+
+  await page.getByRole('button', { name: '选择媒体文件' }).click();
+  await page.getByRole('button', { name: '查看 2 个媒体文件进度' }).click();
+  await expect(page.getByRole('heading', { name: '任务监控与记录' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '媒体文件进度' })).toBeVisible();
+  await expect(page.getByText('P20-核心语法-整数类型.mp4', { exact: true })).toBeVisible();
+  await expect(page.getByText('Product Interview 07.mkv', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '清除清单' })).toBeVisible();
+
+  await page.getByRole('button', { name: '清除清单' }).click();
+  await expect(page.getByRole('button', { name: '清除清单' })).toHaveCount(0);
+  await expect(page.getByText('P20-核心语法-整数类型.mp4', { exact: true })).toHaveCount(0);
+});
+
 test('does not expose the retired model switching workbench', async ({ page }) => {
   const navigation = page.getByRole('navigation', { name: '主导航' });
   await expect(navigation.getByRole('button', { name: '模型切换' })).toHaveCount(0);
@@ -617,6 +640,9 @@ test('supports workspace navigation, theme and configuration export', async ({
     'aria-pressed',
     'true',
   );
+  const accentPalette = page.getByRole('group', { name: '工作台强调色调色板' });
+  await expect(accentPalette.getByRole('button')).toHaveCount(8);
+  await expect(page.getByText('工作台调色板')).toBeVisible();
   await expect(page.getByRole('button', { name: '恢复橙色' })).toBeDisabled();
   await page.getByRole('button', { name: '蓝色强调色' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-accent-preset', 'blue');
@@ -646,6 +672,11 @@ test('supports workspace navigation, theme and configuration export', async ({
     path: testInfo.outputPath('settings-purple-accent.png'),
   });
   await expect(page.getByRole('button', { name: '恢复橙色' })).toBeEnabled();
+  await page.getByRole('button', { name: '珊瑚红强调色' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-accent-preset', 'custom');
+  await expect(
+    page.locator('html').evaluate((element) => element.style.getPropertyValue('--accent')),
+  ).resolves.toBe('#E5484D');
   await page.getByRole('textbox', { name: '自定义强调色十六进制' }).fill('#12345');
   await expect(page.getByRole('alert')).toContainText('请输入完整的十六进制颜色');
   await page.getByRole('textbox', { name: '自定义强调色十六进制' }).fill('#2A7FFF');
@@ -656,9 +687,21 @@ test('supports workspace navigation, theme and configuration export', async ({
   await page.getByRole('button', { name: '恢复橙色' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-accent-preset', 'orange');
   await page.getByRole('button', { name: '打开自定义强调色编辑器' }).click();
-  await expect(page.getByRole('dialog', { name: '自定义强调色编辑器' })).toBeVisible();
-  await page.getByRole('button', { name: '选择颜色 #6E5AE6' }).click();
+  const customColorDialog = page.getByRole('dialog', { name: '自定义强调色编辑器' });
+  await expect(customColorDialog).toBeVisible();
+  await expect(customColorDialog.getByRole('slider', { name: '调节饱和度与明度' })).toBeVisible();
+  await expect(customColorDialog.getByRole('slider', { name: '自定义强调色色相' })).toBeVisible();
+  await expect(
+    customColorDialog.getByRole('meter', { name: '强调色不透明度固定为 100%' }),
+  ).toHaveAttribute('aria-valuenow', '100');
+  await expect(customColorDialog.getByRole('spinbutton')).toHaveCount(3);
+  await customColorDialog.getByRole('slider', { name: '自定义强调色色相' }).press('ArrowRight');
   await expect(page.locator('html')).toHaveAttribute('data-accent-preset', 'custom');
+  await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath('settings-custom-picker.png'),
+  });
+  await page.keyboard.press('Escape');
   const uiFontControl = page.getByRole('combobox', { name: 'UI 字体' });
   await uiFontControl.evaluate((element) => element.scrollIntoView({ block: 'center' }));
   await uiFontControl.click();
@@ -758,7 +801,7 @@ test('supports workspace navigation, theme and configuration export', async ({
       .locator('.task-summary-card')
       .first()
       .evaluate((element) => getComputedStyle(element).padding),
-  ).resolves.toBe('14px 18px');
+  ).resolves.toBe('15px 20px');
   await page.getByRole('button', { name: '偏好设置' }).click();
   await page.getByRole('button', { name: '增大工作台内容字号' }).click();
   await page.getByRole('button', { name: '增大工作台内容字号' }).click();
@@ -884,15 +927,33 @@ test('supports workspace navigation, theme and configuration export', async ({
   ).resolves.toBeLessThan(1);
   await expect(
     page.locator('.task-history-shell').evaluate((shell) => {
+      const heading = shell.querySelector('.panel-heading')!.getBoundingClientRect();
+      const controls = shell.querySelector('.task-control-deck')!.getBoundingClientRect();
       const summary = shell.querySelector('.task-summary-band')!.getBoundingClientRect();
-      const panel = shell.querySelector('.task-panel.is-expanded')!.getBoundingClientRect();
+      const manager = shell.querySelector('.task-history-manager')!.getBoundingClientRect();
+      const controlStyle = getComputedStyle(shell.querySelector('.task-control-deck')!);
+      const managerStyle = getComputedStyle(shell.querySelector('.task-history-manager')!);
       return {
-        gap: Math.abs(panel.top - summary.bottom),
-        overflow: getComputedStyle(shell).overflow,
-        radius: Number.parseFloat(getComputedStyle(shell).borderTopLeftRadius),
+        controlsFollowHeading: controls.top >= heading.bottom,
+        summaryFollowsControls: summary.top >= controls.bottom,
+        summaryClosesManager: Math.abs(manager.bottom - summary.bottom) <= 1,
+        controlBackground: controlStyle.backgroundColor,
+        controlBorder: controlStyle.borderTopStyle,
+        controlPadding: controlStyle.padding,
+        overflow: managerStyle.overflow,
+        radius: Number.parseFloat(managerStyle.borderBottomLeftRadius),
       };
     }),
-  ).resolves.toEqual({ gap: 0, overflow: 'hidden', radius: 20 });
+  ).resolves.toEqual({
+    controlsFollowHeading: true,
+    summaryFollowsControls: true,
+    summaryClosesManager: true,
+    controlBackground: 'rgba(0, 0, 0, 0)',
+    controlBorder: 'none',
+    controlPadding: '0px',
+    overflow: 'hidden',
+    radius: 20,
+  });
   await expect(
     page
       .locator('.task-summary-card strong')
@@ -904,7 +965,7 @@ test('supports workspace navigation, theme and configuration export', async ({
       .locator('.task-summary-card')
       .first()
       .evaluate((element) => getComputedStyle(element).padding),
-  ).resolves.toBe('14px 18px');
+  ).resolves.toBe('15px 20px');
   await page.getByRole('searchbox', { name: '搜索任务' }).fill('Interview');
   await expect(page.getByText('Product Interview 06.mkv', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '清除任务搜索' }).click();
@@ -984,6 +1045,10 @@ test('monitors the active task and manages dated history in a responsive grid', 
   await expect(page.locator('.task-monitor-progress-card')).toHaveCount(2);
   await expect(page.locator('.task-monitor-support-grid')).toContainText('已生成 0 个文件');
   await expect(page.getByRole('heading', { name: '媒体文件进度' })).toBeVisible();
+  await expect(page.locator('.task-media-row')).toHaveCount(2);
+  const mediaList = page.locator('.task-media-list');
+  await expect(mediaList.getByText('设计评审会议.m4a', { exact: true })).toBeVisible();
+  await expect(mediaList.getByText('设计评审补充.wav', { exact: true })).toBeVisible();
   await expect(page.locator('.task-monitor-stop')).toBeVisible();
   await expect(page.locator('.task-monitor-hero')).not.toContainText('GPU 转录中');
   await expect(

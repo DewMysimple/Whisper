@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -255,6 +255,32 @@ describe('desktop workspace', () => {
     expect(screen.getByText('剪贴板课程 02.wav', { exact: true })).toBeInTheDocument();
   });
 
+  it('clears the selected media from either the checklist or its live monitor', async () => {
+    const user = userEvent.setup();
+    useWorkspace.setState({ activeView: 'workspace', inputs: [], taskWorkspaceMode: 'history' });
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
+    expect(useWorkspace.getState().inputs).toHaveLength(2);
+    expect(
+      screen.getByRole('button', { name: '清除任务清单中的 2 个媒体文件' }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '查看 2 个媒体文件进度' }));
+    expect(screen.getByRole('button', { name: '清除清单' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '清除清单' }));
+    expect(useWorkspace.getState().inputs).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: '清除清单' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '转录工作台' }));
+    await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
+    await user.click(screen.getByRole('button', { name: '清除任务清单中的 2 个媒体文件' }));
+    expect(useWorkspace.getState().inputs).toHaveLength(0);
+    expect(
+      screen.queryByRole('button', { name: /查看 \d+ 个媒体文件进度/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it('routes Ctrl+Enter through the standard preset confirmation', async () => {
     const user = userEvent.setup();
     useWorkspace.setState({
@@ -431,9 +457,16 @@ describe('desktop workspace', () => {
     await user.click(screen.getByRole('button', { name: '恢复橙色' }));
     expect(document.documentElement).toHaveAttribute('data-accent-preset', 'orange');
     await user.click(screen.getByRole('button', { name: '打开自定义强调色编辑器' }));
-    expect(screen.getByRole('dialog', { name: '自定义强调色编辑器' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '选择颜色 #6E5AE6' }));
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#6E5AE6');
+    const customColorDialog = screen.getByRole('dialog', { name: '自定义强调色编辑器' });
+    expect(customColorDialog).toBeInTheDocument();
+    expect(
+      within(customColorDialog).getByRole('slider', { name: '调节饱和度与明度' }),
+    ).toBeInTheDocument();
+    expect(within(customColorDialog).getAllByRole('spinbutton')).toHaveLength(3);
+    const redChannel = within(customColorDialog).getByRole('spinbutton', { name: 'R 通道' });
+    fireEvent.change(redChannel, { target: { value: '240' } });
+    expect(document.documentElement).toHaveAttribute('data-accent-preset', 'custom');
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#F05B04');
     await user.click(screen.getByRole('combobox', { name: 'UI 字体' }));
     await user.click(screen.getByRole('option', { name: 'DengXian' }));
     expect(document.documentElement.style.getPropertyValue('--ui-font-family')).toContain(

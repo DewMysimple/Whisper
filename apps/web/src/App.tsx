@@ -128,15 +128,9 @@ function TasksView() {
   const inputs = useWorkspace((state) => state.inputs);
   const mode = useWorkspace((state) => state.taskWorkspaceMode);
   const setMode = useWorkspace((state) => state.setTaskWorkspaceMode);
-  const taskFilter = useWorkspace((state) => state.taskFilter);
-  const setTaskFilter = useWorkspace((state) => state.setTaskFilter);
   const active = tasks.filter(
     (task) => task.status === 'queued' || task.status === 'running',
   ).length;
-  const completed = tasks.filter(
-    (task) => task.status === 'completed' && task.outputAvailability !== 'missing',
-  ).length;
-  const attention = tasks.filter((task) => task.status === 'failed').length;
   const developmentPreviewCount =
     desktopBridge.mode === 'mock'
       ? inputs.reduce((total, input) => total + (input.mediaCount ?? 1), 0)
@@ -180,48 +174,6 @@ function TasksView() {
         <TaskMonitor />
       ) : (
         <div className="task-history-shell">
-          <div className="task-summary task-summary-band" aria-label="历史任务筛选">
-            <button
-              aria-pressed={taskFilter === 'all'}
-              className={`task-summary-card ${taskFilter === 'all' ? 'is-active' : ''}`}
-              onClick={() => setTaskFilter('all')}
-              type="button"
-            >
-              <small>全部任务</small>
-              <strong>{tasks.length}</strong>
-              <span>本地历史快照</span>
-            </button>
-            <button
-              aria-pressed={taskFilter === 'active'}
-              className={`task-summary-card ${taskFilter === 'active' ? 'is-active' : ''}`}
-              onClick={() => setTaskFilter('active')}
-              type="button"
-            >
-              <small>正在运行</small>
-              <strong>{active}</strong>
-              <span>排队或转录中</span>
-            </button>
-            <button
-              aria-pressed={taskFilter === 'completed'}
-              className={`task-summary-card ${taskFilter === 'completed' ? 'is-active' : ''}`}
-              onClick={() => setTaskFilter('completed')}
-              type="button"
-            >
-              <small>已完成</small>
-              <strong>{completed}</strong>
-              <span>本地输出已生成</span>
-            </button>
-            <button
-              aria-pressed={taskFilter === 'failed'}
-              className={`task-summary-card ${taskFilter === 'failed' ? 'is-active' : ''}`}
-              onClick={() => setTaskFilter('failed')}
-              type="button"
-            >
-              <small>需要处理</small>
-              <strong>{attention}</strong>
-              <span>转录失败任务</span>
-            </button>
-          </div>
           <TaskList expanded />
         </div>
       )}

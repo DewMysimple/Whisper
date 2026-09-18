@@ -6,6 +6,7 @@ import {
   FolderOutput,
   Play,
   Settings2,
+  Trash2,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -52,6 +53,7 @@ export function LaunchCard() {
   const overrides = useWorkspace((state) => state.overrides);
   const parameters = useWorkspace((state) => state.parameters);
   const startTask = useWorkspace((state) => state.startTask);
+  const clearInputs = useWorkspace((state) => state.clearInputs);
   const hostStatus = useWorkspace((state) => state.hostStatus);
   const startingTask = useWorkspace((state) => state.startingTask);
   const output = useWorkspace((state) => state.output);
@@ -173,10 +175,23 @@ export function LaunchCard() {
             <p className="step-label">PRE-FLIGHT CHECKLIST</p>
             <h2 id="launch-title">{inputs.length > 0 ? '任务清单已就绪' : '等待输入来源'}</h2>
           </div>
-          <span className={`preflight-status ${canStart ? 'is-ready' : ''}`}>
-            {canStart ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
-            {checklistStatus}
-          </span>
+          <div className="launch-heading-actions">
+            {inputs.length > 0 && (
+              <button
+                aria-label={`清除任务清单中的 ${mediaCount} 个媒体文件`}
+                className="preflight-clear"
+                onClick={clearInputs}
+                title="只清空当前任务清单，不删除本机媒体文件"
+                type="button"
+              >
+                <Trash2 size={14} /> 清除
+              </button>
+            )}
+            <span className={`preflight-status ${canStart ? 'is-ready' : ''}`}>
+              {canStart ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+              {checklistStatus}
+            </span>
+          </div>
         </div>
         <div aria-label="执行前清单" className="preflight-list">
           <button

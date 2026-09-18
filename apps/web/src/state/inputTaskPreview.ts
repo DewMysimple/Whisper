@@ -6,7 +6,7 @@ import type {
   TaskSnapshot,
 } from '../contracts/desktop';
 
-export const DEVELOPMENT_INPUT_PREVIEW_ID = 'development-input-preview';
+export const INPUT_TASK_PREVIEW_ID = 'input-task-preview';
 
 function directoryPreviewPaths(source: InputSource): string[] {
   const count = Math.max(1, source.mediaCount ?? 1);
@@ -31,7 +31,7 @@ function previewMedia(source: InputSource): TaskMediaSnapshot[] {
   }));
 }
 
-export function createDevelopmentInputPreview(
+export function createInputTaskPreview(
   inputs: InputSource[],
   presetId: PresetId,
   modelId: ModelId,
@@ -45,7 +45,7 @@ export function createDevelopmentInputPreview(
       : `${mediaStates.length} 个待处理媒体`;
 
   return {
-    id: DEVELOPMENT_INPUT_PREVIEW_ID,
+    id: INPUT_TASK_PREVIEW_ID,
     title,
     sourceCount: mediaStates.length,
     presetId,

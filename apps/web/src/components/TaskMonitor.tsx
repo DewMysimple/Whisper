@@ -1,18 +1,17 @@
 import {
   Check,
   CircleDashed,
-  Clock3,
   FileAudio,
   FolderOpen,
   FolderTree,
   LoaderCircle,
   Radio,
   Square,
+  Trash2,
 } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { desktopBridge } from '../bridge';
 import type { TaskMediaSnapshot, TaskSnapshot } from '../contracts/desktop';
 import { getModelLabel } from '../data/models';
 import { getPreset } from '../data/presets';
@@ -24,10 +23,7 @@ import {
 import { formatTaskCreatedAt } from '../state/taskHistory';
 import { taskSourceSummary } from '../state/taskSourceSummary';
 import { formatTaskStage } from '../state/taskStage';
-import {
-  createDevelopmentInputPreview,
-  DEVELOPMENT_INPUT_PREVIEW_ID,
-} from '../state/developmentInputPreview';
+import { createInputTaskPreview, INPUT_TASK_PREVIEW_ID } from '../state/inputTaskPreview';
 import { useWorkspace } from '../state/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useAutoFollow } from './useAutoFollow';
@@ -43,6 +39,20 @@ const PROCESS_STEPS = [
 
 function fileName(path: string): string {
   return path.split(/[/\\]/).at(-1) ?? path;
+}
+
+function parentDirectory(path: string): string {
+  const parts = path.split(/[/\\]/);
+  parts.pop();
+  return parts.join('\\') || '本机媒体';
+}
+
+function monitorSourceSummary(task: TaskSnapshot): string | null {
+  const inputs = task.draft?.inputs ?? [];
+  if (inputs.length !== 1) return taskSourceSummary(task);
+  return inputs[0]?.kind === 'file'
+    ? `单个文件 · ${task.sourceCount} 个媒体文件`
+    : `文件夹输入 · ${task.sourceCount} 个媒体文件`;
 }
 
 function mediaStatusLabel(media: TaskMediaSnapshot): string {
@@ -63,12 +73,10 @@ function activeTaskFrom(tasks: TaskSnapshot[]): TaskSnapshot | undefined {
 export function resolveTaskMonitorTarget(
   tasks: TaskSnapshot[],
   monitoredTaskId: string | null,
-  developmentInputPreview: TaskSnapshot | null,
+  inputTaskPreview: TaskSnapshot | null,
 ): TaskSnapshot | undefined {
   return (
-    developmentInputPreview ??
-    tasks.find((task) => task.id === monitoredTaskId) ??
-    activeTaskFrom(tasks)
+    inputTaskPreview ?? tasks.find((task) => task.id === monitoredTaskId) ?? activeTaskFrom(tasks)
   );
 }
 
@@ -79,40 +87,56 @@ export function TaskMonitor() {
   const selectedModelId = useWorkspace((state) => state.selectedModelId);
   const monitoredTaskId = useWorkspace((state) => state.monitoredTaskId);
   const cancelTask = useWorkspace((state) => state.cancelTask);
+  const clearInputs = useWorkspace((state) => state.clearInputs);
   const openTaskOutputDirectory = useWorkspace((state) => state.openTaskOutputDirectory);
   const [terminationOpen, setTerminationOpen] = useState(false);
   const mediaRowRef = useRef<HTMLElement>(null);
   const reducedMotion = useReducedMotion();
-  const developmentInputPreview = useMemo(
-    () =>
-      desktopBridge.mode === 'mock'
-        ? createDevelopmentInputPreview(inputs, selectedPresetId, selectedModelId)
-        : null,
+  const inputTaskPreview = useMemo(
+    () => createInputTaskPreview(inputs, selectedPresetId, selectedModelId),
     [inputs, selectedModelId, selectedPresetId],
   );
-  const activeTask = resolveTaskMonitorTarget(tasks, monitoredTaskId, developmentInputPreview);
-  const isDevelopmentInputPreview = activeTask?.id === DEVELOPMENT_INPUT_PREVIEW_ID;
+  const activeTask = resolveTaskMonitorTarget(tasks, monitoredTaskId, inputTaskPreview);
+  const isInputTaskPreview = activeTask?.id === INPUT_TASK_PREVIEW_ID;
   const waitingCount = tasks.filter(
     (task) =>
       task.status === 'queued' &&
       task.id !== activeTask?.id &&
-      !isDevelopmentInputPreview &&
+      !isInputTaskPreview &&
       (activeTask?.status === 'running' || activeTask?.status === 'queued'),
   ).length;
+  const fallbackMediaPaths =
+    activeTask?.mediaPaths && activeTask.mediaPaths.length > 0
+      ? activeTask.mediaPaths
+      : (activeTask?.draft?.inputs.map((input) => input.path) ?? []);
+  const fallbackCurrentIndex =
+    activeTask?.currentMediaIndex ??
+    (activeTask?.status === 'running' && activeTask.progress > 0 && fallbackMediaPaths.length > 0
+      ? 1
+      : 0);
   const mediaStates: TaskMediaSnapshot[] =
-    activeTask?.mediaStates ??
-    (activeTask?.mediaPaths ?? []).map((path) => ({
-      path,
-      status: 'pending' as const,
-      progress: 0,
-      stage: '等待处理',
-      elapsedSeconds: 0,
-    }));
+    activeTask?.mediaStates && activeTask.mediaStates.length > 0
+      ? activeTask.mediaStates
+      : fallbackMediaPaths.map((path, index) => {
+          const position = index + 1;
+          const completed = activeTask?.status === 'completed' || position < fallbackCurrentIndex;
+          const running = activeTask?.status === 'running' && position === fallbackCurrentIndex;
+          return {
+            path,
+            status: completed ? 'completed' : running ? 'running' : 'pending',
+            progress: completed ? 100 : running ? null : 0,
+            stage: completed ? '已完成' : running ? activeTask.stage : '等待处理',
+            elapsedSeconds: 0,
+          };
+        });
   const runningMediaIndex = mediaStates.findIndex((media) => media.status === 'running');
   const currentIndex =
     activeTask?.status === 'running'
-      ? (activeTask.currentMediaIndex ?? (runningMediaIndex >= 0 ? runningMediaIndex + 1 : 0))
-      : 0;
+      ? (activeTask.currentMediaIndex ??
+        (runningMediaIndex >= 0 ? runningMediaIndex + 1 : fallbackCurrentIndex))
+      : activeTask?.status === 'completed'
+        ? mediaStates.length
+        : 0;
   const currentMedia =
     mediaStates.find((media) => media.status === 'running') ??
     mediaStates[Math.max(0, Math.min(mediaStates.length - 1, currentIndex - 1))];
@@ -147,9 +171,23 @@ export function TaskMonitor() {
   }
 
   const processingTotal = activeTask.processingCount ?? activeTask.sourceCount;
-  const sourceSummary = isDevelopmentInputPreview
+  const sourceSummary = isInputTaskPreview
     ? `已展开 ${mediaStates.length} 个待处理媒体文件`
-    : taskSourceSummary(activeTask);
+    : monitorSourceSummary(activeTask);
+  const completedMediaCount = mediaStates.filter(
+    (media) => media.status === 'completed' || media.status === 'skipped',
+  ).length;
+  const processedMediaCount =
+    activeTask.status === 'completed' || activeTask.progress >= 100
+      ? processingTotal
+      : Math.max(completedMediaCount, Math.min(currentIndex, processingTotal));
+  const currentMediaPosition = currentMedia
+    ? Math.max(1, mediaStates.findIndex((media) => media.path === currentMedia.path) + 1)
+    : currentIndex;
+  const durationSummary = formatDurationSummary(taskDurationSummary(activeTask)).replace(
+    /^总时长\s*/,
+    '',
+  );
   const outputPaths = [
     ...new Set([
       ...(activeTask.outputs ?? []),
@@ -157,9 +195,8 @@ export function TaskMonitor() {
     ]),
   ];
   const isActive =
-    !isDevelopmentInputPreview &&
-    (activeTask.status === 'running' || activeTask.status === 'queued');
-  const statusLabel = isDevelopmentInputPreview
+    !isInputTaskPreview && (activeTask.status === 'running' || activeTask.status === 'queued');
+  const statusLabel = isInputTaskPreview
     ? '待开始'
     : activeTask.status === 'running'
       ? '正在执行'
@@ -176,40 +213,61 @@ export function TaskMonitor() {
       <div className="task-monitor-layout">
         <section className="task-monitor-hero" aria-labelledby="task-monitor-title">
           <header>
-            <div>
+            <div className="task-monitor-overline">
               <p className="step-label">
-                {isDevelopmentInputPreview ? 'INPUT SOURCE PREVIEW' : 'LIVE TASK MONITOR'}
+                {isInputTaskPreview ? 'INPUT SOURCE PREVIEW' : 'LIVE TASK MONITOR'}
               </p>
-              <h2 id="task-monitor-title">{activeTask.title}</h2>
-            </div>
-            <div className="task-monitor-heading-actions">
-              {isActive && (
-                <button
-                  className="task-monitor-stop"
-                  onClick={() => setTerminationOpen(true)}
-                  type="button"
-                >
-                  <Square fill="currentColor" size={12} /> 终止任务
-                </button>
-              )}
-              <span className={`task-monitor-live ${activeTask.status}`}>
-                {activeTask.status === 'running' ? (
-                  <LoaderCircle className="spin" size={15} />
-                ) : (
-                  <CircleDashed size={15} />
+              <div className="task-monitor-heading-actions">
+                {isInputTaskPreview && (
+                  <button
+                    className="task-monitor-clear"
+                    onClick={clearInputs}
+                    title="只清空当前输入清单，不删除本机媒体文件"
+                    type="button"
+                  >
+                    <Trash2 size={14} /> 清除清单
+                  </button>
                 )}
-                {statusLabel}
-              </span>
+                {isActive && (
+                  <button
+                    className="task-monitor-stop"
+                    onClick={() => setTerminationOpen(true)}
+                    type="button"
+                  >
+                    <Square fill="currentColor" size={12} /> 终止任务
+                  </button>
+                )}
+                <span className={`task-monitor-live ${activeTask.status}`}>
+                  {activeTask.status === 'running' ? (
+                    <LoaderCircle className="spin" size={15} />
+                  ) : (
+                    <CircleDashed size={15} />
+                  )}
+                  {statusLabel}
+                </span>
+              </div>
             </div>
+            <h2 id="task-monitor-title" title={activeTask.title}>
+              {activeTask.title}
+            </h2>
           </header>
-          <div className="task-monitor-meta">
-            <span>{formatTaskCreatedAt(activeTask.createdAt)}</span>
-            <span>{getPreset(activeTask.presetId).label}</span>
-            <span>{getModelLabel(activeTask.modelId)}</span>
+          <div className="task-monitor-meta" aria-label="当前任务日期版本与模型">
             <span>
-              <Clock3 size={14} /> 总耗时 {formatElapsedSeconds(timing.taskSeconds)}
+              <small>创建时间</small>
+              <strong>{formatTaskCreatedAt(activeTask.createdAt)}</strong>
             </span>
-            <span>{formatDurationSummary(taskDurationSummary(activeTask))}</span>
+            <span>
+              <small>转录版本</small>
+              <strong>{getPreset(activeTask.presetId).label}</strong>
+            </span>
+            <span>
+              <small>推理模型</small>
+              <strong>{getModelLabel(activeTask.modelId)}</strong>
+            </span>
+            <span>
+              <small>媒体时长</small>
+              <strong>{durationSummary}</strong>
+            </span>
           </div>
           <div className="task-monitor-progress-grid">
             <section className="task-monitor-progress-card is-overall" aria-label="整体进度">
@@ -219,9 +277,9 @@ export function TaskMonitor() {
               </div>
               <div className="task-monitor-progress-copy">
                 <strong>
-                  {Math.min(currentIndex, processingTotal)} / {processingTotal}
+                  {processedMediaCount} / {processingTotal}
                 </strong>
-                <span>个媒体已进入处理流程</span>
+                <span>已处理媒体</span>
               </div>
               <div
                 aria-label={`任务整体进度 ${activeTask.progress}%`}
@@ -235,13 +293,16 @@ export function TaskMonitor() {
               </div>
               <footer>
                 <span>{formatTaskStage(activeTask.stage)}</span>
-                {waitingCount > 0 && <span>另有 {waitingCount} 项等待</span>}
+                <span>
+                  已耗时 {formatElapsedSeconds(timing.taskSeconds)}
+                  {waitingCount > 0 ? ` · 另有 ${waitingCount} 项等待` : ''}
+                </span>
               </footer>
             </section>
 
             <section className="task-monitor-progress-card is-current" aria-label="当前媒体进度">
               <div className="task-monitor-progress-heading">
-                <span>当前媒体</span>
+                <span>{activeTask.status === 'completed' ? '最后处理媒体' : '当前媒体'}</span>
                 <strong>
                   {currentMedia?.progress === null || currentMedia?.progress === undefined
                     ? '—'
@@ -249,10 +310,20 @@ export function TaskMonitor() {
                 </strong>
               </div>
               <div className="task-monitor-progress-copy">
-                <strong>
-                  {currentMedia ? `正在处理：${fileName(currentMedia.path)}` : '尚未进入媒体处理'}
+                <strong title={currentMedia?.path}>
+                  {activeTask.status === 'queued'
+                    ? '等待媒体处理'
+                    : currentMedia
+                      ? fileName(currentMedia.path)
+                      : '尚未进入媒体处理'}
                 </strong>
-                <span>{currentIndex > 0 ? `第 ${currentIndex} 个媒体` : '等待任务开始'}</span>
+                <span>
+                  {activeTask.status === 'queued'
+                    ? `${processingTotal} 个媒体已就绪`
+                    : currentMedia
+                      ? `${mediaStatusLabel(currentMedia)} · 第 ${currentMediaPosition} / ${processingTotal} 个`
+                      : '等待任务开始'}
+                </span>
               </div>
               <div
                 aria-label={
@@ -337,7 +408,7 @@ export function TaskMonitor() {
                 </span>
                 <div className="task-media-copy">
                   <strong>{fileName(media.path)}</strong>
-                  <span>{media.path}</span>
+                  <span title={media.path}>{parentDirectory(media.path)}</span>
                   <div
                     aria-label={
                       media.progress === null
@@ -361,9 +432,9 @@ export function TaskMonitor() {
                       media.path === currentMedia?.path
                         ? timing.mediaSeconds
                         : media.elapsedSeconds,
-                    )}
+                    )}{' '}
+                    / {formatMediaDuration(media.durationSeconds)}
                   </small>
-                  <small>时长 {formatMediaDuration(media.durationSeconds)}</small>
                 </div>
               </article>
             ))}
@@ -394,7 +465,7 @@ export function TaskMonitor() {
                   <span>{completed ? <Check size={14} /> : <i />}</span>
                   <strong>{step.label}</strong>
                   <small>
-                    {completed ? '已完成' : active ? formatTaskStage(activeTask.stage) : '等待'}
+                    {completed ? '完成' : active ? formatTaskStage(activeTask.stage) : '待执行'}
                   </small>
                 </li>
               );

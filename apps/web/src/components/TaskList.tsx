@@ -105,6 +105,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
   const auditTaskOutputs = useWorkspace((state) => state.auditTaskOutputs);
   const outputAuditPending = useWorkspace((state) => state.outputAuditPending);
   const taskFilter = useWorkspace((state) => state.taskFilter);
+  const setTaskFilter = useWorkspace((state) => state.setTaskFilter);
   const taskSearch = useWorkspace((state) => state.taskSearch);
   const setTaskSearch = useWorkspace((state) => state.setTaskSearch);
   const taskDateRange = useWorkspace((state) => state.taskDateRange);
@@ -121,6 +122,10 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
   const completedCount = tasks.filter(
     (task) => task.status === 'completed' && task.outputAvailability !== 'missing',
   ).length;
+  const activeCount = tasks.filter(
+    (task) => task.status === 'queued' || task.status === 'running',
+  ).length;
+  const attentionCount = tasks.filter((task) => task.status === 'failed').length;
   const abnormalCount = tasks.filter(isAbnormalTask).length;
   const retryCandidate = tasks.find((task) => task.id === retryTaskId);
   const taskDates = availableTaskDates(tasks);
@@ -178,94 +183,148 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
       className={`panel task-panel ${expanded ? 'is-expanded' : ''}`}
       aria-labelledby="task-title"
     >
-      <div className="panel-heading">
-        <div>
-          <p className="step-label">{expanded ? 'LOCAL TASK ARCHIVE' : 'LOCAL QUEUE / 本机队列'}</p>
-          <h2 id="task-title">{expanded ? '本机任务历史' : '最近任务'}</h2>
-        </div>
-        <span className="task-count">
-          {expanded ? `显示 ${visibleTasks.length} / ${tasks.length}` : `${tasks.length} 项`}
-        </span>
-      </div>
-      {expanded && (
-        <div className="task-control-deck">
-          <div className="task-control-heading">
-            <span aria-hidden="true">
-              <SlidersHorizontal size={17} />
-            </span>
+      <div className={expanded ? 'task-history-manager' : undefined}>
+        <div className={expanded ? 'task-history-manager-main' : undefined}>
+          <div className="panel-heading">
             <div>
-              <strong>查找与筛选</strong>
-              <small>按名称、日期和状态定位本机任务记录</small>
+              <p className="step-label">
+                {expanded ? 'LOCAL TASK ARCHIVE' : 'LOCAL QUEUE / 本机队列'}
+              </p>
+              <h2 id="task-title">{expanded ? '本机任务历史' : '最近任务'}</h2>
             </div>
-            <em>{visibleTasks.length} 条结果</em>
+            <span className="task-count">
+              {expanded ? `显示 ${visibleTasks.length} / ${tasks.length}` : `${tasks.length} 项`}
+            </span>
           </div>
-          <div className="task-toolbar">
-            <div className="task-search-field">
-              <Search aria-hidden="true" size={16} />
-              <input
-                aria-label="搜索任务"
-                id="task-history-search"
-                onChange={(event) => setTaskSearch(event.target.value)}
-                placeholder="搜索文件名或任务名称…"
-                type="search"
-                value={taskSearch}
-              />
-              {taskSearch && (
-                <button aria-label="清除任务搜索" onClick={() => setTaskSearch('')} type="button">
-                  <X size={14} />
+          {expanded && (
+            <div className="task-control-deck">
+              <div className="task-control-heading">
+                <span aria-hidden="true">
+                  <SlidersHorizontal size={17} />
+                </span>
+                <div>
+                  <strong>查找与筛选</strong>
+                  <small>按名称和日期定位本机任务记录</small>
+                </div>
+                <em>{visibleTasks.length} 条结果</em>
+              </div>
+              <div className="task-toolbar">
+                <div className="task-search-field">
+                  <Search aria-hidden="true" size={16} />
+                  <input
+                    aria-label="搜索任务"
+                    id="task-history-search"
+                    onChange={(event) => setTaskSearch(event.target.value)}
+                    placeholder="搜索文件名或任务名称…"
+                    type="search"
+                    value={taskSearch}
+                  />
+                  {taskSearch && (
+                    <button
+                      aria-label="清除任务搜索"
+                      onClick={() => setTaskSearch('')}
+                      type="button"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                <TaskDateFilter
+                  availableDates={taskDates}
+                  onChange={setTaskDateRange}
+                  range={taskDateRange}
+                />
+                <button
+                  aria-label={
+                    armedDelete?.key === 'clear-completed'
+                      ? '再次点击清除历史；只移除本机记录，不删除输出文件'
+                      : `清除历史 · ${completedCount}；只移除本机记录，不删除输出文件`
+                  }
+                  aria-pressed={armedDelete?.key === 'clear-completed'}
+                  className={`secondary-button task-history-clear ${armedDelete?.key === 'clear-completed' ? 'is-delete-armed' : ''}`}
+                  data-delete-arm-key="clear-completed"
+                  disabled={outputAuditPending || completedCount === 0}
+                  onClick={() =>
+                    armOrDelete('clear-completed', '再次点击清除历史', clearCompletedHistory)
+                  }
+                  title="只移除本机已完成记录，不删除输出文件"
+                  type="button"
+                >
+                  <Eraser size={15} />{' '}
+                  {armedDelete?.key === 'clear-completed'
+                    ? '再次点击清除'
+                    : `清除历史 · ${completedCount}`}
                 </button>
-              )}
+                <button
+                  aria-label={
+                    armedDelete?.key === 'clear-abnormal'
+                      ? '再次点击清除异常；只移除本机记录，不删除输出文件'
+                      : `清除异常 · ${abnormalCount}；只移除本机记录，不删除输出文件`
+                  }
+                  aria-pressed={armedDelete?.key === 'clear-abnormal'}
+                  className={`secondary-button task-history-clear is-danger-subtle ${armedDelete?.key === 'clear-abnormal' ? 'is-delete-armed' : ''}`}
+                  data-delete-arm-key="clear-abnormal"
+                  disabled={outputAuditPending || abnormalCount === 0}
+                  onClick={() =>
+                    armOrDelete('clear-abnormal', '再次点击清除异常', clearAbnormalHistory)
+                  }
+                  title="移除失败、取消或输出缺失的本机记录"
+                  type="button"
+                >
+                  <AlertCircle size={15} />{' '}
+                  {armedDelete?.key === 'clear-abnormal'
+                    ? '再次点击清除'
+                    : `清除异常 · ${abnormalCount}`}
+                </button>
+              </div>
             </div>
-            <TaskDateFilter
-              availableDates={taskDates}
-              onChange={setTaskDateRange}
-              range={taskDateRange}
-            />
+          )}
+        </div>
+        {expanded && (
+          <div className="task-summary task-summary-band" aria-label="历史任务筛选">
             <button
-              aria-label={
-                armedDelete?.key === 'clear-completed'
-                  ? '再次点击清除历史；只移除本机记录，不删除输出文件'
-                  : `清除历史 · ${completedCount}；只移除本机记录，不删除输出文件`
-              }
-              aria-pressed={armedDelete?.key === 'clear-completed'}
-              className={`secondary-button task-history-clear ${armedDelete?.key === 'clear-completed' ? 'is-delete-armed' : ''}`}
-              data-delete-arm-key="clear-completed"
-              disabled={outputAuditPending || completedCount === 0}
-              onClick={() =>
-                armOrDelete('clear-completed', '再次点击清除历史', clearCompletedHistory)
-              }
-              title="只移除本机已完成记录，不删除输出文件"
+              aria-pressed={taskFilter === 'all'}
+              className={`task-summary-card ${taskFilter === 'all' ? 'is-active' : ''}`}
+              onClick={() => setTaskFilter('all')}
               type="button"
             >
-              <Eraser size={15} />{' '}
-              {armedDelete?.key === 'clear-completed'
-                ? '再次点击清除'
-                : `清除历史 · ${completedCount}`}
+              <small>全部任务</small>
+              <strong>{tasks.length}</strong>
+              <span>本机历史快照</span>
             </button>
             <button
-              aria-label={
-                armedDelete?.key === 'clear-abnormal'
-                  ? '再次点击清除异常；只移除本机记录，不删除输出文件'
-                  : `清除异常 · ${abnormalCount}；只移除本机记录，不删除输出文件`
-              }
-              aria-pressed={armedDelete?.key === 'clear-abnormal'}
-              className={`secondary-button task-history-clear is-danger-subtle ${armedDelete?.key === 'clear-abnormal' ? 'is-delete-armed' : ''}`}
-              data-delete-arm-key="clear-abnormal"
-              disabled={outputAuditPending || abnormalCount === 0}
-              onClick={() =>
-                armOrDelete('clear-abnormal', '再次点击清除异常', clearAbnormalHistory)
-              }
-              title="移除失败、取消或输出缺失的本机记录"
+              aria-pressed={taskFilter === 'active'}
+              className={`task-summary-card ${taskFilter === 'active' ? 'is-active' : ''}`}
+              onClick={() => setTaskFilter('active')}
               type="button"
             >
-              <AlertCircle size={15} />{' '}
-              {armedDelete?.key === 'clear-abnormal'
-                ? '再次点击清除'
-                : `清除异常 · ${abnormalCount}`}
+              <small>正在运行</small>
+              <strong>{activeCount}</strong>
+              <span>排队或转录中</span>
+            </button>
+            <button
+              aria-pressed={taskFilter === 'completed'}
+              className={`task-summary-card ${taskFilter === 'completed' ? 'is-active' : ''}`}
+              onClick={() => setTaskFilter('completed')}
+              type="button"
+            >
+              <small>已完成</small>
+              <strong>{completedCount}</strong>
+              <span>本机输出已生成</span>
+            </button>
+            <button
+              aria-pressed={taskFilter === 'failed'}
+              className={`task-summary-card ${taskFilter === 'failed' ? 'is-active' : ''}`}
+              onClick={() => setTaskFilter('failed')}
+              type="button"
+            >
+              <small>需要处理</small>
+              <strong>{attentionCount}</strong>
+              <span>转录失败任务</span>
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
       <span aria-live="polite" className="sr-only">
         {armedDelete?.label ?? ''}
       </span>
