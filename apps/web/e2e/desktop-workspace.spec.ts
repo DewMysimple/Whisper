@@ -913,6 +913,64 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.locator('.task-history-stat-line').first()).toContainText('媒体2 个');
   await expect(page.locator('.task-history-stat-line').first()).toContainText('耗时03:18');
   await expect(page.locator('.task-history-stat-line').first()).toContainText('总时长未知');
+  await expect(page.getByText(/个任务 · 四列/)).toHaveCount(0);
+  await expect(
+    page
+      .locator('.task-row')
+      .first()
+      .evaluate((card) => {
+        const group = card.querySelector('.task-card-status-group')!;
+        const state = group.querySelector('.task-card-state')!.getBoundingClientRect();
+        const firstFormat = group.querySelector('.task-card-format')!.getBoundingClientRect();
+        const formats = Array.from(group.querySelectorAll('.task-card-format'), (format) =>
+          format.getBoundingClientRect(),
+        );
+        const groupBounds = group.getBoundingClientRect();
+        const labelStyles = [state, ...formats].map((bounds, index) => {
+          const element =
+            index === 0
+              ? group.querySelector('.task-card-state')!
+              : group.querySelectorAll('.task-card-format')[index - 1]!;
+          const style = getComputedStyle(element);
+          return {
+            height: bounds.height,
+            radius: style.borderTopLeftRadius,
+            fontFamily: style.fontFamily,
+            fontSize: style.fontSize,
+            fontWeight: style.fontWeight,
+          };
+        });
+        const statRow = card.querySelector('.task-history-stat-line')!.getBoundingClientRect();
+        const statCells = Array.from(
+          card.querySelectorAll('.task-history-stat-line dd > span'),
+          (cell) => cell.getBoundingClientRect(),
+        );
+        return {
+          formatsShareStatusGroup: group.querySelector('.task-card-format-list') !== null,
+          firstFormatIsRightOfStatus: firstFormat.left >= state.right,
+          allFormatsAreVisible: formats.every(
+            (format) => format.width > 0 && format.right <= groupBounds.right + 1,
+          ),
+          labelsShareStyle: labelStyles.every(
+            (style) => JSON.stringify(style) === JSON.stringify(labelStyles[0]),
+          ),
+          headerCentersAlign: Math.abs(
+            state.top + state.height / 2 - (firstFormat.top + firstFormat.height / 2),
+          ),
+          statRulesFillRow: statCells.every(
+            (cell) =>
+              Math.abs(cell.top - statRow.top) <= 1 && Math.abs(cell.bottom - statRow.bottom) <= 1,
+          ),
+        };
+      }),
+  ).resolves.toEqual({
+    formatsShareStatusGroup: true,
+    firstFormatIsRightOfStatus: true,
+    allFormatsAreVisible: true,
+    labelsShareStyle: true,
+    headerCentersAlign: 0,
+    statRulesFillRow: true,
+  });
   await expect(page.getByText('稳定主语言')).toHaveCount(0);
   await expect(page.locator('.task-history-progress-info')).toHaveCount(0);
   await expect(page.locator('.task-card-state').first()).toHaveText('运行中');
@@ -1140,6 +1198,8 @@ test('monitors the active task and manages dated history in a responsive grid', 
         '.task-monitor-progress-card + .task-monitor-progress-card',
       )!;
       const secondMeta = dashboard.querySelector('.task-monitor-meta > span:nth-child(2)')!;
+      const thirdMeta = dashboard.querySelector('.task-monitor-meta > span:nth-child(3)')!;
+      const meta = dashboard.querySelector('.task-monitor-meta')!;
       const source = dashboard.querySelector('.task-monitor-source')!;
       const output = dashboard.querySelector('.task-monitor-output')!;
       const progressStyle = getComputedStyle(progress);
@@ -1147,6 +1207,13 @@ test('monitors the active task and manages dated history in a responsive grid', 
       const secondMetaStyle = getComputedStyle(secondMeta);
       const sourceStyle = getComputedStyle(source);
       const outputStyle = getComputedStyle(output);
+      const metaBounds = meta.getBoundingClientRect();
+      const metaCells = Array.from(meta.children, (cell) => cell.getBoundingClientRect());
+      const thirdMetaBounds = thirdMeta.getBoundingClientRect();
+      const currentProgressBounds = currentProgress.getBoundingClientRect();
+      const outputBounds = output.getBoundingClientRect();
+      const dashboardBounds = dashboard.getBoundingClientRect();
+      const heroBounds = dashboard.closest('.task-monitor-hero')!.getBoundingClientRect();
       return {
         ownsMeta: dashboard.querySelector('.task-monitor-meta') !== null,
         ownsProgress: dashboard.querySelector('.task-monitor-progress-grid') !== null,
@@ -1160,6 +1227,17 @@ test('monitors the active task and manages dated history in a responsive grid', 
         sourceRadius: sourceStyle.borderTopLeftRadius,
         sourceBackground: sourceStyle.backgroundColor,
         supportColumnLine: outputStyle.borderLeftWidth,
+        metaRulesFillRow: metaCells.every(
+          (cell) =>
+            Math.abs(cell.top - metaBounds.top) <= 1 &&
+            Math.abs(cell.bottom - metaBounds.bottom) <= 1,
+        ),
+        centerRulesAlign:
+          Math.max(thirdMetaBounds.left, currentProgressBounds.left, outputBounds.left) -
+          Math.min(thirdMetaBounds.left, currentProgressBounds.left, outputBounds.left),
+        rulesReachCardEdges:
+          Math.abs(dashboardBounds.left - heroBounds.left) <= 1 &&
+          Math.abs(dashboardBounds.right - heroBounds.right) <= 1,
       };
     }),
   ).resolves.toEqual({
@@ -1175,6 +1253,9 @@ test('monitors the active task and manages dated history in a responsive grid', 
     sourceRadius: '0px',
     sourceBackground: 'rgba(0, 0, 0, 0)',
     supportColumnLine: '1px',
+    metaRulesFillRow: true,
+    centerRulesAlign: 0,
+    rulesReachCardEdges: true,
   });
   await expect(
     page

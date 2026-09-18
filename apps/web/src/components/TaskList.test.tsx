@@ -95,6 +95,12 @@ describe('TaskList destructive history controls', () => {
     expect(screen.getByText('中文防幻觉')).toBeInTheDocument();
     expect(container.querySelector('.task-card-format')).toHaveTextContent('TXT');
     expect(container.querySelector('.task-card-state')).toHaveTextContent('已完成');
+    expect(container.querySelector('.task-card-status-group')).toContainElement(
+      container.querySelector('.task-card-state'),
+    );
+    expect(container.querySelector('.task-card-status-group')).toContainElement(
+      container.querySelector('.task-card-format-list'),
+    );
     expect(container.querySelector('.task-history-facts')).not.toHaveTextContent('已完成');
     expect(container.querySelector('.task-history-progress-info')).toBeNull();
     expect(screen.queryByText('稳定主语言')).not.toBeInTheDocument();
@@ -116,6 +122,7 @@ describe('TaskList destructive history controls', () => {
     expect(screen.getByRole('region', { name: '任务归档区' })).toContainElement(
       container.querySelector('.task-list'),
     );
+    expect(screen.queryByText(/个任务 · 四列/)).not.toBeInTheDocument();
     expect(
       Array.from(container.querySelectorAll('.task-card-format'), (tag) => tag.textContent),
     ).toEqual(['TXT', 'MD']);

@@ -24,6 +24,7 @@ supersedes: null
 | 2026-09-18 | ui | - | archived | align-pending-colors-and-numeric-inputs | [[日志/2026-09-18-统一待补充配色与数值输入.md|统一待补充配色与数值输入]] |
 | 2026-09-18 | ui | - | archived | checklist-monitor-history-and-palette | [[日志/2026-09-18-统一任务清单监控历史与调色板.md|统一任务清单监控历史与调色板]] |
 | 2026-09-18 | ui | - | archived | separate-history-regions-and-draggable-topbar | [[日志/2026-09-18-清理历史伪区域并启用顶栏拖拽.md|清理历史伪区域并启用顶栏拖拽]] |
+| 2026-09-18 | ui | - | archived | align-task-grid-rules-and-header-tags | [[日志/2026-09-18-校准任务网格分隔与顶部标签.md|校准任务网格分隔与顶部标签]] |
 | 2026-09-18 | ui | - | archived | enlarge-and-align-preference-values | [[日志/2026-09-18-放大并校准偏好数值.md|放大并校准偏好数值]] |
 | 2026-09-18 | ui | - | archived | restore-state-badge-semantics | [[日志/2026-09-18-恢复状态徽标原始配色与图标.md|恢复状态徽标原始配色与图标]] |
 | 2026-09-18 | ui | - | archived | task-monitor-visual-hierarchy | [[日志/2026-09-18-协调任务监控视觉层级.md|协调任务监控视觉层级]] |

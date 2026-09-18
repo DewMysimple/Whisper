@@ -336,7 +336,6 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
               <p className="step-label">ARCHIVED TASKS</p>
               <h3>任务记录</h3>
             </div>
-            <span>{visibleTasks.length} 个任务 · 四列</span>
           </header>
         )}
         <div className="task-list">
@@ -356,6 +355,20 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                     <span className={`task-status ${taskStatusTone(task)}`} aria-hidden="true">
                       <StatusIcon task={task} />
                     </span>
+                    <span className="task-card-status-group">
+                      <span className={`task-card-state is-${taskStatusTone(task)}`}>
+                        {taskStatusLabel(task)}
+                      </span>
+                      {expanded && (
+                        <span className="task-card-format-list" aria-label="输出格式">
+                          {outputFormats.map((format) => (
+                            <span className="task-card-format" key={format}>
+                              {format}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </span>
                     <span className="task-card-identity">
                       <span className="task-title-line">
                         <strong title={task.title}>{task.title}</strong>
@@ -365,18 +378,6 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                         {task.isCustom && <em>自定义</em>}
                       </span>
                     </span>
-                    <span className={`task-card-state is-${taskStatusTone(task)}`}>
-                      {taskStatusLabel(task)}
-                    </span>
-                    {expanded && (
-                      <span className="task-card-format-list" aria-label="输出格式">
-                        {outputFormats.map((format) => (
-                          <span className="task-card-format" key={format}>
-                            {format}
-                          </span>
-                        ))}
-                      </span>
-                    )}
                     {expanded && (
                       <span
                         className="task-card-progress"
