@@ -86,12 +86,14 @@ describe('TaskList destructive history controls', () => {
     expect(screen.queryByText('已完成访谈.wav')).not.toBeInTheDocument();
   });
 
-  it('shows progress as card information without a progress track', () => {
+  it('keeps status in the card header while the configuration summary stays status-free', () => {
     const { container } = render(<TaskList expanded />);
 
     expect(screen.queryByText('进度')).not.toBeInTheDocument();
     expect(screen.getByText('100%')).toBeInTheDocument();
-    expect(screen.getByText('中文防幻觉 · 已完成 · TXT')).toBeInTheDocument();
+    expect(screen.getByText('中文防幻觉 · TXT')).toBeInTheDocument();
+    expect(container.querySelector('.task-card-state')).toHaveTextContent('已完成');
+    expect(container.querySelector('.task-history-progress-info')).not.toHaveTextContent('已完成');
     expect(screen.queryByText('稳定主语言')).not.toBeInTheDocument();
     expect(container.querySelector('.progress-track')).toBeNull();
   });

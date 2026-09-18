@@ -10633,7 +10633,11 @@ body.sidebar-resizing .app-shell {
 
 .task-history-shell .task-panel.is-expanded {
   padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
   background: transparent;
+  box-shadow: none;
 }
 
 .task-history-manager {
@@ -11178,10 +11182,54 @@ body.sidebar-resizing .app-shell {
 /* Workspace geometry and archive grouping refinements. Keep these rules last:
    the legacy stylesheet still contains earlier diagnostic and history layouts. */
 .topbar {
+  position: relative;
   height: var(--topbar-height, 116px);
   min-height: var(--topbar-height, 116px);
   box-sizing: border-box;
   padding-block: 12px;
+}
+
+.topbar-resize-handle {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  bottom: -7px;
+  left: 0;
+  display: grid;
+  height: 14px;
+  place-items: center;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.topbar-resize-handle > span {
+  width: 64px;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-strong) 48%, transparent);
+  box-shadow: 0 0 0 0 transparent;
+  transition:
+    width 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.topbar-resize-handle:hover > span,
+.topbar-resize-handle:focus-visible > span,
+.topbar-resize-handle.is-resizing > span {
+  width: 96px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.topbar-resize-handle:focus-visible {
+  outline: 0;
+}
+
+body.topbar-resizing,
+body.topbar-resizing * {
+  cursor: row-resize !important;
+  user-select: none !important;
 }
 
 .worker-log-status {
@@ -11216,21 +11264,19 @@ body.sidebar-resizing .app-shell {
 }
 
 .worker-log-status > article::after {
-  right: 18px;
-  left: 18px;
+  right: 0;
+  left: 0;
   height: 2px;
   border-radius: 999px 999px 0 0;
 }
 
 .task-history-archive {
   margin-top: var(--space-5);
-  padding: 20px;
-  border: 1px solid color-mix(in srgb, var(--text) 8%, var(--border));
-  border-radius: 20px;
-  background: var(--surface-raised);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--text) 4%, transparent),
-    0 18px 44px color-mix(in srgb, var(--text) 7%, transparent);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .task-history-archive.is-compact {
@@ -11269,9 +11315,5 @@ body.sidebar-resizing .app-shell {
 
   .worker-log-status > article:first-child {
     border-top: 0;
-  }
-
-  .task-history-archive {
-    padding: 12px;
   }
 }

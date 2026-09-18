@@ -897,10 +897,15 @@ test('supports workspace navigation, theme and configuration export', async ({
   await historyFilters.getByRole('button', { name: /全部任务/ }).click();
   await expect(page.locator('.task-card-progress').first()).toHaveText('63%');
   await expect(page.locator('.task-card-progress').first()).not.toContainText('进度');
-  await expect(page.getByText('中文防幻觉 · 转录中 · TXT / MD')).toBeVisible();
+  await expect(page.getByText('中文防幻觉 · TXT / MD')).toBeVisible();
   await expect(page.getByText('中文防幻觉 · GPU 转录中 · TXT / MD')).toHaveCount(0);
-  await expect(page.getByText('英文转录 · 已完成 · TXT')).toBeVisible();
+  await expect(page.getByText('英文转录 · TXT')).toBeVisible();
   await expect(page.getByText('稳定主语言')).toHaveCount(0);
+  await expect(page.locator('.task-history-progress-info')).toHaveText([
+    '转录配置中文防幻觉 · TXT / MD',
+    '转录配置英文转录 · TXT',
+  ]);
+  await expect(page.locator('.task-card-state').first()).toHaveText('运行中');
   await expect(
     page
       .locator('.task-row')
@@ -960,20 +965,33 @@ test('supports workspace navigation, theme and configuration export', async ({
       const archive = shell.querySelector('.task-history-archive')!.getBoundingClientRect();
       const firstCard = shell.querySelector('.task-row')!.getBoundingClientRect();
       const style = getComputedStyle(shell.querySelector('.task-history-archive')!);
+      const panelStyle = getComputedStyle(shell.querySelector('.task-panel.is-expanded')!);
       return {
         blocksAreSeparated: archive.top - manager.bottom,
         cardLeftInset: firstCard.left - archive.left,
         cardTopInset: firstCard.top - archive.top,
         padding: style.padding,
+        borderWidth: style.borderTopWidth,
+        background: style.backgroundColor,
+        shadow: style.boxShadow,
         radius: Number.parseFloat(style.borderTopLeftRadius),
+        panelBorderWidth: panelStyle.borderTopWidth,
+        panelBackground: panelStyle.backgroundColor,
+        panelShadow: panelStyle.boxShadow,
       };
     }),
   ).resolves.toEqual({
     blocksAreSeparated: 24,
-    cardLeftInset: 21,
-    cardTopInset: 21,
-    padding: '20px',
-    radius: 20,
+    cardLeftInset: 0,
+    cardTopInset: 0,
+    padding: '0px',
+    borderWidth: '0px',
+    background: 'rgba(0, 0, 0, 0)',
+    shadow: 'none',
+    radius: 0,
+    panelBorderWidth: '0px',
+    panelBackground: 'rgba(0, 0, 0, 0)',
+    panelShadow: 'none',
   });
   await expect(
     page
@@ -1268,6 +1286,8 @@ test('opens the independent Worker log workspace and exposes only the restored s
           getComputedStyle(ready!.querySelector('.worker-log-status-icon')!).color ===
           semanticGreen,
         readyLineIsGreen: getComputedStyle(ready!, '::after').backgroundColor === semanticGreen,
+        statusLineLeft: getComputedStyle(ready!, '::after').left,
+        statusLineRight: getComputedStyle(ready!, '::after').right,
       };
     }),
   ).resolves.toEqual({
@@ -1277,6 +1297,8 @@ test('opens the independent Worker log workspace and exposes only the restored s
     radius: 18,
     readyIconIsGreen: true,
     readyLineIsGreen: true,
+    statusLineLeft: '0px',
+    statusLineRight: '0px',
   });
   await expect(page.getByRole('log').locator('code')).toHaveCount(3);
   await expect(page.getByRole('log').locator('.worker-log-source')).toHaveText([
@@ -1356,6 +1378,26 @@ test('keeps full-screen layout and typography personalization independent', asyn
       page.locator('html').evaluate((element) => element.style.getPropertyValue('--sidebar-width')),
     )
     .toBe('328px');
+
+  const topbarResizeHandle = page.getByRole('separator', { name: '拖拽调整顶栏高度' });
+  const topbarResizeBox = await topbarResizeHandle.boundingBox();
+  expect(topbarResizeBox).not.toBeNull();
+  await page.mouse.move(
+    topbarResizeBox!.x + topbarResizeBox!.width / 2,
+    topbarResizeBox!.y + topbarResizeBox!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    topbarResizeBox!.x + topbarResizeBox!.width / 2,
+    topbarResizeBox!.y + topbarResizeBox!.height / 2 + 20,
+    { steps: 4 },
+  );
+  await page.mouse.up();
+  await expect
+    .poll(() =>
+      page.locator('html').evaluate((element) => element.style.getPropertyValue('--topbar-height')),
+    )
+    .toBe('136px');
 
   await page.getByRole('spinbutton', { name: '导航栏宽度数值' }).fill('333');
   await page.getByRole('spinbutton', { name: '工作台内容宽度数值' }).fill('1655');

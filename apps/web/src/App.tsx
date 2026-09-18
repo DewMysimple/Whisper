@@ -1,6 +1,7 @@
 import { Activity, AlertTriangle, History, Moon, Search, Sun, X } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
-import { useEffect, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { desktopBridge } from './bridge';
 import { LaunchCard } from './components/LaunchCard';
@@ -18,6 +19,7 @@ import { TaskDetail } from './components/TaskDetail';
 import { TaskList } from './components/TaskList';
 import { TaskMonitor } from './components/TaskMonitor';
 import { WorkerLogsView } from './components/WorkerLogsView';
+import { DEFAULT_APPEARANCE, TOPBAR_HEIGHT_RANGE } from './state/persistence';
 import { useWorkspace, type WorkspaceViewId } from './state/workspace';
 
 const PAGE_COPY: Record<WorkspaceViewId, { eyebrow: string; title: string }> = {
@@ -42,6 +44,95 @@ const PAGE_COPY: Record<WorkspaceViewId, { eyebrow: string; title: string }> = {
     title: '偏好设置',
   },
 };
+
+function TopbarResizeHandle() {
+  const topbarHeight = useWorkspace((state) => state.topbarHeight);
+  const setTopbarHeight = useWorkspace((state) => state.setTopbarHeight);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startHeight: number;
+    startY: number;
+  } | null>(null);
+  const [resizing, setResizing] = useState(false);
+
+  useEffect(
+    () => () => {
+      document.body.classList.remove('topbar-resizing');
+    },
+    [],
+  );
+
+  const startTopbarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startHeight: topbarHeight,
+      startY: event.clientY,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    document.body.classList.add('topbar-resizing');
+    setResizing(true);
+  };
+
+  const resizeTopbar = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const dragState = dragStateRef.current;
+    if (dragState === null || dragState.pointerId !== event.pointerId) return;
+    const nextHeight = Math.min(
+      TOPBAR_HEIGHT_RANGE.maximum,
+      Math.max(
+        TOPBAR_HEIGHT_RANGE.minimum,
+        Math.round(dragState.startHeight + event.clientY - dragState.startY),
+      ),
+    );
+    setTopbarHeight(nextHeight);
+  };
+
+  const finishTopbarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragStateRef.current?.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragStateRef.current = null;
+    document.body.classList.remove('topbar-resizing');
+    setResizing(false);
+  };
+
+  const resizeTopbarWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    let nextHeight = topbarHeight;
+    if (event.key === 'ArrowUp') nextHeight -= TOPBAR_HEIGHT_RANGE.step;
+    else if (event.key === 'ArrowDown') nextHeight += TOPBAR_HEIGHT_RANGE.step;
+    else if (event.key === 'Home') nextHeight = TOPBAR_HEIGHT_RANGE.minimum;
+    else if (event.key === 'End') nextHeight = TOPBAR_HEIGHT_RANGE.maximum;
+    else return;
+    event.preventDefault();
+    setTopbarHeight(
+      Math.min(TOPBAR_HEIGHT_RANGE.maximum, Math.max(TOPBAR_HEIGHT_RANGE.minimum, nextHeight)),
+    );
+  };
+
+  return (
+    <div
+      aria-label="拖拽调整顶栏高度"
+      aria-orientation="horizontal"
+      aria-valuemax={TOPBAR_HEIGHT_RANGE.maximum}
+      aria-valuemin={TOPBAR_HEIGHT_RANGE.minimum}
+      aria-valuenow={topbarHeight}
+      aria-valuetext={`${topbarHeight} 像素`}
+      className={`topbar-resize-handle ${resizing ? 'is-resizing' : ''}`}
+      onDoubleClick={() => setTopbarHeight(DEFAULT_APPEARANCE.topbarHeight)}
+      onKeyDown={resizeTopbarWithKeyboard}
+      onPointerCancel={finishTopbarResize}
+      onPointerDown={startTopbarResize}
+      onPointerMove={resizeTopbar}
+      onPointerUp={finishTopbarResize}
+      role="separator"
+      tabIndex={0}
+    >
+      <span aria-hidden="true" />
+    </div>
+  );
+}
 
 function Topbar() {
   const hostStatus = useWorkspace((state) => state.hostStatus);
@@ -102,6 +193,7 @@ function Topbar() {
           {resolvedTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </div>
+      <TopbarResizeHandle />
     </header>
   );
 }

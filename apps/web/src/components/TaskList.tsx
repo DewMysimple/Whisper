@@ -80,17 +80,8 @@ function taskOutputFormatLabel(task: TaskSnapshot): string {
   return formats.length > 0 ? formats.join(' / ') : '格式未记录';
 }
 
-function taskPhaseLabel(task: TaskSnapshot): string {
-  if (task.outputAvailability === 'missing') return '输出缺失';
-  if (task.status === 'completed') return '已完成';
-  if (task.status === 'failed') return '执行失败';
-  if (task.status === 'cancelled') return '已取消';
-  if (task.status === 'queued') return '等待执行';
-  return formatTaskStage(task.stage);
-}
-
 function taskStageSummary(task: TaskSnapshot): string {
-  return `${getPreset(task.presetId).label} · ${taskPhaseLabel(task)} · ${taskOutputFormatLabel(task)}`;
+  return `${getPreset(task.presetId).label} · ${taskOutputFormatLabel(task)}`;
 }
 
 export function TaskList({ expanded = false }: { expanded?: boolean }) {
@@ -370,7 +361,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                     <>
                       <div className="task-history-progress-info">
                         <span>
-                          <small>当前阶段</small>
+                          <small>转录配置</small>
                           <strong title={taskStageSummary(task)}>{taskStageSummary(task)}</strong>
                         </span>
                       </div>
