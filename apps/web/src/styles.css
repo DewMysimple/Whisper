@@ -11301,7 +11301,7 @@ body.topbar-resizing * {
 
 .task-card-heading {
   grid-template-columns: 38px minmax(0, 1fr) auto;
-  column-gap: 2px;
+  column-gap: 8px;
 }
 
 .task-panel.is-expanded .task-card-identity {
@@ -11309,54 +11309,56 @@ body.topbar-resizing * {
   margin-top: 8px;
 }
 
-.task-card-status-group {
+.task-panel.is-expanded .task-title-line strong.preserve-extension {
   display: flex;
-  min-width: 0;
-  grid-column: 2;
-  grid-row: 1;
-  align-items: center;
-  gap: 2px;
-  overflow: hidden;
+  align-items: baseline;
 }
 
-.task-card-status-group .task-card-state {
-  height: 24px;
-  min-height: 24px;
+.task-panel.is-expanded .task-title-line .task-title-basename,
+.task-panel.is-expanded .task-title-line .task-title-extension {
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit !important;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+.task-panel.is-expanded .task-title-line .task-title-basename {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-panel.is-expanded .task-title-line .task-title-extension {
   flex: 0 0 auto;
-  padding-inline: 4px;
-  border: 1px solid color-mix(in srgb, currentColor 22%, var(--border));
-  border-radius: 999px;
-  grid-column: auto;
-  grid-row: auto;
-  justify-self: auto;
-  font-size: max(10px, calc(var(--font-caption) - 1px)) !important;
-  font-weight: 700;
-  line-height: 1;
+  white-space: nowrap;
 }
 
 .task-card-format-list {
   display: flex;
   min-width: 0;
-  flex: 0 1 auto;
+  grid-column: 2;
+  grid-row: 1;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   overflow: hidden;
 }
 
 .task-card-format {
   display: inline-flex;
-  height: 24px;
-  min-height: 24px;
+  height: 28px;
+  min-height: 28px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
+  padding: 0 7px;
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
   font-family: inherit;
-  font-size: max(10px, calc(var(--font-caption) - 1px));
+  font-size: var(--font-caption);
   font-weight: 700;
   line-height: 1;
 }
@@ -11367,7 +11369,14 @@ body.topbar-resizing * {
 
 .task-history-facts {
   margin-top: var(--space-4);
+  margin-right: -12px;
+  margin-left: -14px;
   padding-top: 0;
+}
+
+.task-history-facts > div {
+  padding-right: 12px;
+  padding-left: 14px;
 }
 
 .task-history-facts > div:first-child {
@@ -11510,6 +11519,11 @@ body.topbar-resizing * {
 
 .task-monitor-dashboard .task-monitor-progress-card:last-child {
   padding-right: 40px;
+}
+
+.task-monitor-dashboard .task-monitor-progress-copy {
+  min-height: 3em;
+  align-content: start;
 }
 
 .task-monitor-dashboard .task-monitor-support-grid {

@@ -80,6 +80,22 @@ function taskOutputFormats(task: TaskSnapshot): string[] {
   return formats.length > 0 ? formats : ['格式未记录'];
 }
 
+function taskTitleParts(title: string): { basename: string; extension: string } | null {
+  const extensionStart = title.lastIndexOf('.');
+  if (extensionStart <= 0 || extensionStart === title.length - 1) return null;
+
+  const estimatedWidth = Array.from(title).reduce(
+    (width, character) => width + ((character.codePointAt(0) ?? 0) > 0xff ? 2 : 1),
+    0,
+  );
+  if (estimatedWidth <= 28) return null;
+
+  return {
+    basename: title.slice(0, extensionStart),
+    extension: title.slice(extensionStart),
+  };
+}
+
 function taskDurationValue(task: TaskSnapshot): string {
   const summary = taskDurationSummary(task);
   if (summary.unknownCount > 0) {
@@ -343,6 +359,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
           {visibleTasks.map((task) => {
             const resumable = canResumeTask(task);
             const outputFormats = taskOutputFormats(task);
+            const titleParts = taskTitleParts(task.title);
             return (
               <article className={`task-row is-${taskStatusTone(task)}`} key={task.id}>
                 <button
@@ -352,30 +369,44 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                   type="button"
                 >
                   <div className="task-card-heading">
-                    <span className={`task-status ${taskStatusTone(task)}`} aria-hidden="true">
+                    <span
+                      aria-label={taskStatusLabel(task)}
+                      className={`task-status ${taskStatusTone(task)}`}
+                      role="img"
+                      title={taskStatusLabel(task)}
+                    >
                       <StatusIcon task={task} />
                     </span>
-                    <span className="task-card-status-group">
-                      <span className={`task-card-state is-${taskStatusTone(task)}`}>
-                        {taskStatusLabel(task)}
+                    {expanded && (
+                      <span className="task-card-format-list" aria-label="输出格式">
+                        {outputFormats.map((format) => (
+                          <span className="task-card-format" key={format}>
+                            {format}
+                          </span>
+                        ))}
                       </span>
-                      {expanded && (
-                        <span className="task-card-format-list" aria-label="输出格式">
-                          {outputFormats.map((format) => (
-                            <span className="task-card-format" key={format}>
-                              {format}
-                            </span>
-                          ))}
-                        </span>
-                      )}
-                    </span>
+                    )}
                     <span className="task-card-identity">
                       <span className="task-title-line">
-                        <strong title={task.title}>{task.title}</strong>
+                        <strong
+                          className={titleParts ? 'preserve-extension' : undefined}
+                          title={task.title}
+                        >
+                          {titleParts ? (
+                            <>
+                              <span className="task-title-basename">{titleParts.basename}</span>
+                              <span className="task-title-extension">{titleParts.extension}</span>
+                            </>
+                          ) : (
+                            task.title
+                          )}
+                        </strong>
                       </span>
                       <span className="task-card-subline">
                         <time dateTime={task.createdAt}>{formatTaskCreatedAt(task.createdAt)}</time>
-                        {task.isCustom && <em>自定义</em>}
+                        {task.isCustom && (
+                          <em title="该任务使用了相对预设调整过的转录参数">参数已调整</em>
+                        )}
                       </span>
                     </span>
                     {expanded && (
@@ -394,7 +425,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                         <dd>{getPreset(task.presetId).label}</dd>
                       </div>
                       <div className="task-history-stat-line">
-                        <dt className="sr-only">媒体、耗时与总时长</dt>
+                        <dt className="sr-only">媒体、耗时与媒体时长</dt>
                         <dd>
                           <span>
                             <small>媒体</small>
@@ -405,7 +436,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                             <strong>{task.elapsed}</strong>
                           </span>
                           <span>
-                            <small>总时长</small>
+                            <small>媒体时长</small>
                             <strong>{taskDurationValue(task)}</strong>
                           </span>
                         </dd>

@@ -86,7 +86,7 @@ describe('TaskList destructive history controls', () => {
     expect(screen.queryByText('已完成访谈.wav')).not.toBeInTheDocument();
   });
 
-  it('keeps status in the card header while the configuration summary stays status-free', () => {
+  it('uses the status icon without repeating a text badge in the card header', () => {
     const { container } = render(<TaskList expanded />);
 
     expect(screen.queryByText('进度')).not.toBeInTheDocument();
@@ -94,11 +94,9 @@ describe('TaskList destructive history controls', () => {
     expect(screen.getByText('转录模式')).toBeInTheDocument();
     expect(screen.getByText('中文防幻觉')).toBeInTheDocument();
     expect(container.querySelector('.task-card-format')).toHaveTextContent('TXT');
-    expect(container.querySelector('.task-card-state')).toHaveTextContent('已完成');
-    expect(container.querySelector('.task-card-status-group')).toContainElement(
-      container.querySelector('.task-card-state'),
-    );
-    expect(container.querySelector('.task-card-status-group')).toContainElement(
+    expect(container.querySelector('.task-card-state')).toBeNull();
+    expect(screen.getByRole('img', { name: '已完成' })).toBeInTheDocument();
+    expect(container.querySelector('.task-card-heading')).toContainElement(
       container.querySelector('.task-card-format-list'),
     );
     expect(container.querySelector('.task-history-facts')).not.toHaveTextContent('已完成');
@@ -127,7 +125,7 @@ describe('TaskList destructive history controls', () => {
       Array.from(container.querySelectorAll('.task-card-format'), (tag) => tag.textContent),
     ).toEqual(['TXT', 'MD']);
     expect(container.querySelector('.task-history-stat-line dd')).toHaveTextContent(
-      '媒体1 个耗时00:12总时长未知',
+      '媒体1 个耗时00:12媒体时长未知',
     );
   });
 
@@ -135,11 +133,27 @@ describe('TaskList destructive history controls', () => {
     const title = '当你拥有一棵赛博粒子交互的圣诞树并继续附加很长的任务说明.mkv';
     useWorkspace.setState({ tasks: [{ ...FINISHED_TASK, title }] });
 
+    const { container } = render(<TaskList expanded />);
+
+    const taskTitle = container.querySelector(`strong[title="${title}"]`);
+    expect(taskTitle).toHaveAttribute('title', title);
+    expect(taskTitle?.closest('.task-title-line')).not.toBeNull();
+    expect(taskTitle?.querySelector('.task-title-basename')).toHaveTextContent(
+      '当你拥有一棵赛博粒子交互的圣诞树并继续附加很长的任务说明',
+    );
+    expect(taskTitle?.querySelector('.task-title-extension')).toHaveTextContent('.mkv');
+  });
+
+  it('explains customized task metadata as adjusted parameters', () => {
+    useWorkspace.setState({ tasks: [{ ...FINISHED_TASK, isCustom: true }] });
+
     render(<TaskList expanded />);
 
-    const taskTitle = screen.getByText(title);
-    expect(taskTitle).toHaveAttribute('title', title);
-    expect(taskTitle.closest('.task-title-line')).not.toBeNull();
+    expect(screen.getByText('参数已调整')).toHaveAttribute(
+      'title',
+      '该任务使用了相对预设调整过的转录参数',
+    );
+    expect(screen.queryByText('自定义')).not.toBeInTheDocument();
   });
 
   it('shows only failed tasks in the attention filter', () => {

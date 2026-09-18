@@ -182,8 +182,8 @@ const INITIAL_TASKS: TaskSnapshot[] = [
       modelId: DEFAULT_MODEL_ID,
       basePresetId: 'en_v1',
       profileMode: 'transcript',
-      overrides: {},
-      effectiveParameters: { ...getPreset('en_v1').parameters },
+      overrides: { beam_size: 8 },
+      effectiveParameters: { ...getPreset('en_v1').parameters, beam_size: 8 },
       subtitleParameters: { ...getSubtitlePreset('en_v1').subtitleParameters },
       output: {
         mode: 'compatibility',

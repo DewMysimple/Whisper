@@ -912,25 +912,23 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.locator('.task-row').nth(1).locator('.task-card-format')).toHaveText(['TXT']);
   await expect(page.locator('.task-history-stat-line').first()).toContainText('媒体2 个');
   await expect(page.locator('.task-history-stat-line').first()).toContainText('耗时03:18');
-  await expect(page.locator('.task-history-stat-line').first()).toContainText('总时长未知');
+  await expect(page.locator('.task-history-stat-line').first()).toContainText('媒体时长未知');
+  await expect(page.locator('.task-history-stat-line').filter({ hasText: '总时长' })).toHaveCount(
+    0,
+  );
   await expect(page.getByText(/个任务 · 四列/)).toHaveCount(0);
   await expect(
     page
       .locator('.task-row')
       .first()
       .evaluate((card) => {
-        const group = card.querySelector('.task-card-status-group')!;
-        const state = group.querySelector('.task-card-state')!.getBoundingClientRect();
-        const firstFormat = group.querySelector('.task-card-format')!.getBoundingClientRect();
-        const formats = Array.from(group.querySelectorAll('.task-card-format'), (format) =>
+        const formatList = card.querySelector('.task-card-format-list')!;
+        const formats = Array.from(formatList.querySelectorAll('.task-card-format'), (format) =>
           format.getBoundingClientRect(),
         );
-        const groupBounds = group.getBoundingClientRect();
-        const labelStyles = [state, ...formats].map((bounds, index) => {
-          const element =
-            index === 0
-              ? group.querySelector('.task-card-state')!
-              : group.querySelectorAll('.task-card-format')[index - 1]!;
+        const groupBounds = formatList.getBoundingClientRect();
+        const labelStyles = formats.map((bounds, index) => {
+          const element = formatList.querySelectorAll('.task-card-format')[index]!;
           const style = getComputedStyle(element);
           return {
             height: bounds.height,
@@ -945,18 +943,22 @@ test('supports workspace navigation, theme and configuration export', async ({
           card.querySelectorAll('.task-history-stat-line dd > span'),
           (cell) => cell.getBoundingClientRect(),
         );
+        const main = card.querySelector('.task-main')!.getBoundingClientRect();
+        const facts = card.querySelector('.task-history-facts')!.getBoundingClientRect();
+        const formatGap =
+          formats.length > 1 ? formats[1]!.left - formats[0]!.right : Number.POSITIVE_INFINITY;
         return {
-          formatsShareStatusGroup: group.querySelector('.task-card-format-list') !== null,
-          firstFormatIsRightOfStatus: firstFormat.left >= state.right,
           allFormatsAreVisible: formats.every(
             (format) => format.width > 0 && format.right <= groupBounds.right + 1,
           ),
+          formatHeight: formats[0]!.height,
+          formatFontIsReadable: Number.parseFloat(labelStyles[0]!.fontSize) >= 12,
+          formatGap,
           labelsShareStyle: labelStyles.every(
             (style) => JSON.stringify(style) === JSON.stringify(labelStyles[0]),
           ),
-          headerCentersAlign: Math.abs(
-            state.top + state.height / 2 - (firstFormat.top + firstFormat.height / 2),
-          ),
+          factsReachCardEdges:
+            Math.abs(facts.left - main.left) <= 1 && Math.abs(facts.right - main.right) <= 1,
           statRulesFillRow: statCells.every(
             (cell) =>
               Math.abs(cell.top - statRow.top) <= 1 && Math.abs(cell.bottom - statRow.bottom) <= 1,
@@ -964,22 +966,26 @@ test('supports workspace navigation, theme and configuration export', async ({
         };
       }),
   ).resolves.toEqual({
-    formatsShareStatusGroup: true,
-    firstFormatIsRightOfStatus: true,
     allFormatsAreVisible: true,
+    formatHeight: 28,
+    formatFontIsReadable: true,
+    formatGap: 6,
     labelsShareStyle: true,
-    headerCentersAlign: 0,
+    factsReachCardEdges: true,
     statRulesFillRow: true,
   });
   await expect(page.getByText('稳定主语言')).toHaveCount(0);
   await expect(page.locator('.task-history-progress-info')).toHaveCount(0);
-  await expect(page.locator('.task-card-state').first()).toHaveText('运行中');
+  await expect(page.locator('.task-card-state')).toHaveCount(0);
+  await expect(
+    page.locator('.task-row').first().getByRole('img', { name: '运行中' }),
+  ).toBeVisible();
   await expect(
     page
       .locator('.task-row')
       .first()
       .evaluate((card) => {
-        const state = card.querySelector('.task-card-state')!.getBoundingClientRect();
+        const state = card.querySelector('.task-status')!.getBoundingClientRect();
         const progress = card.querySelector('.task-card-progress')!.getBoundingClientRect();
         return Math.abs(state.top + state.height / 2 - (progress.top + progress.height / 2));
       }),
@@ -1099,19 +1105,34 @@ test('supports workspace navigation, theme and configuration export', async ({
     .locator('.task-title-line strong')
     .first()
     .evaluate((title) => {
-      title.textContent = '当你拥有一棵赛博粒子交互的圣诞树并继续附加很长的任务说明.mkv';
-      const style = getComputedStyle(title);
+      title.classList.add('preserve-extension');
+      title.innerHTML =
+        '<span class="task-title-basename">当你拥有一棵赛博粒子交互的圣诞树并继续附加很长的任务说明</span><span class="task-title-extension">.mkv</span>';
+      const basename = title.querySelector('.task-title-basename')! as HTMLElement;
+      const extension = title.querySelector('.task-title-extension')! as HTMLElement;
+      const basenameStyle = getComputedStyle(basename);
+      const titleBounds = title.getBoundingClientRect();
+      const extensionBounds = extension.getBoundingClientRect();
       return {
-        clientWidth: title.clientWidth,
-        overflow: style.overflow,
-        scrollWidth: title.scrollWidth,
-        textOverflow: style.textOverflow,
-        whiteSpace: style.whiteSpace,
+        clientWidth: basename.clientWidth,
+        extension: extension.textContent,
+        extensionIsVisible:
+          extensionBounds.width > 0 && extensionBounds.right <= titleBounds.right + 1,
+        overflow: basenameStyle.overflow,
+        scrollWidth: basename.scrollWidth,
+        textOverflow: basenameStyle.textOverflow,
+        whiteSpace: basenameStyle.whiteSpace,
       };
     });
   expect(longTitleMetrics.scrollWidth).toBeGreaterThan(longTitleMetrics.clientWidth);
   expect(longTitleMetrics).toEqual(
-    expect.objectContaining({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
+    expect.objectContaining({
+      extension: '.mkv',
+      extensionIsVisible: true,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    }),
   );
   await expect(page.locator('.task-panel.is-expanded .progress-track')).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -1212,6 +1233,10 @@ test('monitors the active task and manages dated history in a responsive grid', 
       const thirdMetaBounds = thirdMeta.getBoundingClientRect();
       const currentProgressBounds = currentProgress.getBoundingClientRect();
       const outputBounds = output.getBoundingClientRect();
+      const progressTrack = progress.querySelector('.task-overall-track')!.getBoundingClientRect();
+      const currentTrack = currentProgress
+        .querySelector('.task-overall-track')!
+        .getBoundingClientRect();
       const dashboardBounds = dashboard.getBoundingClientRect();
       const heroBounds = dashboard.closest('.task-monitor-hero')!.getBoundingClientRect();
       return {
@@ -1235,6 +1260,9 @@ test('monitors the active task and manages dated history in a responsive grid', 
         centerRulesAlign:
           Math.max(thirdMetaBounds.left, currentProgressBounds.left, outputBounds.left) -
           Math.min(thirdMetaBounds.left, currentProgressBounds.left, outputBounds.left),
+        progressTracksAlign:
+          Math.max(progressTrack.top, currentTrack.top) -
+          Math.min(progressTrack.top, currentTrack.top),
         rulesReachCardEdges:
           Math.abs(dashboardBounds.left - heroBounds.left) <= 1 &&
           Math.abs(dashboardBounds.right - heroBounds.right) <= 1,
@@ -1255,6 +1283,7 @@ test('monitors the active task and manages dated history in a responsive grid', 
     supportColumnLine: '1px',
     metaRulesFillRow: true,
     centerRulesAlign: 0,
+    progressTracksAlign: 0,
     rulesReachCardEdges: true,
   });
   await expect(
