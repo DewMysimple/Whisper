@@ -10147,62 +10147,28 @@ body.sidebar-resizing .app-shell {
 .preflight-status {
   display: inline-flex;
   min-height: 28px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: 1px solid transparent;
+  gap: 5px;
   border-radius: 999px;
-  font-size: var(--font-caption) !important;
-  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
+}
+
+.mode-chip {
+  padding: 5px 9px;
 }
 
 .mode-chip svg,
 .preflight-status svg {
   display: block;
-  width: 14px;
-  height: 14px;
   flex: 0 0 auto;
-  stroke-width: 2;
-}
-
-.mode-chip.is-active {
-  border-color: color-mix(in srgb, var(--green) 24%, var(--border));
-  background: color-mix(in srgb, var(--green-soft) 68%, var(--surface-raised));
-  color: var(--green);
-}
-
-.mode-chip.is-inactive,
-.mode-chip.is-custom,
-.subtitle-mode-chip.is-inactive,
-.subtitle-mode-chip.is-custom,
-.preflight-status:not(.is-ready) {
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
-  background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface-raised));
-  color: var(--accent);
-}
-
-.subtitle-mode-chip.is-active {
-  border-color: color-mix(in srgb, var(--green) 24%, var(--border));
-  background: color-mix(in srgb, var(--green-soft) 68%, var(--surface-raised));
-  color: var(--green);
 }
 
 .preset-panel .panel-heading > .mode-chip,
 .launch-heading > .preflight-status {
   align-self: flex-start;
-}
-
-.preflight-item.needs-attention {
-  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
-  background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface));
-}
-
-.preflight-item.needs-attention .preflight-icon {
-  background: var(--accent-soft);
-  color: var(--accent);
 }
 
 .worker-log-stream.log-view,

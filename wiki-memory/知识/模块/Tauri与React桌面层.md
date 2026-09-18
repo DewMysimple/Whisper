@@ -15,6 +15,7 @@ source_logs:
   - "[[日志/2026-09-18-重构Worker日志与桌面个性化设置]]"
   - "[[日志/2026-09-18-修正主题一致性与布局直接调节]]"
   - "[[日志/2026-09-18-统一诊断历史与状态标识细节]]"
+  - "[[日志/2026-09-18-恢复状态徽标原始配色与图标]]"
 supersedes: null
 ---
 
@@ -28,6 +29,7 @@ supersedes: null
 - `state/workspaceEvents.ts` 集中 Worker/Host 事件归并，`state/workspaceTaskState.ts` 保存任务状态派生和质量诊断纯函数；`workspaceDraft.ts`、`workspacePersistence.ts` 和 `appearancePreferences.ts` 分别保存草稿、持久化和外观规则；`workspace.ts` 负责 store 组合和公开动作。
 - `bridge/tauriWorkerDecoder.ts` 保存 Worker 消息解码、错误归一化和展示标签；`tauriWorkerEvents.ts` 负责消息到桌面任务事件的归并；`tauriDesktopBridge.ts` 负责 Tauri invoke、事件订阅、轮询和 DesktopBridge 生命周期。
 - `WorkerLogsView.tsx` 只把 Host 已生成的日志行解析为时间、来源和正文视觉列；复制、导出、清空及 store 缓冲区继续处理原始字符串，展示解析不构成新的日志协议。
+- 工作台状态徽标只共享高度、弹性布局和图文中心线，不共享图标或语义配色：文本与 SRT 未启用态分别使用文件、字幕图标，执行前待补充态使用警告图标与赭黄色提醒，不能用统一的新增状态图标或强调色覆盖。
 - 原生窗口提醒与电源倒计时通知同样由 `DesktopBridge` 暴露；eslint 禁止 bridge 之外直接导入 `@tauri-apps/*`。
 - `contracts/modelCatalog.generated.ts` 由 Python 模型注册表生成，Web 不手工维护模型能力列表。
 

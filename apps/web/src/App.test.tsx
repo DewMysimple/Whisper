@@ -49,9 +49,11 @@ describe('desktop workspace', () => {
     expect(screen.getByRole('button', { name: '无操作' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '关机' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '休眠' })).not.toBeInTheDocument();
-    expect(screen.getByText('当前输出 TXT / MD')).toHaveClass('is-active');
-    expect(screen.getByText('选择以启用')).toHaveClass('is-inactive');
-    expect(screen.getByText('待补充')).not.toHaveClass('is-ready');
+    expect(
+      screen.getByText('当前输出 TXT / MD').querySelector('.lucide-check'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('选择以启用').querySelector('.lucide-captions')).toBeInTheDocument();
+    expect(screen.getByText('待补充').querySelector('.lucide-triangle-alert')).toBeInTheDocument();
     const checklist = screen.getByLabelText('执行前清单');
     expect(checklist).toHaveTextContent('版本与模型');
     expect(checklist).toHaveTextContent('英文转录');

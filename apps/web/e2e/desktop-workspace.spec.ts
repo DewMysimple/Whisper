@@ -164,7 +164,13 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
       pendingHeight: pending.getBoundingClientRect().height,
       inactiveColor: getComputedStyle(inactive).color,
       pendingColor: getComputedStyle(pending).color,
-      accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
+      inactiveBackground: getComputedStyle(inactive).backgroundColor,
+      pendingBackground: getComputedStyle(pending).backgroundColor,
+      inactiveBorderStyle: getComputedStyle(inactive).borderTopStyle,
+      pendingBorderStyle: getComputedStyle(pending).borderTopStyle,
+      inactiveIconWidth: inactive.querySelector('svg')!.getBoundingClientRect().width,
+      inactiveIcon: inactive.querySelector('svg')?.classList.contains('lucide-captions'),
+      pendingIcon: pending.querySelector('svg')?.classList.contains('lucide-triangle-alert'),
       activeOffset: iconTextOffset(active),
       inactiveOffset: iconTextOffset(inactive),
       pendingOffset: iconTextOffset(pending),
@@ -172,8 +178,13 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   });
   expect(stateChipLayout.activeHeight).toBeCloseTo(stateChipLayout.inactiveHeight, 1);
   expect(stateChipLayout.pendingHeight).toBeCloseTo(stateChipLayout.inactiveHeight, 1);
-  expect(stateChipLayout.pendingColor).toBe(stateChipLayout.inactiveColor);
-  expect(stateChipLayout.accent).not.toBe('');
+  expect(stateChipLayout.pendingColor).not.toBe(stateChipLayout.inactiveColor);
+  expect(stateChipLayout.pendingBackground).not.toBe(stateChipLayout.inactiveBackground);
+  expect(stateChipLayout.inactiveBorderStyle).toBe('none');
+  expect(stateChipLayout.pendingBorderStyle).toBe('solid');
+  expect(stateChipLayout.inactiveIconWidth).toBeCloseTo(13, 1);
+  expect(stateChipLayout.inactiveIcon).toBe(true);
+  expect(stateChipLayout.pendingIcon).toBe(true);
   expect(
     Math.max(
       stateChipLayout.activeOffset,
@@ -197,6 +208,10 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   await expect(page.getByRole('textbox', { name: '粘贴 Windows 路径' })).toHaveCount(0);
 
   await page.locator('.subtitle-profile-panel .preset-card').first().click();
+  await expect(
+    page.locator('.preset-panel:not(.subtitle-profile-panel) .mode-chip .lucide-file-text'),
+  ).toBeVisible();
+  await expect(page.locator('.subtitle-profile-panel .mode-chip .lucide-check')).toBeVisible();
   const subtitle = await measure();
   expect(subtitle.source.height).toBeCloseTo(subtitle.output.height, 1);
   expect(subtitle.preset.height).toBeCloseTo(subtitle.launch.height, 1);
