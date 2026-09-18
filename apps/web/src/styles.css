@@ -6738,18 +6738,6 @@ button:active:not(:disabled) {
 .appearance-stepper button:last-child {
   border-left: 1px solid var(--border);
 }
-.appearance-stepper output {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 3px;
-  font-family: var(--mono);
-}
-.appearance-stepper output small {
-  color: var(--text-faint);
-  font-size: 9px;
-}
-
 .sr-only {
   position: absolute;
   width: 1px;
@@ -7558,10 +7546,10 @@ output,
   align-items: center;
   gap: 5px;
   padding: 5px 8px;
-  border: 1px solid color-mix(in srgb, var(--ochre) 26%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ochre-soft) 60%, var(--surface-raised));
-  color: var(--ochre);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-raised));
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
   font-size: var(--font-caption);
   font-weight: 680;
   line-height: 1;
@@ -7603,8 +7591,8 @@ output,
 }
 
 .preflight-item.needs-attention {
-  border-color: color-mix(in srgb, var(--ochre) 32%, var(--border));
-  background: color-mix(in srgb, var(--ochre-soft) 24%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
 }
 
 .preflight-icon {
@@ -7618,8 +7606,8 @@ output,
 }
 
 .preflight-item.needs-attention .preflight-icon {
-  background: var(--ochre-soft);
-  color: var(--ochre);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-raised));
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
 }
 
 .preflight-copy {
@@ -9387,14 +9375,6 @@ output,
   accent-color: var(--accent);
 }
 
-.dimension-control-input output {
-  color: var(--accent);
-  font-family: var(--mono);
-  font-size: var(--font-caption);
-  font-weight: 720;
-  text-align: right;
-}
-
 .layout-setting-note {
   margin: 0 !important;
   padding: 10px 12px;
@@ -10019,41 +9999,82 @@ body.sidebar-resizing .app-shell {
 }
 
 .custom-color-channels input::-webkit-inner-spin-button,
-.custom-color-channels input::-webkit-outer-spin-button,
-.dimension-number-input input::-webkit-inner-spin-button,
-.dimension-number-input input::-webkit-outer-spin-button {
+.custom-color-channels input::-webkit-outer-spin-button {
   margin: 0;
   appearance: none;
 }
 
-/* Numeric values align centrally and dimensions accept direct integer input. */
-.appearance-stepper output {
-  align-items: center;
-  line-height: 1;
+/* Numeric values use text-backed integer fields so WebView number controls never
+   cover the value; the unit always owns a separate visual cell. */
+.appearance-stepper:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-.appearance-stepper output strong {
-  font-size: var(--font-body);
+.appearance-number-input {
+  position: relative;
+  display: block;
+  min-width: 0;
+  min-height: 34px;
+}
+
+.appearance-number-input input,
+.dimension-number-input input {
+  appearance: none;
+  box-shadow: none;
+}
+
+.appearance-number-input input:focus,
+.appearance-number-input input:focus-visible,
+.dimension-number-input input:focus,
+.dimension-number-input input:focus-visible {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.appearance-number-input input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 26px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: max(12px, var(--font-caption));
   font-variant-numeric: tabular-nums;
-  font-weight: 660;
-  line-height: 1;
+  font-weight: 720;
+  letter-spacing: 0.01em;
+  text-align: center;
 }
 
-.appearance-stepper output small {
+.appearance-number-input small {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  width: 26px;
+  min-height: 34px;
+  place-items: center;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 9px;
   line-height: 1;
-  transform: none;
 }
 
 .dimension-control-input {
-  grid-template-columns: 36px minmax(100px, 1fr) 36px minmax(86px, 96px);
+  grid-template-columns: 36px minmax(100px, 1fr) 36px minmax(104px, 112px);
 }
 
 .dimension-number-input {
-  display: grid;
+  position: relative;
+  display: block;
   min-width: 0;
   min-height: 38px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
   overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: 11px;
@@ -10069,7 +10090,7 @@ body.sidebar-resizing .app-shell {
   width: 100%;
   min-width: 0;
   min-height: 36px;
-  padding: 0 3px 0 9px;
+  padding: 0 30px;
   border: 0;
   background: transparent;
   color: var(--accent);
@@ -10077,7 +10098,8 @@ body.sidebar-resizing .app-shell {
   font-size: var(--font-caption);
   font-variant-numeric: tabular-nums;
   font-weight: 720;
-  text-align: right;
+  letter-spacing: 0.01em;
+  text-align: center;
 }
 
 .dimension-number-input input:focus-visible {
@@ -10085,6 +10107,10 @@ body.sidebar-resizing .app-shell {
 }
 
 .dimension-number-input small {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
   padding-right: 9px;
   color: var(--text-faint);
   font-family: var(--mono);
@@ -10098,7 +10124,7 @@ body.sidebar-resizing .app-shell {
   }
 
   .dimension-control-input {
-    grid-template-columns: 36px minmax(80px, 1fr) 36px minmax(78px, 90px);
+    grid-template-columns: 36px minmax(80px, 1fr) 36px minmax(92px, 100px);
   }
 }
 
@@ -10114,7 +10140,7 @@ body.sidebar-resizing .app-shell {
 
 .dimension-control-input {
   min-width: 0;
-  grid-template-columns: 32px minmax(72px, 1fr) 32px 94px;
+  grid-template-columns: 32px minmax(72px, 1fr) 32px minmax(104px, 112px);
   gap: 7px;
 }
 
@@ -10125,18 +10151,18 @@ body.sidebar-resizing .app-shell {
 
 .dimension-number-input {
   max-width: 100%;
-  grid-template-columns: minmax(0, 1fr) 28px;
 }
 
 .dimension-number-input input {
-  padding: 0 10px;
+  padding: 0 30px;
   font-size: max(12px, var(--font-caption));
   letter-spacing: 0.01em;
 }
 
 .dimension-number-input small {
   display: grid;
-  min-height: 36px;
+  width: 30px;
+  min-height: 0;
   padding: 0;
   place-items: center;
   border-left: 1px solid var(--border);

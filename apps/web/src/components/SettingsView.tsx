@@ -274,10 +274,15 @@ function NumberStepper({
       >
         <Minus size={15} />
       </button>
-      <output aria-live="polite">
-        <strong>{value}</strong>
-        <small>px</small>
-      </output>
+      <IntegerInput
+        className="appearance-number-input"
+        label={`${label}数值`}
+        maximum={maximum}
+        minimum={minimum}
+        onChange={onChange}
+        step={step}
+        value={value}
+      />
       <button
         aria-label={`增大${label}`}
         disabled={value >= maximum}
@@ -290,9 +295,8 @@ function NumberStepper({
   );
 }
 
-function DimensionControl({
-  description,
-  icon,
+function IntegerInput({
+  className,
   label,
   maximum,
   minimum,
@@ -300,8 +304,7 @@ function DimensionControl({
   step,
   value,
 }: {
-  description: string;
-  icon: ReactNode;
+  className: string;
   label: string;
   maximum: number;
   minimum: number;
@@ -324,6 +327,77 @@ function DimensionControl({
     onChange(next);
   };
 
+  const updateValue = (next: number) => {
+    const clamped = Math.min(maximum, Math.max(minimum, next));
+    setDraft(String(clamped));
+    onChange(clamped);
+  };
+
+  return (
+    <label className={className}>
+      <span className="sr-only">{label}</span>
+      <input
+        aria-label={label}
+        aria-valuemax={maximum}
+        aria-valuemin={minimum}
+        aria-valuenow={value}
+        aria-valuetext={`${value} px`}
+        autoComplete="off"
+        inputMode="numeric"
+        maxLength={String(maximum).length}
+        onBlur={commitDraft}
+        onChange={(event) => {
+          const nextDraft = event.currentTarget.value.replace(/\D+/g, '');
+          setDraft(nextDraft);
+          const parsed = Number.parseInt(nextDraft, 10);
+          if (Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum) {
+            onChange(parsed);
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.currentTarget.blur();
+          } else if (event.key === 'Escape') {
+            setDraft(String(value));
+            event.currentTarget.blur();
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            updateValue(value + step);
+          } else if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            updateValue(value - step);
+          }
+        }}
+        pattern="[0-9]*"
+        role="spinbutton"
+        spellCheck={false}
+        type="text"
+        value={draft}
+      />
+      <small aria-hidden="true">px</small>
+    </label>
+  );
+}
+
+function DimensionControl({
+  description,
+  icon,
+  label,
+  maximum,
+  minimum,
+  onChange,
+  step,
+  value,
+}: {
+  description: string;
+  icon: ReactNode;
+  label: string;
+  maximum: number;
+  minimum: number;
+  onChange(value: number): void;
+  step: number;
+  value: number;
+}) {
   return (
     <div className="dimension-control">
       <div className="dimension-control-copy">
@@ -359,30 +433,15 @@ function DimensionControl({
         >
           <Plus size={15} />
         </button>
-        <label className="dimension-number-input">
-          <span className="sr-only">{label}数值</span>
-          <input
-            aria-label={`${label}数值`}
-            max={maximum}
-            min={minimum}
-            onBlur={commitDraft}
-            onChange={(event) => {
-              const nextDraft = event.currentTarget.value;
-              setDraft(nextDraft);
-              const parsed = Number.parseInt(nextDraft, 10);
-              if (Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum) {
-                onChange(parsed);
-              }
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') event.currentTarget.blur();
-            }}
-            step={1}
-            type="number"
-            value={draft}
-          />
-          <small>px</small>
-        </label>
+        <IntegerInput
+          className="dimension-number-input"
+          label={`${label}数值`}
+          maximum={maximum}
+          minimum={minimum}
+          onChange={onChange}
+          step={step}
+          value={value}
+        />
       </div>
     </div>
   );

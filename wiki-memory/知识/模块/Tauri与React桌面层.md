@@ -16,6 +16,7 @@ source_logs:
   - "[[日志/2026-09-18-修正主题一致性与布局直接调节]]"
   - "[[日志/2026-09-18-统一诊断历史与状态标识细节]]"
   - "[[日志/2026-09-18-恢复状态徽标原始配色与图标]]"
+  - "[[日志/2026-09-18-统一待补充配色与数值输入]]"
 supersedes: null
 ---
 
@@ -25,11 +26,11 @@ supersedes: null
 - `apps/web/src/bridge/mockDesktopBridge.ts` 只用于浏览器测试；`tauriDesktopBridge.ts` 是正式本地 bridge。
 - `apps/desktop/src-tauri/` 负责窗口、原生对话框、拖放、系统通知、Worker Host、权限和受限输出预览。
 - UI 状态通过版本化 localStorage 保存设置和最多 100 条任务，不依赖服务端数据库。
-- 外观配置在同一版本 1 payload 中保存主题、强调色、字体家族、框架/工作台/日志三组字号，以及展开导航和工作台最大宽度；`appearancePreferences.ts` 负责校验后的 CSS 变量投影。日志字号在字段缺失时默认 13px，已有合法显式值保持不变。设置页用滑杆、加减按钮和整数输入调用 store，`Sidebar.tsx` 的拖拽分隔条也只通过 `setSidebarWidth` 更新同一事实源，组件不另存布局宽度。
+- 外观配置在同一版本 1 payload 中保存主题、强调色、字体家族、框架/工作台/日志三组字号，以及展开导航和工作台最大宽度；`appearancePreferences.ts` 负责校验后的 CSS 变量投影。日志字号在字段缺失时默认 13px，已有合法显式值保持不变。设置页的宽度和三组字号共用受范围约束的纯数字文本输入：允许直接键入、加减按钮与方向键调节，失焦时收敛范围；两类数值使用一致的等宽字体参数并按完整控件居中，`px` 固定在右侧且只有外层控件绘制焦点。`Sidebar.tsx` 的拖拽分隔条也只通过 `setSidebarWidth` 更新同一事实源，组件不另存布局宽度。
 - `state/workspaceEvents.ts` 集中 Worker/Host 事件归并，`state/workspaceTaskState.ts` 保存任务状态派生和质量诊断纯函数；`workspaceDraft.ts`、`workspacePersistence.ts` 和 `appearancePreferences.ts` 分别保存草稿、持久化和外观规则；`workspace.ts` 负责 store 组合和公开动作。
 - `bridge/tauriWorkerDecoder.ts` 保存 Worker 消息解码、错误归一化和展示标签；`tauriWorkerEvents.ts` 负责消息到桌面任务事件的归并；`tauriDesktopBridge.ts` 负责 Tauri invoke、事件订阅、轮询和 DesktopBridge 生命周期。
 - `WorkerLogsView.tsx` 只把 Host 已生成的日志行解析为时间、来源和正文视觉列；复制、导出、清空及 store 缓冲区继续处理原始字符串，展示解析不构成新的日志协议。
-- 工作台状态徽标只共享高度、弹性布局和图文中心线，不共享图标或语义配色：文本与 SRT 未启用态分别使用文件、字幕图标，执行前待补充态使用警告图标与赭黄色提醒，不能用统一的新增状态图标或强调色覆盖。
+- 工作台状态徽标共享高度、弹性布局和图文中心线，但继续保留各自图标：文本与 SRT 未启用态分别使用文件、字幕图标，执行前待补充态仍使用警告图标。待补充徽标、需要关注的媒体清单卡片及 SRT“选择以启用”共用柔和强调色通道；当前输出保留绿色，不用统一的新增图标替换原图标。
 - 原生窗口提醒与电源倒计时通知同样由 `DesktopBridge` 暴露；eslint 禁止 bridge 之外直接导入 `@tauri-apps/*`。
 - `contracts/modelCatalog.generated.ts` 由 Python 模型注册表生成，Web 不手工维护模型能力列表。
 

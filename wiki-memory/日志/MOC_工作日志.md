@@ -19,6 +19,7 @@ supersedes: null
 | 2026-09-18 | ui | - | archived | task-monitor-and-history-redesign | [[日志/2026-09-18-重构任务监控与历史记录.md|重构任务监控与历史记录]] |
 | 2026-09-18 | ui | - | archived | worker-logs-and-appearance-personalization | [[日志/2026-09-18-重构Worker日志与桌面个性化设置.md|重构 Worker 日志与桌面个性化设置]] |
 | 2026-09-18 | ui | - | archived | diagnostic-history-and-state-ui-polish | [[日志/2026-09-18-统一诊断历史与状态标识细节.md|统一诊断历史与状态标识细节]] |
+| 2026-09-18 | ui | - | archived | align-pending-colors-and-numeric-inputs | [[日志/2026-09-18-统一待补充配色与数值输入.md|统一待补充配色与数值输入]] |
 | 2026-09-18 | ui | - | archived | restore-state-badge-semantics | [[日志/2026-09-18-恢复状态徽标原始配色与图标.md|恢复状态徽标原始配色与图标]] |
 | 2026-09-18 | ui | - | archived | task-monitor-visual-hierarchy | [[日志/2026-09-18-协调任务监控视觉层级.md|协调任务监控视觉层级]] |
 | 2026-09-18 | ui | - | archived | appearance-controls-and-theme-fidelity | [[日志/2026-09-18-修正主题一致性与布局直接调节.md|修正主题一致性与布局直接调节]] |

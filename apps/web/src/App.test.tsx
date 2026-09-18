@@ -397,9 +397,9 @@ describe('desktop workspace', () => {
     expect(screen.queryByText(/跟随 Windows 的浅色或深色应用模式/)).not.toBeInTheDocument();
     expect(screen.queryByText('固定使用明亮背景与深色文字')).not.toBeInTheDocument();
     expect(screen.queryByText('固定使用深色背景与浅色文字')).not.toBeInTheDocument();
-    expect(screen.getByRole('group', { name: '界面框架字号' })).toHaveTextContent('14px');
-    expect(screen.getByRole('group', { name: '工作台内容字号' })).toHaveTextContent('14px');
-    expect(screen.getByRole('group', { name: 'Worker 日志字号' })).toHaveTextContent('13px');
+    expect(screen.getByRole('spinbutton', { name: '界面框架字号数值' })).toHaveValue('14');
+    expect(screen.getByRole('spinbutton', { name: '工作台内容字号数值' })).toHaveValue('14');
+    expect(screen.getByRole('spinbutton', { name: 'Worker 日志字号数值' })).toHaveValue('13');
     await user.click(screen.getByRole('button', { name: '增大界面框架字号' }));
     expect(document.documentElement.style.getPropertyValue('--ui-font-size')).toBe('15px');
     expect(document.documentElement.style.getPropertyValue('--workspace-font-size')).toBe('14px');
@@ -407,6 +407,10 @@ describe('desktop workspace', () => {
     await user.click(screen.getByRole('button', { name: '增大工作台内容字号' }));
     expect(document.documentElement.style.getPropertyValue('--ui-font-size')).toBe('15px');
     expect(document.documentElement.style.getPropertyValue('--workspace-font-size')).toBe('15px');
+    const logFontSizeInput = screen.getByRole('spinbutton', { name: 'Worker 日志字号数值' });
+    await user.clear(logFontSizeInput);
+    await user.type(logFontSizeInput, '16');
+    expect(document.documentElement.style.getPropertyValue('--log-font-size')).toBe('16px');
     await user.click(screen.getByRole('button', { name: '扩大导航栏宽度' }));
     await user.click(screen.getByRole('button', { name: '扩大工作台内容宽度' }));
     expect(document.documentElement.style.getPropertyValue('--sidebar-width')).toBe('312px');

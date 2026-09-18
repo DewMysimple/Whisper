@@ -150,6 +150,9 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
     )!;
     const inactive = document.querySelector<HTMLElement>('.subtitle-profile-panel .mode-chip')!;
     const pending = document.querySelector<HTMLElement>('.preflight-status')!;
+    const attentionIcon = document.querySelector<HTMLElement>(
+      '.preflight-item.needs-attention .preflight-icon',
+    )!;
     const iconTextOffset = (chip: HTMLElement) => {
       const icon = chip.querySelector('svg')!.getBoundingClientRect();
       const text = chip.lastChild!;
@@ -166,6 +169,8 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
       pendingColor: getComputedStyle(pending).color,
       inactiveBackground: getComputedStyle(inactive).backgroundColor,
       pendingBackground: getComputedStyle(pending).backgroundColor,
+      attentionIconColor: getComputedStyle(attentionIcon).color,
+      attentionIconBackground: getComputedStyle(attentionIcon).backgroundColor,
       inactiveBorderStyle: getComputedStyle(inactive).borderTopStyle,
       pendingBorderStyle: getComputedStyle(pending).borderTopStyle,
       inactiveIconWidth: inactive.querySelector('svg')!.getBoundingClientRect().width,
@@ -178,8 +183,10 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   });
   expect(stateChipLayout.activeHeight).toBeCloseTo(stateChipLayout.inactiveHeight, 1);
   expect(stateChipLayout.pendingHeight).toBeCloseTo(stateChipLayout.inactiveHeight, 1);
-  expect(stateChipLayout.pendingColor).not.toBe(stateChipLayout.inactiveColor);
-  expect(stateChipLayout.pendingBackground).not.toBe(stateChipLayout.inactiveBackground);
+  expect(stateChipLayout.pendingColor).toBe(stateChipLayout.inactiveColor);
+  expect(stateChipLayout.pendingBackground).toBe(stateChipLayout.inactiveBackground);
+  expect(stateChipLayout.attentionIconColor).toBe(stateChipLayout.inactiveColor);
+  expect(stateChipLayout.attentionIconBackground).toBe(stateChipLayout.inactiveBackground);
   expect(stateChipLayout.inactiveBorderStyle).toBe('none');
   expect(stateChipLayout.pendingBorderStyle).toBe('solid');
   expect(stateChipLayout.inactiveIconWidth).toBeCloseTo(13, 1);
@@ -603,9 +610,9 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.getByRole('radio', { name: '跟随 Windows' })).toBeChecked();
   await expect(page.getByText('固定使用明亮背景与深色文字')).toHaveCount(0);
   await expect(page.getByText('固定使用深色背景与浅色文字')).toHaveCount(0);
-  await expect(page.getByRole('group', { name: '界面框架字号' })).toContainText('14px');
-  await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('14px');
-  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('13px');
+  await expect(page.getByRole('spinbutton', { name: '界面框架字号数值' })).toHaveValue('14');
+  await expect(page.getByRole('spinbutton', { name: '工作台内容字号数值' })).toHaveValue('14');
+  await expect(page.getByRole('spinbutton', { name: 'Worker 日志字号数值' })).toHaveValue('13');
   await expect(page.getByRole('button', { name: '橙色强调色' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -667,7 +674,7 @@ test('supports workspace navigation, theme and configuration export', async ({
 
   await page.getByRole('button', { name: '增大界面框架字号' }).click();
   await page.getByRole('button', { name: '增大界面框架字号' }).click();
-  await expect(page.getByRole('group', { name: '界面框架字号' })).toContainText('16px');
+  await expect(page.getByRole('spinbutton', { name: '界面框架字号数值' })).toHaveValue('16');
   await expect(
     page.locator('html').evaluate((element) => element.style.getPropertyValue('--ui-font-size')),
   ).resolves.toBe('16px');
@@ -681,7 +688,7 @@ test('supports workspace navigation, theme and configuration export', async ({
   ).resolves.toBe('13px');
   await page.getByRole('button', { name: '增大工作台内容字号' }).click();
   await page.getByRole('button', { name: '增大工作台内容字号' }).click();
-  await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('16px');
+  await expect(page.getByRole('spinbutton', { name: '工作台内容字号数值' })).toHaveValue('16');
   await expect(
     page.locator('html').evaluate((element) => element.style.getPropertyValue('--ui-font-size')),
   ).resolves.toBe('16px');
@@ -755,10 +762,10 @@ test('supports workspace navigation, theme and configuration export', async ({
   await page.getByRole('button', { name: '偏好设置' }).click();
   await page.getByRole('button', { name: '增大工作台内容字号' }).click();
   await page.getByRole('button', { name: '增大工作台内容字号' }).click();
-  await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('18px');
+  await expect(page.getByRole('spinbutton', { name: '工作台内容字号数值' })).toHaveValue('18');
   await expect(page.getByRole('button', { name: '增大工作台内容字号' })).toBeDisabled();
   await page.getByRole('button', { name: '增大Worker 日志字号' }).click();
-  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('14px');
+  await expect(page.getByRole('spinbutton', { name: 'Worker 日志字号数值' })).toHaveValue('14');
   await page.getByRole('button', { name: '转录工作台' }).click();
   await expect(
     page
@@ -1202,9 +1209,9 @@ test('keeps full-screen layout and typography personalization independent', asyn
   await page.getByRole('button', { name: '偏好设置' }).click();
 
   await expect(page.getByRole('heading', { name: '工作区尺寸' })).toBeVisible();
-  await expect(page.getByRole('group', { name: '界面框架字号' })).toContainText('14px');
-  await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('14px');
-  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('13px');
+  await expect(page.getByRole('spinbutton', { name: '界面框架字号数值' })).toHaveValue('14');
+  await expect(page.getByRole('spinbutton', { name: '工作台内容字号数值' })).toHaveValue('14');
+  await expect(page.getByRole('spinbutton', { name: 'Worker 日志字号数值' })).toHaveValue('13');
   await expect(page.getByRole('slider', { name: '工作台内容宽度滑杆' })).toHaveValue('1540');
   await expect(page.getByRole('slider', { name: '导航栏宽度滑杆' })).toHaveValue('304');
   await expect(
@@ -1240,33 +1247,52 @@ test('keeps full-screen layout and typography personalization independent', asyn
       workspace: element.style.getPropertyValue('--workspace-max'),
     })),
   ).resolves.toEqual({ sidebar: '333px', workspace: '1655px' });
+  await expect(page.getByRole('spinbutton', { name: '工作台内容宽度数值' })).toHaveAttribute(
+    'type',
+    'text',
+  );
+  await expect(page.getByRole('spinbutton', { name: '工作台内容宽度数值' })).toHaveAttribute(
+    'inputmode',
+    'numeric',
+  );
+  await expect(
+    page.getByRole('spinbutton', { name: '工作台内容宽度数值' }).evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        borderWidth: style.borderTopWidth,
+        boxShadow: style.boxShadow,
+        outlineStyle: style.outlineStyle,
+      };
+    }),
+  ).resolves.toEqual({ borderWidth: '0px', boxShadow: 'none', outlineStyle: 'none' });
   await expect(
     page
       .locator('.dimension-number-input')
       .first()
       .evaluate((element) => {
+        const field = element.getBoundingClientRect();
         const input = element.querySelector('input')!.getBoundingClientRect();
         const unit = element.querySelector('small')!.getBoundingClientRect();
+        const style = getComputedStyle(element.querySelector('input')!);
         return {
-          inputRight: Math.round(input.right),
-          unitLeft: Math.round(unit.left),
+          centerOffset: Math.abs(field.left + field.width / 2 - (input.left + input.width / 2)),
+          color: style.color,
+          paddingLeft: style.paddingLeft,
+          paddingRight: style.paddingRight,
+          textAlign: style.textAlign,
           unitWidth: Math.round(unit.width),
         };
       }),
   ).resolves.toEqual(
     expect.objectContaining({
-      unitWidth: 28,
+      centerOffset: 0,
+      color: 'rgb(255, 91, 4)',
+      paddingLeft: '30px',
+      paddingRight: '30px',
+      textAlign: 'center',
+      unitWidth: 30,
     }),
   );
-  const dimensionCells = await page
-    .locator('.dimension-number-input')
-    .first()
-    .evaluate((element) => {
-      const input = element.querySelector('input')!.getBoundingClientRect();
-      const unit = element.querySelector('small')!.getBoundingClientRect();
-      return { inputRight: input.right, unitLeft: unit.left };
-    });
-  expect(dimensionCells.inputRight).toBeLessThanOrEqual(dimensionCells.unitLeft);
   const layoutCardWidth = await page.locator('.layout-settings-card').evaluate((element) => ({
     clientWidth: element.clientWidth,
     scrollWidth: element.scrollWidth,
@@ -1300,13 +1326,47 @@ test('keeps full-screen layout and typography personalization independent', asyn
       .evaluate((element) => getComputedStyle(element).getPropertyValue('--ui-font-size').trim()),
   ).resolves.toBe('15px');
 
+  await page.getByRole('spinbutton', { name: 'Worker 日志字号数值' }).fill('15');
+  await expect(
+    page.locator('html').evaluate((element) => element.style.getPropertyValue('--log-font-size')),
+  ).resolves.toBe('15px');
+  await expect(page.getByRole('spinbutton', { name: 'Worker 日志字号数值' })).toHaveValue('15');
+  await expect(
+    page.getByRole('spinbutton', { name: 'Worker 日志字号数值' }).evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        borderWidth: style.borderTopWidth,
+        boxShadow: style.boxShadow,
+        outlineStyle: style.outlineStyle,
+      };
+    }),
+  ).resolves.toEqual({ borderWidth: '0px', boxShadow: 'none', outlineStyle: 'none' });
+
   await expect(
     page.getByRole('group', { name: '界面框架字号' }).evaluate((element) => {
-      const output = element.querySelector('output')!.getBoundingClientRect();
-      const value = element.querySelector('output strong')!.getBoundingClientRect();
-      return Math.abs(output.top + output.height / 2 - (value.top + value.height / 2));
+      const field = element.querySelector('.appearance-number-input')!.getBoundingClientRect();
+      const value = element.querySelector('input')!.getBoundingClientRect();
+      const dimensionStyle = getComputedStyle(
+        document.querySelector('.dimension-number-input input')!,
+      );
+      const valueStyle = getComputedStyle(element.querySelector('input')!);
+      return {
+        fontFamilyMatches: valueStyle.fontFamily === dimensionStyle.fontFamily,
+        fontSizeMatches: valueStyle.fontSize === dimensionStyle.fontSize,
+        fontWeightMatches: valueStyle.fontWeight === dimensionStyle.fontWeight,
+        horizontalOffset: Math.abs(field.left + field.width / 2 - (value.left + value.width / 2)),
+        textAlign: valueStyle.textAlign,
+        verticalOffset: Math.abs(field.top + field.height / 2 - (value.top + value.height / 2)),
+      };
     }),
-  ).resolves.toBeLessThanOrEqual(1);
+  ).resolves.toEqual({
+    fontFamilyMatches: true,
+    fontSizeMatches: true,
+    fontWeightMatches: true,
+    horizontalOffset: 0,
+    textAlign: 'center',
+    verticalOffset: 0,
+  });
 
   await expect(
     page.locator('.theme-sample.is-system').evaluate((element) => {
