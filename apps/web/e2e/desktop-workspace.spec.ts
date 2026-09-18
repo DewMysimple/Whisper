@@ -904,18 +904,18 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.getByText('转录模式', { exact: true })).toHaveCount(2);
   await expect(page.locator('.task-history-facts').first()).toContainText('中文防幻觉');
   await expect(page.locator('.task-history-facts').nth(1)).toContainText('英文转录');
-  await expect(page.locator('.task-history-config-cell.is-formats')).toHaveCount(2);
-  await expect(page.locator('.task-history-config-cell.is-parameters').first()).toContainText(
-    '默认参数',
-  );
-  await expect(page.locator('.task-history-config-cell.is-parameters').nth(1)).toContainText(
-    '自定义参数',
-  );
-  await expect(page.locator('.task-row').first().locator('.task-card-format')).toHaveText([
-    'TXT',
-    'MD',
-  ]);
-  await expect(page.locator('.task-row').nth(1).locator('.task-card-format')).toHaveText(['TXT']);
+  await expect(
+    page.locator('.task-row').first().locator('.task-history-config-cell').nth(1).locator('strong'),
+  ).toHaveText('TXT MD');
+  await expect(
+    page.locator('.task-row').nth(1).locator('.task-history-config-cell').nth(1).locator('strong'),
+  ).toHaveText('TXT');
+  await expect(
+    page.locator('.task-row').first().locator('.task-history-config-cell').nth(2).locator('strong'),
+  ).toHaveText('默认参数');
+  await expect(
+    page.locator('.task-row').nth(1).locator('.task-history-config-cell').nth(2).locator('strong'),
+  ).toHaveText('自定义参数');
   await expect(page.locator('.task-history-stat-line').first()).toContainText('媒体2 个');
   await expect(page.locator('.task-history-stat-line').first()).toContainText('耗时03:18');
   await expect(page.locator('.task-history-stat-line').first()).toContainText('媒体时长未知');
@@ -928,25 +928,6 @@ test('supports workspace navigation, theme and configuration export', async ({
       .locator('.task-row')
       .first()
       .evaluate((card) => {
-        const formatList = card.querySelector('.task-card-format-list')!;
-        const formats = Array.from(formatList.querySelectorAll('.task-card-format'), (format) =>
-          format.getBoundingClientRect(),
-        );
-        const groupBounds = formatList.getBoundingClientRect();
-        const labelStyles = formats.map((_, index) => {
-          const element = formatList.querySelectorAll('.task-card-format')[index]!;
-          const style = getComputedStyle(element);
-          return {
-            background: style.backgroundColor,
-            borderWidth: style.borderTopWidth,
-            color: style.color,
-            radius: style.borderTopLeftRadius,
-            fontFamily: style.fontFamily,
-            fontSize: style.fontSize,
-            fontWeight: style.fontWeight,
-            padding: style.padding,
-          };
-        });
         const statRow = card.querySelector('.task-history-stat-line')!.getBoundingClientRect();
         const statCells = Array.from(
           card.querySelectorAll('.task-history-stat-line dd > span'),
@@ -956,46 +937,39 @@ test('supports workspace navigation, theme and configuration export', async ({
         const configCells = Array.from(card.querySelectorAll('.task-history-config-cell'), (cell) =>
           cell.getBoundingClientRect(),
         );
-        const configLabels = Array.from(
-          card.querySelectorAll('.task-history-config-cell > small'),
-          (label) => label.getBoundingClientRect(),
-        );
-        const statLabels = Array.from(
-          card.querySelectorAll('.task-history-stat-line dd > span > small'),
-          (label) => label.getBoundingClientRect(),
-        );
-        const formatCell = configCells[1]!;
+        const formatText = card.querySelector('.task-history-config-cell:nth-child(2) > strong')!;
         const parameterCell = configCells[2]!;
-        const parameterText = card.querySelector('.task-history-config-cell.is-parameters strong')!;
+        const parameterText = card.querySelector(
+          '.task-history-config-cell:nth-child(3) > strong',
+        )!;
         const presetText = card.querySelector('.task-history-config-cell:first-child strong')!;
+        const formatStyle = getComputedStyle(formatText);
         const parameterStyle = getComputedStyle(parameterText);
         const main = card.querySelector('.task-main')!.getBoundingClientRect();
         const facts = card.querySelector('.task-history-facts')!.getBoundingClientRect();
         return {
-          allFormatsAreVisible: formats.every(
-            (format) =>
-              format.width > 0 &&
-              format.left >= formatCell.left - 1 &&
-              format.right <= formatCell.right + 1 &&
-              format.right <= groupBounds.right + 1,
+          allConfigValuesUseStrong: Array.from(
+            card.querySelectorAll('.task-history-config-cell'),
+          ).every(
+            (cell) =>
+              cell.children.length === 2 &&
+              cell.children[0]?.tagName === 'SMALL' &&
+              cell.children[1]?.tagName === 'STRONG',
           ),
-          formatsAreInSecondColumn: formatList.parentElement?.classList.contains('is-formats'),
+          formatsAreInSecondColumn:
+            formatText.parentElement === card.querySelectorAll('.task-history-config-cell')[1],
           parametersAreInThirdColumn:
-            parameterText.parentElement?.classList.contains('is-parameters') &&
+            parameterText.parentElement === card.querySelectorAll('.task-history-config-cell')[2] &&
             parameterText.textContent === '默认参数',
+          formatTextIsFullyVisible: formatText.scrollWidth <= formatText.clientWidth + 1,
           parameterTextIsFullyVisible: parameterText.scrollWidth <= parameterText.clientWidth + 1,
           presetTextIsFullyVisible: presetText.scrollWidth <= presetText.clientWidth + 1,
-          formatsUsePlainText: labelStyles.every(
-            (style) =>
-              style.background === 'rgba(0, 0, 0, 0)' &&
-              style.borderWidth === '0px' &&
-              style.radius === '0px' &&
-              style.padding === '0px' &&
-              style.color === parameterStyle.color &&
-              style.fontFamily === parameterStyle.fontFamily &&
-              style.fontSize === parameterStyle.fontSize &&
-              style.fontWeight === parameterStyle.fontWeight,
-          ),
+          formatUsesUnifiedValueStyle:
+            formatStyle.color === parameterStyle.color &&
+            formatStyle.fontFamily === parameterStyle.fontFamily &&
+            formatStyle.fontSize === parameterStyle.fontSize &&
+            formatStyle.fontWeight === parameterStyle.fontWeight &&
+            formatStyle.lineHeight === parameterStyle.lineHeight,
           factsReachCardEdges:
             Math.abs(facts.left - main.left) <= 1 && Math.abs(facts.right - main.right) <= 1,
           configRulesJoinRowBorders: configCells.every(
@@ -1006,9 +980,6 @@ test('supports workspace navigation, theme and configuration export', async ({
           configAndStatsColumnsAlign: configCells.every(
             (cell, index) => Math.abs(cell.left - statCells[index]!.left) <= 1,
           ),
-          configAndStatsTextAlign: configLabels.every(
-            (label, index) => Math.abs(label.left - statLabels[index]!.left) <= 1,
-          ),
           parameterCellIsThird: parameterCell.left >= configCells[1]!.right - 1,
           statRulesFillRow: statCells.every(
             (cell) =>
@@ -1017,19 +988,57 @@ test('supports workspace navigation, theme and configuration export', async ({
         };
       }),
   ).resolves.toEqual({
-    allFormatsAreVisible: true,
+    allConfigValuesUseStrong: true,
     formatsAreInSecondColumn: true,
     parametersAreInThirdColumn: true,
+    formatTextIsFullyVisible: true,
     parameterTextIsFullyVisible: true,
     presetTextIsFullyVisible: true,
-    formatsUsePlainText: true,
+    formatUsesUnifiedValueStyle: true,
     factsReachCardEdges: true,
     configRulesJoinRowBorders: true,
     configAndStatsColumnsAlign: true,
-    configAndStatsTextAlign: true,
     parameterCellIsThird: true,
     statRulesFillRow: true,
   });
+  await expect(
+    page.locator('.task-row').evaluateAll((cards) =>
+      cards.every((card) => {
+        const configLabels = Array.from(
+          card.querySelectorAll('.task-history-config-cell > small'),
+          (label) => label.getBoundingClientRect(),
+        );
+        const configLabelTops = configLabels.map((label) => label.top);
+        const configLabelBottoms = configLabels.map((label) => label.bottom);
+        const configLabelsShareOneLine =
+          Math.max(...configLabelTops) - Math.min(...configLabelTops) <= 0.5 &&
+          Math.max(...configLabelBottoms) - Math.min(...configLabelBottoms) <= 0.5;
+        const cells = card.querySelectorAll(
+          '.task-history-config-cell, .task-history-stat-line dd > span',
+        );
+        return (
+          configLabelsShareOneLine &&
+          Array.from(cells).every((cell) => {
+            const label = cell.querySelector('small');
+            const value = cell.querySelector('strong');
+            if (!label || !value) return false;
+            const cellBounds = cell.getBoundingClientRect();
+            const labelBounds = label.getBoundingClientRect();
+            const valueBounds = value.getBoundingClientRect();
+            const cellCenter = cellBounds.left + cellBounds.width / 2;
+            const labelCenter = labelBounds.left + labelBounds.width / 2;
+            const valueCenter = valueBounds.left + valueBounds.width / 2;
+            return (
+              Math.abs(labelCenter - cellCenter) <= 1 &&
+              Math.abs(valueCenter - cellCenter) <= 1 &&
+              label.scrollWidth <= label.clientWidth + 1 &&
+              value.scrollWidth <= value.clientWidth + 1
+            );
+          })
+        );
+      }),
+    ),
+  ).resolves.toBe(true);
   await expect(page.getByText('稳定主语言')).toHaveCount(0);
   await expect(page.locator('.task-history-progress-info')).toHaveCount(0);
   await expect(page.locator('.task-card-state')).toHaveCount(0);

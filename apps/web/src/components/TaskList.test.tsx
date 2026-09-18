@@ -93,12 +93,12 @@ describe('TaskList destructive history controls', () => {
     expect(screen.getByText('100%')).toBeInTheDocument();
     expect(screen.getByText('转录模式')).toBeInTheDocument();
     expect(screen.getByText('中文防幻觉')).toBeInTheDocument();
-    expect(container.querySelector('.task-card-format')).toHaveTextContent('TXT');
+    expect(
+      container.querySelector('.task-history-config-cell:nth-child(2) > strong'),
+    ).toHaveTextContent('TXT');
     expect(container.querySelector('.task-card-state')).toBeNull();
     expect(screen.getByRole('img', { name: '已完成' })).toBeInTheDocument();
-    expect(container.querySelector('.task-history-config-line')).toContainElement(
-      container.querySelector('.task-card-format-list'),
-    );
+    expect(container.querySelectorAll('.task-history-config-line strong')).toHaveLength(3);
     expect(container.querySelector('.task-history-facts')).not.toHaveTextContent('已完成');
     expect(container.querySelector('.task-history-progress-info')).toBeNull();
     expect(screen.queryByText('稳定主语言')).not.toBeInTheDocument();
@@ -131,12 +131,10 @@ describe('TaskList destructive history controls', () => {
       container.querySelector('.task-list'),
     );
     expect(screen.queryByText(/个任务 · 四列/)).not.toBeInTheDocument();
-    expect(
-      Array.from(container.querySelectorAll('.task-card-format'), (tag) => tag.textContent),
-    ).toEqual(['TXT', 'MD']);
     const configCells = container.querySelectorAll('.task-history-config-cell');
     expect(configCells[0]).toHaveTextContent('转录模式中文防幻觉');
-    expect(configCells[1]).toHaveTextContent('文本格式TXTMD');
+    expect(configCells[1]).toHaveTextContent('文本格式TXT MD');
+    expect(configCells.item(1).querySelector('strong')).toHaveTextContent('TXT MD');
     expect(configCells[2]).toHaveTextContent('参数配置默认参数');
     expect(container.querySelector('.task-history-stat-line dd')).toHaveTextContent(
       '媒体1 个耗时00:12媒体时长未知',
@@ -164,7 +162,7 @@ describe('TaskList destructive history controls', () => {
     const { container } = render(<TaskList expanded />);
 
     expect(screen.getByText('自定义参数')).toBeInTheDocument();
-    expect(container.querySelector('.task-history-config-cell.is-parameters')).toHaveTextContent(
+    expect(container.querySelector('.task-history-config-cell:nth-child(3)')).toHaveTextContent(
       '参数配置自定义参数',
     );
   });

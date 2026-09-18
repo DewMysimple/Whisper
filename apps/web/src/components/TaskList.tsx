@@ -398,17 +398,11 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                               {getPreset(task.presetId).label}
                             </strong>
                           </span>
-                          <span className="task-history-config-cell is-formats">
+                          <span className="task-history-config-cell">
                             <small>文本格式</small>
-                            <span className="task-card-format-list" aria-label="文本格式">
-                              {outputFormats.map((format) => (
-                                <span className="task-card-format" key={format}>
-                                  {format}
-                                </span>
-                              ))}
-                            </span>
+                            <strong>{outputFormats.join(' ')}</strong>
                           </span>
-                          <span className="task-history-config-cell is-parameters">
+                          <span className="task-history-config-cell">
                             <small>参数配置</small>
                             <strong title={task.isCustom ? '自定义参数' : '默认参数'}>
                               {task.isCustom ? '自定义参数' : '默认参数'}

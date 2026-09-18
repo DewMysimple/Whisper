@@ -11291,34 +11291,6 @@ body.topbar-resizing * {
   white-space: nowrap;
 }
 
-.task-card-format-list {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 2px 7px;
-}
-
-.task-card-format {
-  display: inline;
-  height: auto;
-  min-height: 0;
-  flex: 0 0 auto;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 680;
-  line-height: normal;
-}
-
-.task-panel.is-expanded .task-history-config-cell span.task-card-format {
-  font-size: 12px !important;
-}
-
 .task-card-progress {
   grid-column: 3;
 }
@@ -11351,24 +11323,24 @@ body.topbar-resizing * {
 .task-history-config-cell {
   display: grid;
   min-width: 0;
-  align-content: center;
+  min-height: 62px;
+  grid-template-rows: 16px minmax(18px, auto);
+  align-content: start;
   gap: 3px;
-  padding: 7px 8px;
+  justify-items: center;
+  padding: 12px 0 7px;
   border-left: 1px solid var(--border);
+  text-align: center;
 }
 
 .task-history-config-cell:first-child {
-  padding-left: 0;
   border-left: 0;
-}
-
-.task-history-config-cell:last-child {
-  padding-right: 0;
 }
 
 .task-history-config-cell small,
 .task-history-config-cell strong {
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -11378,12 +11350,14 @@ body.topbar-resizing * {
   color: var(--text-faint);
   font-size: max(9px, calc(var(--font-caption) - 1px));
   font-weight: 500;
+  line-height: 16px;
 }
 
 .task-history-config-cell strong {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 680;
+  line-height: 18px;
 }
 
 .task-history-stat-line dd {
@@ -11401,8 +11375,10 @@ body.topbar-resizing * {
   min-height: 54px;
   align-content: center;
   gap: 2px;
-  padding: 7px 8px;
+  justify-items: center;
+  padding: 7px 0;
   border-left: 1px solid var(--border);
+  text-align: center;
 }
 
 .task-history-facts > .task-history-stat-line {
@@ -11410,17 +11386,13 @@ body.topbar-resizing * {
 }
 
 .task-history-stat-line dd span:first-child {
-  padding-left: 0;
   border-left: 0;
-}
-
-.task-history-stat-line dd span:last-child {
-  padding-right: 0;
 }
 
 .task-history-stat-line dd small,
 .task-history-stat-line dd strong {
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

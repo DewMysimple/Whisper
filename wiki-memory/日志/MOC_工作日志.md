@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-19 | ui | - | archived | unify-history-config-field-structure | [[日志/2026-09-19-统一历史配置字段结构.md|统一历史配置字段结构]] |
 | 2026-09-19 | ui | - | archived | refine-history-card-heading-and-rules | [[日志/2026-09-19-收紧历史卡片标题与分隔线.md|收紧历史卡片标题与分隔线]] |
 | 2026-09-19 | ui | - | archived | align-history-fact-text | [[日志/2026-09-19-对齐历史事实区文字.md|对齐历史事实区文字]] |
 | 2026-09-18 | ui | - | archived | history-filter-and-stage-redesign | [[日志/2026-09-18-重构历史状态筛选与阶段信息.md|重构历史状态筛选与阶段信息]] |
