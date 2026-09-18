@@ -91,11 +91,37 @@ describe('TaskList destructive history controls', () => {
 
     expect(screen.queryByText('进度')).not.toBeInTheDocument();
     expect(screen.getByText('100%')).toBeInTheDocument();
-    expect(screen.getByText('中文防幻觉 · TXT')).toBeInTheDocument();
+    expect(screen.getByText('转录模式')).toBeInTheDocument();
+    expect(screen.getByText('中文防幻觉')).toBeInTheDocument();
+    expect(container.querySelector('.task-card-format')).toHaveTextContent('TXT');
     expect(container.querySelector('.task-card-state')).toHaveTextContent('已完成');
-    expect(container.querySelector('.task-history-progress-info')).not.toHaveTextContent('已完成');
+    expect(container.querySelector('.task-history-facts')).not.toHaveTextContent('已完成');
+    expect(container.querySelector('.task-history-progress-info')).toBeNull();
     expect(screen.queryByText('稳定主语言')).not.toBeInTheDocument();
     expect(container.querySelector('.progress-track')).toBeNull();
+  });
+
+  it('keeps output formats as independent header tags inside the archive region', () => {
+    useWorkspace.setState({
+      tasks: [
+        {
+          ...FINISHED_TASK,
+          outputs: ['D:\\Text\\已完成访谈.txt', 'D:\\Markdown\\已完成访谈.md'],
+        },
+      ],
+    });
+
+    const { container } = render(<TaskList expanded />);
+
+    expect(screen.getByRole('region', { name: '任务归档区' })).toContainElement(
+      container.querySelector('.task-list'),
+    );
+    expect(
+      Array.from(container.querySelectorAll('.task-card-format'), (tag) => tag.textContent),
+    ).toEqual(['TXT', 'MD']);
+    expect(container.querySelector('.task-history-stat-line dd')).toHaveTextContent(
+      '媒体1 个耗时00:12总时长未知',
+    );
   });
 
   it('keeps a long task name available while marking its visual line for tail truncation', () => {

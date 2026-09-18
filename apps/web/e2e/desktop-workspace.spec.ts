@@ -897,14 +897,24 @@ test('supports workspace navigation, theme and configuration export', async ({
   await historyFilters.getByRole('button', { name: /全部任务/ }).click();
   await expect(page.locator('.task-card-progress').first()).toHaveText('63%');
   await expect(page.locator('.task-card-progress').first()).not.toContainText('进度');
-  await expect(page.getByText('中文防幻觉 · TXT / MD')).toBeVisible();
-  await expect(page.getByText('中文防幻觉 · GPU 转录中 · TXT / MD')).toHaveCount(0);
-  await expect(page.getByText('英文转录 · TXT')).toBeVisible();
-  await expect(page.getByText('稳定主语言')).toHaveCount(0);
-  await expect(page.locator('.task-history-progress-info')).toHaveText([
-    '转录配置中文防幻觉 · TXT / MD',
-    '转录配置英文转录 · TXT',
+  await expect(page.getByText('转录模式')).toHaveCount(2);
+  await expect(page.locator('.task-history-facts').first()).toContainText('中文防幻觉');
+  await expect(page.locator('.task-history-facts').nth(1)).toContainText('英文转录');
+  await expect(
+    page
+      .locator('.task-history-facts')
+      .evaluateAll((facts) => facts.every((fact) => !fact.textContent?.includes('TXT'))),
+  ).resolves.toBe(true);
+  await expect(page.locator('.task-row').first().locator('.task-card-format')).toHaveText([
+    'TXT',
+    'MD',
   ]);
+  await expect(page.locator('.task-row').nth(1).locator('.task-card-format')).toHaveText(['TXT']);
+  await expect(page.locator('.task-history-stat-line').first()).toContainText('媒体2 个');
+  await expect(page.locator('.task-history-stat-line').first()).toContainText('耗时03:18');
+  await expect(page.locator('.task-history-stat-line').first()).toContainText('总时长未知');
+  await expect(page.getByText('稳定主语言')).toHaveCount(0);
+  await expect(page.locator('.task-history-progress-info')).toHaveCount(0);
   await expect(page.locator('.task-card-state').first()).toHaveText('运行中');
   await expect(
     page
@@ -964,16 +974,30 @@ test('supports workspace navigation, theme and configuration export', async ({
       const manager = shell.querySelector('.task-history-manager')!.getBoundingClientRect();
       const archive = shell.querySelector('.task-history-archive')!.getBoundingClientRect();
       const firstCard = shell.querySelector('.task-row')!.getBoundingClientRect();
+      const cards = Array.from(shell.querySelectorAll('.task-row'), (card) =>
+        card.getBoundingClientRect(),
+      );
       const style = getComputedStyle(shell.querySelector('.task-history-archive')!);
       const panelStyle = getComputedStyle(shell.querySelector('.task-panel.is-expanded')!);
       return {
         blocksAreSeparated: archive.top - manager.bottom,
         cardLeftInset: firstCard.left - archive.left,
-        cardTopInset: firstCard.top - archive.top,
+        cardTopInsetIsStructured: firstCard.top - archive.top > 56,
+        cardsShareTopEdge:
+          Math.max(...cards.map((card) => card.top)) - Math.min(...cards.map((card) => card.top)) <
+          1,
+        cardsShareHeight:
+          Math.max(...cards.map((card) => card.height)) -
+            Math.min(...cards.map((card) => card.height)) <
+          1,
+        archiveOwnsCards: shell
+          .querySelector('.task-history-archive')!
+          .contains(shell.querySelector('.task-row')),
+        archiveHasHeading: shell.querySelector('.task-history-archive-heading') !== null,
         padding: style.padding,
         borderWidth: style.borderTopWidth,
-        background: style.backgroundColor,
-        shadow: style.boxShadow,
+        hasBackground: style.backgroundColor !== 'rgba(0, 0, 0, 0)',
+        hasShadow: style.boxShadow !== 'none',
         radius: Number.parseFloat(style.borderTopLeftRadius),
         panelBorderWidth: panelStyle.borderTopWidth,
         panelBackground: panelStyle.backgroundColor,
@@ -982,13 +1006,17 @@ test('supports workspace navigation, theme and configuration export', async ({
     }),
   ).resolves.toEqual({
     blocksAreSeparated: 24,
-    cardLeftInset: 0,
-    cardTopInset: 0,
-    padding: '0px',
-    borderWidth: '0px',
-    background: 'rgba(0, 0, 0, 0)',
-    shadow: 'none',
-    radius: 0,
+    cardLeftInset: 21,
+    cardTopInsetIsStructured: true,
+    cardsShareTopEdge: true,
+    cardsShareHeight: true,
+    archiveOwnsCards: true,
+    archiveHasHeading: true,
+    padding: '20px',
+    borderWidth: '1px',
+    hasBackground: true,
+    hasShadow: true,
+    radius: 20,
     panelBorderWidth: '0px',
     panelBackground: 'rgba(0, 0, 0, 0)',
     panelShadow: 'none',
@@ -1083,6 +1111,7 @@ test('monitors the active task and manages dated history in a responsive grid', 
   await expect(page.locator('.task-monitor-source')).toContainText('多文件路径 · 2 个媒体文件');
   await expect(page.locator('.task-monitor-progress-card')).toHaveCount(2);
   await expect(page.locator('.task-monitor-support-grid')).toContainText('已生成 0 个文件');
+  await expect(page.locator('.task-monitor-dashboard')).toContainText('整体进度');
   await expect(page.getByRole('heading', { name: '媒体文件进度' })).toBeVisible();
   await expect(page.locator('.task-media-row')).toHaveCount(2);
   const mediaList = page.locator('.task-media-list');
@@ -1090,6 +1119,63 @@ test('monitors the active task and manages dated history in a responsive grid', 
   await expect(mediaList.getByText('设计评审补充.wav', { exact: true })).toBeVisible();
   await expect(page.locator('.task-monitor-stop')).toBeVisible();
   await expect(page.locator('.task-monitor-hero')).not.toContainText('GPU 转录中');
+  await expect(page.locator('.task-monitor-hero')).not.toContainText('第 1 / 2 个');
+  await expect(
+    page.locator('.task-monitor-hero > header').evaluate((header) => {
+      const area = header.getBoundingClientRect();
+      const actions = header
+        .querySelector('.task-monitor-heading-actions')!
+        .getBoundingClientRect();
+      return {
+        alignedRight: Math.abs(area.right - 24 - actions.right) < 1,
+        separatedFromLabel:
+          actions.left > header.querySelector('.step-label')!.getBoundingClientRect().right,
+      };
+    }),
+  ).resolves.toEqual({ alignedRight: true, separatedFromLabel: true });
+  await expect(
+    page.locator('.task-monitor-dashboard').evaluate((dashboard) => {
+      const progress = dashboard.querySelector('.task-monitor-progress-card')!;
+      const currentProgress = dashboard.querySelector(
+        '.task-monitor-progress-card + .task-monitor-progress-card',
+      )!;
+      const secondMeta = dashboard.querySelector('.task-monitor-meta > span:nth-child(2)')!;
+      const source = dashboard.querySelector('.task-monitor-source')!;
+      const output = dashboard.querySelector('.task-monitor-output')!;
+      const progressStyle = getComputedStyle(progress);
+      const currentProgressStyle = getComputedStyle(currentProgress);
+      const secondMetaStyle = getComputedStyle(secondMeta);
+      const sourceStyle = getComputedStyle(source);
+      const outputStyle = getComputedStyle(output);
+      return {
+        ownsMeta: dashboard.querySelector('.task-monitor-meta') !== null,
+        ownsProgress: dashboard.querySelector('.task-monitor-progress-grid') !== null,
+        ownsSupport: dashboard.querySelector('.task-monitor-support-grid') !== null,
+        progressBorder: progressStyle.borderTopWidth,
+        progressRadius: progressStyle.borderTopLeftRadius,
+        progressBackground: progressStyle.backgroundColor,
+        progressColumnLine: currentProgressStyle.borderLeftWidth,
+        metaColumnLine: secondMetaStyle.borderLeftWidth,
+        sourceBorder: sourceStyle.borderTopWidth,
+        sourceRadius: sourceStyle.borderTopLeftRadius,
+        sourceBackground: sourceStyle.backgroundColor,
+        supportColumnLine: outputStyle.borderLeftWidth,
+      };
+    }),
+  ).resolves.toEqual({
+    ownsMeta: true,
+    ownsProgress: true,
+    ownsSupport: true,
+    progressBorder: '0px',
+    progressRadius: '0px',
+    progressBackground: 'rgba(0, 0, 0, 0)',
+    progressColumnLine: '1px',
+    metaColumnLine: '1px',
+    sourceBorder: '0px',
+    sourceRadius: '0px',
+    sourceBackground: 'rgba(0, 0, 0, 0)',
+    supportColumnLine: '1px',
+  });
   await expect(
     page
       .locator('.task-monitor-meta > span')

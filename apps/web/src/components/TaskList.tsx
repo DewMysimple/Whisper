@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import type { TaskSnapshot } from '../contracts/desktop';
 import { getModelLabel } from '../data/models';
-import { formatDurationSummary, taskDurationSummary } from '../state/mediaDuration';
+import { formatMediaDuration, taskDurationSummary } from '../state/mediaDuration';
 import { getPreset, transcriptionTaskLabel } from '../data/presets';
 import { canResumeTask, isAbnormalTask, useWorkspace, type TaskFilter } from '../state/workspace';
 import {
@@ -60,7 +60,7 @@ function taskMatchesFilter(task: TaskSnapshot, filter: TaskFilter): boolean {
   return task.status === 'failed';
 }
 
-function taskOutputFormatLabel(task: TaskSnapshot): string {
+function taskOutputFormats(task: TaskSnapshot): string[] {
   const formats: string[] = [];
   const output = task.draft?.output;
   if (output?.txtEnabled) formats.push('TXT');
@@ -77,11 +77,18 @@ function taskOutputFormatLabel(task: TaskSnapshot): string {
     }
   }
 
-  return formats.length > 0 ? formats.join(' / ') : '格式未记录';
+  return formats.length > 0 ? formats : ['格式未记录'];
 }
 
-function taskStageSummary(task: TaskSnapshot): string {
-  return `${getPreset(task.presetId).label} · ${taskOutputFormatLabel(task)}`;
+function taskDurationValue(task: TaskSnapshot): string {
+  const summary = taskDurationSummary(task);
+  if (summary.unknownCount > 0) {
+    if (summary.knownSeconds > 0) {
+      return `${formatMediaDuration(summary.knownSeconds)} + ${summary.unknownCount} 未知`;
+    }
+    return summary.unknownCount >= task.sourceCount ? '未知' : `${summary.unknownCount} 个未知`;
+  }
+  return formatMediaDuration(summary.knownSeconds);
 }
 
 export function TaskList({ expanded = false }: { expanded?: boolean }) {
@@ -319,11 +326,24 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
       <span aria-live="polite" className="sr-only">
         {armedDelete?.label ?? ''}
       </span>
-      <div className={`task-history-archive ${expanded ? '' : 'is-compact'}`}>
+      <section
+        aria-label={expanded ? '任务归档区' : undefined}
+        className={`task-history-archive ${expanded ? '' : 'is-compact'}`}
+      >
+        {expanded && (
+          <header className="task-history-archive-heading">
+            <div>
+              <p className="step-label">ARCHIVED TASKS</p>
+              <h3>任务记录</h3>
+            </div>
+            <span>{visibleTasks.length} 个任务 · 四列</span>
+          </header>
+        )}
         <div className="task-list">
           {visibleTasks.length === 0 && <div className="empty-tasks">没有符合条件的任务。</div>}
           {visibleTasks.map((task) => {
             const resumable = canResumeTask(task);
+            const outputFormats = taskOutputFormats(task);
             return (
               <article className={`task-row is-${taskStatusTone(task)}`} key={task.id}>
                 <button
@@ -349,6 +369,15 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                       {taskStatusLabel(task)}
                     </span>
                     {expanded && (
+                      <span className="task-card-format-list" aria-label="输出格式">
+                        {outputFormats.map((format) => (
+                          <span className="task-card-format" key={format}>
+                            {format}
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                    {expanded && (
                       <span
                         className="task-card-progress"
                         aria-label={`任务进度 ${task.progress}%`}
@@ -358,30 +387,33 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                     )}
                   </div>
                   {expanded ? (
-                    <>
-                      <div className="task-history-progress-info">
-                        <span>
-                          <small>转录配置</small>
-                          <strong title={taskStageSummary(task)}>{taskStageSummary(task)}</strong>
-                        </span>
+                    <dl className="task-history-facts">
+                      <div>
+                        <dt>转录模式</dt>
+                        <dd>{getPreset(task.presetId).label}</dd>
                       </div>
-                      <dl className="task-history-facts">
-                        <div>
-                          <dt>媒体与耗时</dt>
-                          <dd>
-                            {task.sourceCount} 个 · {task.elapsed}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>总时长</dt>
-                          <dd>{formatDurationSummary(taskDurationSummary(task))}</dd>
-                        </div>
-                        <div>
-                          <dt>模型</dt>
-                          <dd>{getModelLabel(task.modelId)}</dd>
-                        </div>
-                      </dl>
-                    </>
+                      <div className="task-history-stat-line">
+                        <dt className="sr-only">媒体、耗时与总时长</dt>
+                        <dd>
+                          <span>
+                            <small>媒体</small>
+                            <strong>{task.sourceCount} 个</strong>
+                          </span>
+                          <span>
+                            <small>耗时</small>
+                            <strong>{task.elapsed}</strong>
+                          </span>
+                          <span>
+                            <small>总时长</small>
+                            <strong>{taskDurationValue(task)}</strong>
+                          </span>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>模型</dt>
+                        <dd>{getModelLabel(task.modelId)}</dd>
+                      </div>
+                    </dl>
                   ) : (
                     <>
                       <div className="task-meta">
@@ -488,7 +520,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
             );
           })}
         </div>
-      </div>
+      </section>
       <ConfirmDialog
         confirmLabel="载入原配置"
         description="软件只会把历史输入、参数、模型和输出策略载入转录工作台，不会立即创建或执行任务。"

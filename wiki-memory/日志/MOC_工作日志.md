@@ -18,6 +18,7 @@ supersedes: null
 | 2026-09-18 | ui | - | archived | history-filter-and-stage-redesign | [[日志/2026-09-18-重构历史状态筛选与阶段信息.md|重构历史状态筛选与阶段信息]] |
 | 2026-09-18 | ui | - | archived | task-monitor-and-history-redesign | [[日志/2026-09-18-重构任务监控与历史记录.md|重构任务监控与历史记录]] |
 | 2026-09-18 | ui | - | archived | worker-logs-and-appearance-personalization | [[日志/2026-09-18-重构Worker日志与桌面个性化设置.md|重构 Worker 日志与桌面个性化设置]] |
+| 2026-09-18 | ui | - | archived | regroup-history-cards-and-live-task-monitor | [[日志/2026-09-18-重排历史归档与任务监控信息.md|重排历史归档与任务监控信息]] |
 | 2026-09-18 | ui | - | archived | connected-worker-status-and-split-history | [[日志/2026-09-18-联结Worker状态并拆分历史区块.md|联结 Worker 状态并拆分历史区块]] |
 | 2026-09-18 | ui | - | archived | diagnostic-history-and-state-ui-polish | [[日志/2026-09-18-统一诊断历史与状态标识细节.md|统一诊断历史与状态标识细节]] |
 | 2026-09-18 | ui | - | archived | align-pending-colors-and-numeric-inputs | [[日志/2026-09-18-统一待补充配色与数值输入.md|统一待补充配色与数值输入]] |
