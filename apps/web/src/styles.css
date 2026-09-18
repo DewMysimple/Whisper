@@ -2412,16 +2412,26 @@ body.sidebar-collapsed .app-shell {
   flex: 0 0 auto;
   border: 1px solid rgba(255, 255, 255, 0.52);
   border-radius: 12px;
-  background: linear-gradient(145deg, #ff752d, var(--accent) 58%, #d84700);
-  color: #fff;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent) 72%, white),
+    var(--accent) 58%,
+    color-mix(in srgb, var(--accent) 82%, black)
+  );
+  color: var(--on-accent);
   box-shadow:
     0 8px 22px color-mix(in srgb, var(--accent) 28%, transparent),
     inset 0 1px rgba(255, 255, 255, 0.45);
 }
 
 :root[data-theme='dark'] .brand-mark {
-  background: linear-gradient(145deg, #ff8244, var(--accent) 62%, #d94800);
-  color: #fff;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent) 70%, white),
+    var(--accent) 62%,
+    color-mix(in srgb, var(--accent) 84%, black)
+  );
+  color: var(--on-accent);
 }
 
 .brand strong {
@@ -2920,11 +2930,16 @@ body.sidebar-collapsed .engine-heading {
   padding: 0 17px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 14px;
-  background: linear-gradient(135deg, #ff732b, var(--accent));
-  color: #fff;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 78%, white) 0%,
+    var(--accent) 58%,
+    color-mix(in srgb, var(--accent) 84%, black) 100%
+  );
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 720;
-  box-shadow: 0 12px 28px rgba(255, 91, 4, 0.25);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 @media (max-width: 1260px) {
@@ -3148,7 +3163,12 @@ body.sidebar-collapsed .engine-heading {
 .primary-button {
   min-height: 42px;
   border-color: var(--accent);
-  background: linear-gradient(180deg, #ff7025 0%, var(--accent) 58%, #ef5000 100%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 78%, white) 0%,
+    var(--accent) 58%,
+    color-mix(in srgb, var(--accent) 84%, black) 100%
+  );
   box-shadow:
     0 9px 24px color-mix(in srgb, var(--accent) 24%, transparent),
     inset 0 1px rgba(255, 255, 255, 0.32);
@@ -3248,13 +3268,17 @@ textarea:focus {
   overflow: hidden;
   contain: layout paint;
   border-color: rgba(255, 255, 255, 0.1);
-  background: linear-gradient(145deg, rgba(255, 91, 4, 0.08), transparent 45%), #232326;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 45%),
+    #232326;
   color: #f8f8fa;
   box-shadow: 0 18px 40px rgba(29, 29, 31, 0.17);
 }
 
 :root[data-theme='dark'] .launch-card {
-  background: linear-gradient(145deg, rgba(255, 91, 4, 0.12), transparent 48%), #0e0e0f;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 48%),
+    #0e0e0f;
 }
 
 .launch-card::after {
@@ -9071,7 +9095,7 @@ output,
 }
 
 .worker-log-empty .step-label {
-  color: #ff7a33;
+  color: var(--accent);
   font-size: max(10px, calc(var(--workspace-font-size) - 3px));
 }
 
@@ -9571,5 +9595,509 @@ output,
 
   .dimension-control-input {
     grid-template-columns: 36px minmax(80px, 1fr) 36px 66px;
+  }
+}
+
+/* Phase 4 / modification 33: theme fidelity and direct layout controls. */
+:root {
+  --log-console-bg: #f5f5f6;
+  --log-console-border: color-mix(in srgb, var(--text) 10%, transparent);
+  --log-console-grid: color-mix(in srgb, var(--text) 4%, transparent);
+  --log-console-hover: color-mix(in srgb, var(--accent) 5%, var(--surface-raised));
+  --log-console-text: #29292d;
+  --log-console-muted: #77777e;
+  --log-console-chip: #ffffff;
+}
+
+:root[data-theme='dark'] {
+  --log-console-bg: #17191d;
+  --log-console-border: rgba(255, 255, 255, 0.08);
+  --log-console-grid: rgba(255, 255, 255, 0.018);
+  --log-console-hover: rgba(255, 255, 255, 0.045);
+  --log-console-text: #e7e9ed;
+  --log-console-muted: #9297a2;
+  --log-console-chip: rgba(255, 255, 255, 0.035);
+}
+
+/* The navigation rail can be resized where it is used, with a quiet visual handle. */
+.sidebar-resize-handle {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  right: -1px;
+  display: grid;
+  width: 14px;
+  height: 100%;
+  place-items: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-resize-handle > span {
+  width: 3px;
+  height: 54px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-strong) 48%, transparent);
+  box-shadow: 0 0 0 0 transparent;
+  transition:
+    height 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.sidebar-resize-handle:hover > span,
+.sidebar-resize-handle:focus-visible > span,
+.sidebar-resize-handle.is-resizing > span {
+  height: 72px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.sidebar-resize-handle:focus-visible {
+  outline: 0;
+}
+
+body.sidebar-collapsed .sidebar-resize-handle {
+  display: none;
+}
+
+body.sidebar-resizing,
+body.sidebar-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.sidebar-resizing .app-shell {
+  transition: none;
+}
+
+/* Light diagnostics stay light; dark diagnostics remain purposefully dark. */
+.worker-log-stream.log-view {
+  border-color: var(--log-console-border);
+  background:
+    linear-gradient(var(--log-console-grid) 1px, transparent 1px) 0 0 / 100% 28px,
+    var(--log-console-bg);
+  color: var(--log-console-text);
+  box-shadow:
+    inset 0 1px color-mix(in srgb, var(--surface-raised) 75%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+:root[data-theme='dark'] .worker-log-stream.log-view {
+  border-color: var(--log-console-border);
+  background:
+    linear-gradient(var(--log-console-grid) 1px, transparent 1px) 0 0 / 100% 28px,
+    var(--log-console-bg);
+  color: var(--log-console-text);
+}
+
+.worker-log-stream code,
+:root[data-theme='dark'] .worker-log-stream code {
+  color: var(--log-console-text);
+}
+
+.worker-log-stream code:hover,
+:root[data-theme='dark'] .worker-log-stream code:hover {
+  background: var(--log-console-hover);
+}
+
+.worker-log-stream code > span,
+:root[data-theme='dark'] .worker-log-stream code > span {
+  color: var(--log-console-muted);
+}
+
+.worker-log-empty,
+:root[data-theme='dark'] .worker-log-empty {
+  color: var(--log-console-text);
+}
+
+.worker-log-empty-icon {
+  border-color: color-mix(in srgb, var(--green) 28%, var(--log-console-border));
+  background: color-mix(in srgb, var(--green-soft) 74%, var(--log-console-bg));
+  color: var(--green);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.worker-log-empty .step-label {
+  color: var(--accent);
+}
+
+.worker-log-empty > span:not(.worker-log-empty-icon),
+:root[data-theme='dark'] .worker-log-empty > span:not(.worker-log-empty-icon),
+.worker-log-empty-flow {
+  color: var(--log-console-muted);
+}
+
+.worker-log-empty-flow span {
+  border-color: var(--log-console-border);
+  background: var(--log-console-chip);
+  color: var(--log-console-muted);
+}
+
+/* Theme choices explain every mode, and AUTO sits inside the preview rail. */
+.theme-choice-grid label {
+  grid-template-rows: auto minmax(42px, auto);
+}
+
+.theme-sample.is-system::after {
+  content: none;
+}
+
+.theme-mode-badge {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  left: 7px;
+  padding: 3px 5px;
+  border: 1px solid rgba(70, 70, 74, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.68);
+  color: #5f5f64;
+  font-family: var(--mono);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 760;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  box-shadow: 0 2px 7px rgba(29, 29, 31, 0.06);
+}
+
+.theme-choice-copy {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  text-align: center;
+}
+
+.theme-choice-grid label > .theme-choice-copy > strong {
+  font-size: var(--font-caption);
+  line-height: 1.3;
+}
+
+.theme-choice-copy small {
+  color: var(--text-muted);
+  font-size: max(10px, calc(var(--workspace-font-size) - 3px));
+  font-weight: 450;
+  line-height: 1.35;
+}
+
+/* Rounded, theme-aware font listboxes replace the platform's square menu. */
+.font-family-grid > .font-family-control {
+  display: grid;
+  min-width: 0;
+  min-height: 82px;
+  grid-template-columns: minmax(150px, 1fr) minmax(170px, 0.9fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.font-family-control > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.font-family-control strong {
+  font-size: var(--font-body);
+}
+
+.font-family-control small {
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  font-weight: 450;
+  line-height: 1.4;
+}
+
+.rounded-select {
+  position: relative;
+  min-width: 0;
+}
+
+.rounded-select-trigger {
+  display: grid;
+  width: 100%;
+  min-height: 42px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  box-shadow: inset 0 1px color-mix(in srgb, white 52%, transparent);
+}
+
+.rounded-select-trigger svg {
+  color: var(--text-muted);
+  transition: transform 160ms ease;
+}
+
+.rounded-select.is-open .rounded-select-trigger {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.rounded-select.is-open .rounded-select-trigger svg {
+  transform: rotate(180deg);
+}
+
+.rounded-select-list {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 8px);
+  right: 0;
+  left: 0;
+  display: grid;
+  gap: 3px;
+  padding: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-float);
+}
+
+.rounded-select-list > button {
+  display: grid;
+  width: 100%;
+  min-height: 38px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.rounded-select-list > button:hover,
+.rounded-select-list > button[aria-selected='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Custom color editing uses an in-app rounded popover instead of the square native dialog. */
+.custom-color-control {
+  grid-template-columns: auto 38px minmax(100px, 112px);
+}
+
+.custom-color-picker {
+  position: relative;
+}
+
+.custom-color-trigger {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  padding: 4px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: inset 0 1px color-mix(in srgb, white 58%, transparent);
+}
+
+.custom-color-trigger > span {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  background: var(--custom-color);
+}
+
+.custom-color-picker.is-open .custom-color-trigger {
+  border-color: var(--custom-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--custom-color) 15%, transparent);
+}
+
+.custom-color-popover {
+  position: absolute;
+  z-index: 70;
+  top: calc(100% + 9px);
+  left: -54px;
+  display: grid;
+  width: 286px;
+  gap: 13px;
+  padding: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 17px;
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: var(--shadow-float);
+}
+
+.custom-color-popover-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.custom-color-popover-heading > span {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: var(--custom-color);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.custom-color-popover-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.custom-color-popover-heading strong {
+  font-size: var(--font-caption);
+}
+
+.custom-color-popover-heading small {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: max(9px, calc(var(--workspace-font-size) - 3px));
+}
+
+.custom-color-suggestions {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+
+.custom-color-suggestions button {
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 2px solid var(--surface-raised);
+  border-radius: 9px;
+  outline: 1px solid var(--border);
+  background: var(--custom-color);
+}
+
+.custom-color-suggestions button[aria-pressed='true'] {
+  outline: 2px solid var(--custom-color);
+  outline-offset: 2px;
+}
+
+.custom-color-channels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.custom-color-channels label {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding-left: 7px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.custom-color-channels input {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 7px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: right;
+}
+
+.custom-color-channels input::-webkit-inner-spin-button,
+.custom-color-channels input::-webkit-outer-spin-button,
+.dimension-number-input input::-webkit-inner-spin-button,
+.dimension-number-input input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+/* Numeric values align centrally and dimensions accept direct integer input. */
+.appearance-stepper output {
+  align-items: center;
+  line-height: 1;
+}
+
+.appearance-stepper output strong {
+  font-size: var(--font-body);
+  font-variant-numeric: tabular-nums;
+  font-weight: 660;
+  line-height: 1;
+}
+
+.appearance-stepper output small {
+  line-height: 1;
+  transform: none;
+}
+
+.dimension-control-input {
+  grid-template-columns: 36px minmax(100px, 1fr) 36px minmax(86px, 96px);
+}
+
+.dimension-number-input {
+  display: grid;
+  min-width: 0;
+  min-height: 38px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface-raised);
+}
+
+.dimension-number-input:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.dimension-number-input input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 3px 0 9px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: var(--font-caption);
+  font-variant-numeric: tabular-nums;
+  font-weight: 720;
+  text-align: right;
+}
+
+.dimension-number-input input:focus-visible {
+  outline: 0;
+}
+
+.dimension-number-input small {
+  padding-right: 9px;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 1;
+}
+
+@media (max-width: 760px) {
+  .font-family-grid > .font-family-control {
+    grid-template-columns: 1fr;
+  }
+
+  .dimension-control-input {
+    grid-template-columns: 36px minmax(80px, 1fr) 36px minmax(78px, 90px);
   }
 }

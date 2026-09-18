@@ -8,8 +8,10 @@ import {
   Settings2,
   Sparkles,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { DEFAULT_APPEARANCE, SIDEBAR_WIDTH_RANGE } from '../state/persistence';
 import { useWorkspace, type WorkspaceViewId } from '../state/workspace';
 
 const SIDEBAR_STORAGE_KEY = 'whisper-subtitle.sidebar-collapsed.v1';
@@ -33,7 +35,13 @@ export function Sidebar() {
   const environment = useWorkspace((state) => state.environment);
   const model = useWorkspace((state) => state.model);
   const restartWorker = useWorkspace((state) => state.restartWorker);
+  const sidebarWidth = useWorkspace((state) => state.sidebarWidth);
+  const setSidebarWidth = useWorkspace((state) => state.setSidebarWidth);
   const isReady = hostStatus.state === 'ready';
+  const dragStateRef = useRef<{ pointerId: number; startWidth: number; startX: number } | null>(
+    null,
+  );
+  const [resizing, setResizing] = useState(false);
   const remainingMediaCount = useWorkspace((state) => {
     const activeTask =
       state.tasks.find((task) => task.status === 'running') ??
@@ -66,6 +74,62 @@ export function Sidebar() {
     }
     return () => document.body.classList.remove('sidebar-collapsed');
   }, [collapsed]);
+
+  useEffect(
+    () => () => {
+      document.body.classList.remove('sidebar-resizing');
+    },
+    [],
+  );
+
+  const startSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (collapsed || event.button !== 0) return;
+    event.preventDefault();
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startWidth: sidebarWidth,
+      startX: event.clientX,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    document.body.classList.add('sidebar-resizing');
+    setResizing(true);
+  };
+
+  const resizeSidebar = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const dragState = dragStateRef.current;
+    if (dragState === null || dragState.pointerId !== event.pointerId) return;
+    const nextWidth = Math.min(
+      SIDEBAR_WIDTH_RANGE.maximum,
+      Math.max(
+        SIDEBAR_WIDTH_RANGE.minimum,
+        Math.round(dragState.startWidth + event.clientX - dragState.startX),
+      ),
+    );
+    setSidebarWidth(nextWidth);
+  };
+
+  const finishSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragStateRef.current?.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragStateRef.current = null;
+    document.body.classList.remove('sidebar-resizing');
+    setResizing(false);
+  };
+
+  const resizeSidebarWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    let nextWidth = sidebarWidth;
+    if (event.key === 'ArrowLeft') nextWidth -= SIDEBAR_WIDTH_RANGE.step;
+    else if (event.key === 'ArrowRight') nextWidth += SIDEBAR_WIDTH_RANGE.step;
+    else if (event.key === 'Home') nextWidth = SIDEBAR_WIDTH_RANGE.minimum;
+    else if (event.key === 'End') nextWidth = SIDEBAR_WIDTH_RANGE.maximum;
+    else return;
+    event.preventDefault();
+    setSidebarWidth(
+      Math.min(SIDEBAR_WIDTH_RANGE.maximum, Math.max(SIDEBAR_WIDTH_RANGE.minimum, nextWidth)),
+    );
+  };
 
   return (
     <aside className="sidebar" id="app-sidebar">
@@ -138,6 +202,25 @@ export function Sidebar() {
         )}
       </section>
       <p className="build-label">DESKTOP IPC V1 · OFFLINE</p>
+      <div
+        aria-label="拖拽调整导航栏宽度"
+        aria-orientation="vertical"
+        aria-valuemax={SIDEBAR_WIDTH_RANGE.maximum}
+        aria-valuemin={SIDEBAR_WIDTH_RANGE.minimum}
+        aria-valuenow={sidebarWidth}
+        aria-valuetext={`${sidebarWidth} 像素`}
+        className={`sidebar-resize-handle ${resizing ? 'is-resizing' : ''}`}
+        onDoubleClick={() => setSidebarWidth(DEFAULT_APPEARANCE.sidebarWidth)}
+        onKeyDown={resizeSidebarWithKeyboard}
+        onPointerCancel={finishSidebarResize}
+        onPointerDown={startSidebarResize}
+        onPointerMove={resizeSidebar}
+        onPointerUp={finishSidebarResize}
+        role="separator"
+        tabIndex={collapsed ? -1 : 0}
+      >
+        <span aria-hidden="true" />
+      </div>
     </aside>
   );
 }

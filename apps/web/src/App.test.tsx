@@ -387,6 +387,8 @@ describe('desktop workspace', () => {
     expect(screen.getByText('网络端口')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: '跟随 Windows' })).toBeChecked();
     expect(screen.getByText(/跟随 Windows 的浅色或深色应用模式/)).toBeInTheDocument();
+    expect(screen.getByText('固定使用明亮背景与深色文字')).toBeInTheDocument();
+    expect(screen.getByText('固定使用深色背景与浅色文字')).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '界面框架字号' })).toHaveTextContent('14px');
     expect(screen.getByRole('group', { name: '工作台内容字号' })).toHaveTextContent('14px');
     expect(screen.getByRole('group', { name: 'Worker 日志字号' })).toHaveTextContent('12px');
@@ -401,12 +403,27 @@ describe('desktop workspace', () => {
     await user.click(screen.getByRole('button', { name: '扩大工作台内容宽度' }));
     expect(document.documentElement.style.getPropertyValue('--sidebar-width')).toBe('312px');
     expect(document.documentElement.style.getPropertyValue('--workspace-max')).toBe('1560px');
+    const workspaceWidthInput = screen.getByRole('spinbutton', {
+      name: '工作台内容宽度数值',
+    });
+    const sidebarWidthInput = screen.getByRole('spinbutton', { name: '导航栏宽度数值' });
+    await user.clear(workspaceWidthInput);
+    await user.type(workspaceWidthInput, '1655');
+    await user.clear(sidebarWidthInput);
+    await user.type(sidebarWidthInput, '333');
+    expect(document.documentElement.style.getPropertyValue('--workspace-max')).toBe('1655px');
+    expect(document.documentElement.style.getPropertyValue('--sidebar-width')).toBe('333px');
     await user.click(screen.getByRole('button', { name: '蓝色强调色' }));
     expect(document.documentElement).toHaveAttribute('data-accent-preset', 'blue');
     expect(screen.getByRole('button', { name: '恢复橙色' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: '恢复橙色' }));
     expect(document.documentElement).toHaveAttribute('data-accent-preset', 'orange');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'UI 字体' }), 'dengxian');
+    await user.click(screen.getByRole('button', { name: '打开自定义强调色编辑器' }));
+    expect(screen.getByRole('dialog', { name: '自定义强调色编辑器' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '选择颜色 #6E5AE6' }));
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#6E5AE6');
+    await user.click(screen.getByRole('combobox', { name: 'UI 字体' }));
+    await user.click(screen.getByRole('option', { name: 'DengXian' }));
     expect(document.documentElement.style.getPropertyValue('--ui-font-family')).toContain(
       'DengXian',
     );

@@ -107,9 +107,16 @@ export function applyAppearancePreferences(preferences: AppearancePreferences): 
   if (preferences.accentPreset === 'custom') {
     const custom =
       normalizeHexColor(preferences.customAccentColor) ?? DEFAULT_APPEARANCE.customAccentColor;
+    const darkTheme = root.dataset.theme === 'dark';
     root.style.setProperty('--accent', custom);
-    root.style.setProperty('--accent-hover', `color-mix(in srgb, ${custom} 84%, black)`);
-    root.style.setProperty('--accent-soft', `color-mix(in srgb, ${custom} 14%, transparent)`);
+    root.style.setProperty(
+      '--accent-hover',
+      `color-mix(in srgb, ${custom} ${darkTheme ? 82 : 84}%, ${darkTheme ? 'white' : 'black'})`,
+    );
+    root.style.setProperty(
+      '--accent-soft',
+      `color-mix(in srgb, ${custom} ${darkTheme ? 22 : 13}%, transparent)`,
+    );
     root.style.setProperty('--on-accent', contrastColor(custom));
   } else {
     root.style.removeProperty('--accent');

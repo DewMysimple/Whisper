@@ -549,6 +549,8 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.getByRole('heading', { name: '桌面外观' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '本地运行环境' })).toBeVisible();
   await expect(page.getByRole('radio', { name: '跟随 Windows' })).toBeChecked();
+  await expect(page.getByText('固定使用明亮背景与深色文字')).toBeVisible();
+  await expect(page.getByText('固定使用深色背景与浅色文字')).toBeVisible();
   await expect(page.getByRole('group', { name: '界面框架字号' })).toContainText('14px');
   await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('14px');
   await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('12px');
@@ -559,6 +561,31 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.getByRole('button', { name: '恢复橙色' })).toBeDisabled();
   await page.getByRole('button', { name: '蓝色强调色' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-accent-preset', 'blue');
+  await expect(
+    page.locator('.brand-mark').evaluate((element) => getComputedStyle(element).backgroundImage),
+  ).resolves.not.toContain('rgb(255, 117, 45)');
+  const presetGradients = [
+    await page
+      .locator('.brand-mark')
+      .evaluate((element) => getComputedStyle(element).backgroundImage),
+  ];
+  for (const [label, preset] of [
+    ['绿色强调色', 'green'],
+    ['紫色强调色', 'purple'],
+  ] as const) {
+    await page.getByRole('button', { name: label }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-accent-preset', preset);
+    presetGradients.push(
+      await page
+        .locator('.brand-mark')
+        .evaluate((element) => getComputedStyle(element).backgroundImage),
+    );
+  }
+  expect(new Set(presetGradients).size).toBe(3);
+  await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath('settings-purple-accent.png'),
+  });
   await expect(page.getByRole('button', { name: '恢复橙色' })).toBeEnabled();
   await page.getByRole('textbox', { name: '自定义强调色十六进制' }).fill('#12345');
   await expect(page.getByRole('alert')).toContainText('请输入完整的十六进制颜色');
@@ -569,8 +596,16 @@ test('supports workspace navigation, theme and configuration export', async ({
   ).resolves.toBe('#2A7FFF');
   await page.getByRole('button', { name: '恢复橙色' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-accent-preset', 'orange');
-  await page.getByRole('combobox', { name: 'UI 字体' }).selectOption('dengxian');
-  await page.getByRole('combobox', { name: '等宽字体' }).selectOption('consolas');
+  await page.getByRole('button', { name: '打开自定义强调色编辑器' }).click();
+  await expect(page.getByRole('dialog', { name: '自定义强调色编辑器' })).toBeVisible();
+  await page.getByRole('button', { name: '选择颜色 #6E5AE6' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-accent-preset', 'custom');
+  const uiFontControl = page.getByRole('combobox', { name: 'UI 字体' });
+  await uiFontControl.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+  await uiFontControl.click();
+  await page.getByRole('option', { name: 'DengXian' }).click();
+  await page.getByRole('combobox', { name: '等宽字体' }).click();
+  await page.getByRole('option', { name: 'Consolas' }).click();
   await expect(
     page.locator('html').evaluate((element) => element.style.getPropertyValue('--ui-font-family')),
   ).resolves.toContain('DengXian');
@@ -1043,11 +1078,24 @@ test('opens the independent Worker log workspace and exposes only the restored s
   await expect(
     page.locator('.worker-logs-workspace').evaluate((element) => element.clientWidth),
   ).resolves.toBeGreaterThan(1200);
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = 'light';
+  });
+  await expect(
+    page
+      .locator('.worker-log-stream')
+      .evaluate((element) => getComputedStyle(element).backgroundColor),
+  ).resolves.toBe('rgb(245, 245, 246)');
   await page.waitForTimeout(400);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('worker-logs.png') });
   await page.evaluate(() => {
     document.documentElement.dataset.theme = 'dark';
   });
+  await expect(
+    page
+      .locator('.worker-log-stream')
+      .evaluate((element) => getComputedStyle(element).backgroundColor),
+  ).resolves.toBe('rgb(23, 25, 29)');
   await page.waitForTimeout(250);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('worker-logs-dark.png') });
 });
@@ -1073,6 +1121,30 @@ test('keeps full-screen layout and typography personalization independent', asyn
   await expect(
     page.locator('.app-shell').evaluate((element) => getComputedStyle(element).gridTemplateColumns),
   ).resolves.toMatch(/^304px /);
+
+  const resizeHandle = page.getByRole('separator', { name: '拖拽调整导航栏宽度' });
+  const resizeBox = await resizeHandle.boundingBox();
+  expect(resizeBox).not.toBeNull();
+  await page.mouse.move(resizeBox!.x + resizeBox!.width / 2, resizeBox!.y + 220);
+  await page.mouse.down();
+  await page.mouse.move(resizeBox!.x + resizeBox!.width / 2 + 24, resizeBox!.y + 220, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  await expect
+    .poll(() =>
+      page.locator('html').evaluate((element) => element.style.getPropertyValue('--sidebar-width')),
+    )
+    .toBe('328px');
+
+  await page.getByRole('spinbutton', { name: '导航栏宽度数值' }).fill('333');
+  await page.getByRole('spinbutton', { name: '工作台内容宽度数值' }).fill('1655');
+  await expect(
+    page.locator('html').evaluate((element) => ({
+      sidebar: element.style.getPropertyValue('--sidebar-width'),
+      workspace: element.style.getPropertyValue('--workspace-max'),
+    })),
+  ).resolves.toEqual({ sidebar: '333px', workspace: '1655px' });
 
   await page.getByRole('button', { name: '增大界面框架字号' }).click();
   await expect(
@@ -1100,10 +1172,46 @@ test('keeps full-screen layout and typography personalization independent', asyn
       .locator('.view-content')
       .evaluate((element) => getComputedStyle(element).getPropertyValue('--ui-font-size').trim()),
   ).resolves.toBe('15px');
+
+  await expect(
+    page.getByRole('group', { name: '界面框架字号' }).evaluate((element) => {
+      const output = element.querySelector('output')!.getBoundingClientRect();
+      const value = element.querySelector('output strong')!.getBoundingClientRect();
+      return Math.abs(output.top + output.height / 2 - (value.top + value.height / 2));
+    }),
+  ).resolves.toBeLessThanOrEqual(1);
+
+  await expect(
+    page.locator('.theme-sample.is-system').evaluate((element) => {
+      const sample = element.getBoundingClientRect();
+      const badge = element.querySelector('.theme-mode-badge')!.getBoundingClientRect();
+      return badge.left < sample.left + sample.width / 2;
+    }),
+  ).resolves.toBe(true);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(400);
   await page.screenshot({
     fullPage: true,
     path: testInfo.outputPath('settings-personalization-fullscreen.png'),
+  });
+
+  await page.getByRole('combobox', { name: 'UI 字体' }).click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expect(
+    page.getByRole('listbox').evaluate((element) => getComputedStyle(element).borderRadius),
+  ).resolves.toBe('14px');
+  await page.screenshot({
+    path: testInfo.outputPath('settings-font-list.png'),
+  });
+  await page.getByRole('option', { name: '系统默认' }).click();
+
+  await page.getByRole('button', { name: '打开自定义强调色编辑器' }).click();
+  const colorEditor = page.getByRole('dialog', { name: '自定义强调色编辑器' });
+  await expect(colorEditor).toBeVisible();
+  await expect(
+    colorEditor.evaluate((element) => getComputedStyle(element).borderRadius),
+  ).resolves.toBe('17px');
+  await page.screenshot({
+    path: testInfo.outputPath('settings-custom-color.png'),
   });
 });

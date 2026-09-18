@@ -1,4 +1,6 @@
 import {
+  Check,
+  ChevronDown,
   Download,
   Maximize2,
   Minus,
@@ -10,7 +12,7 @@ import {
   Upload,
 } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import {
   LOG_FONT_SIZE_RANGE,
@@ -46,6 +48,210 @@ const MONO_FONTS: Array<{ id: MonoFontFamily; label: string }> = [
   { id: 'consolas', label: 'Consolas' },
 ];
 
+const THEMES = [
+  {
+    description: '跟随 Windows 的浅色或深色应用模式',
+    id: 'system',
+    label: '跟随 Windows',
+  },
+  {
+    description: '固定使用明亮背景与深色文字',
+    id: 'light',
+    label: '浅色',
+  },
+  {
+    description: '固定使用深色背景与浅色文字',
+    id: 'dark',
+    label: '深色',
+  },
+] as const;
+
+const CUSTOM_COLOR_SUGGESTIONS = [
+  '#FF5B04',
+  '#E5484D',
+  '#B44BC8',
+  '#6E5AE6',
+  '#3478C7',
+  '#16845F',
+  '#8A6414',
+  '#495057',
+] as const;
+
+function RoundedSelect<T extends string>({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange(value: T): void;
+  options: Array<{ id: T; label: string }>;
+  value: T;
+}) {
+  const [open, setOpen] = useState(false);
+  const listboxId = useId();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.id === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !containerRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer, true);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer, true);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div className={`rounded-select ${open ? 'is-open' : ''}`} ref={containerRef}>
+      <button
+        aria-controls={listboxId}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={label}
+        className="rounded-select-trigger"
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
+        role="combobox"
+        type="button"
+      >
+        <span>{selected?.label}</span>
+        <ChevronDown size={15} />
+      </button>
+      {open && (
+        <div className="rounded-select-list" id={listboxId} role="listbox">
+          {options.map((option) => (
+            <button
+              aria-selected={option.id === value}
+              key={option.id}
+              onClick={() => {
+                onChange(option.id);
+                setOpen(false);
+              }}
+              role="option"
+              type="button"
+            >
+              <span>{option.label}</span>
+              {option.id === value && <Check size={15} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  return [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)].map((part) =>
+    Number.parseInt(part, 16),
+  ) as [number, number, number];
+}
+
+function rgbToHex(channels: [number, number, number]): string {
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+}
+
+function CustomColorPicker({ onChange, value }: { onChange(value: string): void; value: string }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const channels = hexToRgb(value);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !containerRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer, true);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer, true);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  const updateChannel = (channelIndex: number, nextValue: number) => {
+    if (!Number.isFinite(nextValue)) return;
+    const nextChannels = [...channels] as [number, number, number];
+    nextChannels[channelIndex] = Math.min(255, Math.max(0, Math.round(nextValue)));
+    onChange(rgbToHex(nextChannels));
+  };
+
+  return (
+    <div className={`custom-color-picker ${open ? 'is-open' : ''}`} ref={containerRef}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-label="打开自定义强调色编辑器"
+        className="custom-color-trigger"
+        onClick={() => setOpen((current) => !current)}
+        style={{ '--custom-color': value } as CSSProperties}
+        type="button"
+      >
+        <span />
+      </button>
+      {open && (
+        <div aria-label="自定义强调色编辑器" className="custom-color-popover" role="dialog">
+          <div className="custom-color-popover-heading">
+            <span style={{ '--custom-color': value } as CSSProperties} />
+            <div>
+              <strong>自定义强调色</strong>
+              <small>{value}</small>
+            </div>
+          </div>
+          <div className="custom-color-suggestions" role="group" aria-label="常用强调色">
+            {CUSTOM_COLOR_SUGGESTIONS.map((color) => (
+              <button
+                aria-label={`选择颜色 ${color}`}
+                aria-pressed={color === value}
+                key={color}
+                onClick={() => onChange(color)}
+                style={{ '--custom-color': color } as CSSProperties}
+                type="button"
+              />
+            ))}
+          </div>
+          <div className="custom-color-channels">
+            {(['R', 'G', 'B'] as const).map((channel, channelIndex) => (
+              <label key={channel}>
+                <span>{channel}</span>
+                <input
+                  aria-label={`${channel} 通道`}
+                  max={255}
+                  min={0}
+                  onChange={(event) =>
+                    updateChannel(channelIndex, event.currentTarget.valueAsNumber)
+                  }
+                  type="number"
+                  value={channels[channelIndex]}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NumberStepper({
   label,
   maximum,
@@ -72,7 +278,7 @@ function NumberStepper({
         <Minus size={15} />
       </button>
       <output aria-live="polite">
-        {value}
+        <strong>{value}</strong>
         <small>px</small>
       </output>
       <button
@@ -106,6 +312,21 @@ function DimensionControl({
   step: number;
   value: number;
 }) {
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => setDraft(String(value)), [value]);
+
+  const commitDraft = () => {
+    const parsed = Number.parseInt(draft, 10);
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(value));
+      return;
+    }
+    const next = Math.min(maximum, Math.max(minimum, Math.round(parsed)));
+    setDraft(String(next));
+    onChange(next);
+  };
+
   return (
     <div className="dimension-control">
       <div className="dimension-control-copy">
@@ -129,7 +350,7 @@ function DimensionControl({
           max={maximum}
           min={minimum}
           onChange={(event) => onChange(Number(event.target.value))}
-          step={step}
+          step={1}
           type="range"
           value={value}
         />
@@ -141,7 +362,30 @@ function DimensionControl({
         >
           <Plus size={15} />
         </button>
-        <output aria-live="polite">{value}px</output>
+        <label className="dimension-number-input">
+          <span className="sr-only">{label}数值</span>
+          <input
+            aria-label={`${label}数值`}
+            max={maximum}
+            min={minimum}
+            onBlur={commitDraft}
+            onChange={(event) => {
+              const nextDraft = event.currentTarget.value;
+              setDraft(nextDraft);
+              const parsed = Number.parseInt(nextDraft, 10);
+              if (Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum) {
+                onChange(parsed);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur();
+            }}
+            step={1}
+            type="number"
+            value={draft}
+          />
+          <small>px</small>
+        </label>
       </div>
     </div>
   );
@@ -254,33 +498,29 @@ export function SettingsView() {
           </div>
           <fieldset className="theme-choice-grid">
             <legend className="sr-only">主题</legend>
-            {(
-              [
-                ['system', '跟随 Windows'],
-                ['light', '浅色'],
-                ['dark', '深色'],
-              ] as const
-            ).map(([value, label]) => (
-              <label className={theme === value ? 'is-selected' : ''} key={value}>
+            {THEMES.map((option) => (
+              <label className={theme === option.id ? 'is-selected' : ''} key={option.id}>
                 <input
-                  checked={theme === value}
+                  aria-label={option.label}
+                  checked={theme === option.id}
                   name="theme"
-                  onChange={() => setTheme(value)}
+                  onChange={() => setTheme(option.id)}
                   type="radio"
-                  value={value}
+                  value={option.id}
                 />
-                <span className={`theme-sample is-${value}`} aria-hidden="true">
+                <span className={`theme-sample is-${option.id}`} aria-hidden="true">
+                  {option.id === 'system' && <span className="theme-mode-badge">AUTO</span>}
                   <i />
                   <b />
                   <em />
                 </span>
-                <strong>{label}</strong>
+                <span className="theme-choice-copy">
+                  <strong>{option.label}</strong>
+                  <small>{option.description}</small>
+                </span>
               </label>
             ))}
           </fieldset>
-          {theme === 'system' && (
-            <p className="theme-choice-note">软件会跟随 Windows 的浅色或深色应用模式自动切换。</p>
-          )}
 
           <div className="accent-setting-row">
             <div className="accent-swatches" role="group" aria-label="强调色预设">
@@ -307,16 +547,13 @@ export function SettingsView() {
                 <span />
               </button>
             </div>
-            <label className="custom-color-control">
+            <div className="custom-color-control">
               <span>自定义</span>
-              <input
-                aria-label="选择自定义强调色"
-                onChange={(event) => {
-                  const value = event.target.value.toUpperCase();
+              <CustomColorPicker
+                onChange={(value) => {
                   setAccentDraft(value);
                   setCustomAccentColor(value);
                 }}
-                type="color"
                 value={normalizedAccent ?? customAccentColor}
               />
               <input
@@ -332,7 +569,7 @@ export function SettingsView() {
                 spellCheck={false}
                 value={accentDraft}
               />
-            </label>
+            </div>
             <button
               className="quiet-button restore-orange"
               disabled={accentPreset === 'orange'}
@@ -393,40 +630,30 @@ export function SettingsView() {
             </div>
           </div>
           <div className="font-family-grid">
-            <label>
+            <div className="font-family-control">
               <span>
                 <strong>UI 字体</strong>
                 <small>用于导航、标题、卡片和控件</small>
               </span>
-              <select
-                aria-label="UI 字体"
-                onChange={(event) => setUiFontFamily(event.target.value as UiFontFamily)}
+              <RoundedSelect
+                label="UI 字体"
+                onChange={setUiFontFamily}
+                options={UI_FONTS}
                 value={uiFontFamily}
-              >
-                {UI_FONTS.map((font) => (
-                  <option key={font.id} value={font.id}>
-                    {font.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
+              />
+            </div>
+            <div className="font-family-control">
               <span>
                 <strong>等宽字体</strong>
                 <small>用于 Worker 日志、路径与诊断数据</small>
               </span>
-              <select
-                aria-label="等宽字体"
-                onChange={(event) => setMonoFontFamily(event.target.value as MonoFontFamily)}
+              <RoundedSelect
+                label="等宽字体"
+                onChange={setMonoFontFamily}
+                options={MONO_FONTS}
                 value={monoFontFamily}
-              >
-                {MONO_FONTS.map((font) => (
-                  <option key={font.id} value={font.id}>
-                    {font.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
           </div>
           <div className="typography-setting-grid">
             <div className="typography-size-row">
