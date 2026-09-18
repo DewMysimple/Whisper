@@ -96,7 +96,7 @@ describe('TaskList destructive history controls', () => {
     expect(container.querySelector('.task-card-format')).toHaveTextContent('TXT');
     expect(container.querySelector('.task-card-state')).toBeNull();
     expect(screen.getByRole('img', { name: '已完成' })).toBeInTheDocument();
-    expect(container.querySelector('.task-card-heading')).toContainElement(
+    expect(container.querySelector('.task-history-config-line')).toContainElement(
       container.querySelector('.task-card-format-list'),
     );
     expect(container.querySelector('.task-history-facts')).not.toHaveTextContent('已完成');
@@ -105,7 +105,7 @@ describe('TaskList destructive history controls', () => {
     expect(container.querySelector('.progress-track')).toBeNull();
   });
 
-  it('keeps output formats as independent header tags inside the archive region', () => {
+  it('places formats in the second configuration column and parameters in the third', () => {
     useWorkspace.setState({
       tasks: [
         {
@@ -124,6 +124,10 @@ describe('TaskList destructive history controls', () => {
     expect(
       Array.from(container.querySelectorAll('.task-card-format'), (tag) => tag.textContent),
     ).toEqual(['TXT', 'MD']);
+    const configCells = container.querySelectorAll('.task-history-config-cell');
+    expect(configCells[0]).toHaveTextContent('转录模式中文防幻觉');
+    expect(configCells[1]).toHaveTextContent('文本格式TXTMD');
+    expect(configCells[2]).toHaveTextContent('参数配置默认参数');
     expect(container.querySelector('.task-history-stat-line dd')).toHaveTextContent(
       '媒体1 个耗时00:12媒体时长未知',
     );
@@ -144,16 +148,15 @@ describe('TaskList destructive history controls', () => {
     expect(taskTitle?.querySelector('.task-title-extension')).toHaveTextContent('.mkv');
   });
 
-  it('explains customized task metadata as adjusted parameters', () => {
+  it('labels customized task metadata as custom parameters in the third column', () => {
     useWorkspace.setState({ tasks: [{ ...FINISHED_TASK, isCustom: true }] });
 
-    render(<TaskList expanded />);
+    const { container } = render(<TaskList expanded />);
 
-    expect(screen.getByText('参数已调整')).toHaveAttribute(
-      'title',
-      '该任务使用了相对预设调整过的转录参数',
+    expect(screen.getByText('自定义参数')).toBeInTheDocument();
+    expect(container.querySelector('.task-history-config-cell.is-parameters')).toHaveTextContent(
+      '参数配置自定义参数',
     );
-    expect(screen.queryByText('自定义')).not.toBeInTheDocument();
   });
 
   it('shows only failed tasks in the attention filter', () => {

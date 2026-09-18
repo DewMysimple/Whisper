@@ -377,15 +377,6 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                     >
                       <StatusIcon task={task} />
                     </span>
-                    {expanded && (
-                      <span className="task-card-format-list" aria-label="输出格式">
-                        {outputFormats.map((format) => (
-                          <span className="task-card-format" key={format}>
-                            {format}
-                          </span>
-                        ))}
-                      </span>
-                    )}
                     <span className="task-card-identity">
                       <span className="task-title-line">
                         <strong
@@ -404,9 +395,6 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                       </span>
                       <span className="task-card-subline">
                         <time dateTime={task.createdAt}>{formatTaskCreatedAt(task.createdAt)}</time>
-                        {task.isCustom && (
-                          <em title="该任务使用了相对预设调整过的转录参数">参数已调整</em>
-                        )}
                       </span>
                     </span>
                     {expanded && (
@@ -420,9 +408,32 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                   </div>
                   {expanded ? (
                     <dl className="task-history-facts">
-                      <div>
-                        <dt>转录模式</dt>
-                        <dd>{getPreset(task.presetId).label}</dd>
+                      <div className="task-history-config-line">
+                        <dt className="sr-only">转录模式、文本格式与参数配置</dt>
+                        <dd>
+                          <span className="task-history-config-cell">
+                            <small>转录模式</small>
+                            <strong title={getPreset(task.presetId).label}>
+                              {getPreset(task.presetId).label}
+                            </strong>
+                          </span>
+                          <span className="task-history-config-cell is-formats">
+                            <small>文本格式</small>
+                            <span className="task-card-format-list" aria-label="文本格式">
+                              {outputFormats.map((format) => (
+                                <span className="task-card-format" key={format}>
+                                  {format}
+                                </span>
+                              ))}
+                            </span>
+                          </span>
+                          <span className="task-history-config-cell is-parameters">
+                            <small>参数配置</small>
+                            <strong title={task.isCustom ? '自定义参数' : '默认参数'}>
+                              {task.isCustom ? '自定义参数' : '默认参数'}
+                            </strong>
+                          </span>
+                        </dd>
                       </div>
                       <div className="task-history-stat-line">
                         <dt className="sr-only">媒体、耗时与媒体时长</dt>

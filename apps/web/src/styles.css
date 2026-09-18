@@ -11338,11 +11338,9 @@ body.topbar-resizing * {
 .task-card-format-list {
   display: flex;
   min-width: 0;
-  grid-column: 2;
-  grid-row: 1;
   align-items: center;
-  gap: 6px;
-  overflow: hidden;
+  flex-wrap: wrap;
+  gap: 3px;
 }
 
 .task-card-format {
@@ -11352,7 +11350,7 @@ body.topbar-resizing * {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  padding: 0 7px;
+  padding: 0 3px;
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
   border-radius: 999px;
   background: var(--accent-soft);
@@ -11361,6 +11359,10 @@ body.topbar-resizing * {
   font-size: var(--font-caption);
   font-weight: 700;
   line-height: 1;
+}
+
+.task-panel.is-expanded .task-history-config-cell .task-card-format {
+  font-size: 12px !important;
 }
 
 .task-card-progress {
@@ -11381,6 +11383,60 @@ body.topbar-resizing * {
 
 .task-history-facts > div:first-child {
   padding-top: 7px;
+}
+
+.task-history-config-line dd {
+  display: grid;
+  min-width: 0;
+  min-height: 62px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  margin-top: 0;
+}
+
+.task-history-config-cell {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 3px;
+  padding: 7px 8px;
+  border-left: 1px solid var(--border);
+}
+
+.task-history-config-cell:first-child {
+  padding-right: 4px;
+  padding-left: 0;
+  border-left: 0;
+}
+
+.task-history-config-cell:last-child {
+  padding-right: 0;
+  padding-left: 4px;
+}
+
+.task-history-config-cell.is-formats {
+  padding-right: 4px;
+  padding-left: 4px;
+}
+
+.task-history-config-cell small,
+.task-history-config-cell strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-history-config-cell small {
+  color: var(--text-faint);
+  font-size: max(9px, calc(var(--font-caption) - 1px));
+  font-weight: 500;
+}
+
+.task-history-config-cell strong {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 680;
 }
 
 .task-history-stat-line dd {
