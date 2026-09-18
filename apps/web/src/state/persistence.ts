@@ -33,6 +33,7 @@ import {
   UI_FONT_SIZE_RANGE,
   WORKSPACE_FONT_SIZE_RANGE,
   WORKSPACE_WIDTH_RANGE,
+  TOPBAR_HEIGHT_RANGE,
   normalizeHexColor,
   type AccentPreset,
   type AppearancePreferences,
@@ -48,6 +49,7 @@ export {
   UI_FONT_SIZE_RANGE,
   WORKSPACE_FONT_SIZE_RANGE,
   WORKSPACE_WIDTH_RANGE,
+  TOPBAR_HEIGHT_RANGE,
   applyAppearancePreferences,
   applyThemePreference,
   normalizeHexColor,
@@ -152,6 +154,7 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   const logFontSize = value.logFontSize ?? DEFAULT_APPEARANCE.logFontSize;
   const sidebarWidth = value.sidebarWidth ?? DEFAULT_APPEARANCE.sidebarWidth;
   const workspaceWidth = value.workspaceWidth ?? DEFAULT_APPEARANCE.workspaceWidth;
+  const topbarHeight = value.topbarHeight ?? DEFAULT_APPEARANCE.topbarHeight;
   const accentPreset = value.accentPreset ?? DEFAULT_APPEARANCE.accentPreset;
   const customAccentColor = value.customAccentColor ?? DEFAULT_APPEARANCE.customAccentColor;
   const uiFontFamily = value.uiFontFamily ?? DEFAULT_APPEARANCE.uiFontFamily;
@@ -176,6 +179,12 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
       workspaceWidth,
       WORKSPACE_WIDTH_RANGE.minimum,
       WORKSPACE_WIDTH_RANGE.maximum,
+      true,
+    ) ||
+    !isNumberInRange(
+      topbarHeight,
+      TOPBAR_HEIGHT_RANGE.minimum,
+      TOPBAR_HEIGHT_RANGE.maximum,
       true,
     ) ||
     !isAccentPreset(accentPreset) ||
@@ -268,6 +277,7 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
     monoFontFamily,
     sidebarWidth,
     workspaceWidth,
+    topbarHeight,
     selectedModelId,
     selectedPresetId: value.selectedPresetId,
     profileMode,

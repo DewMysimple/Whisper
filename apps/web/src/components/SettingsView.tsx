@@ -6,6 +6,7 @@ import {
   Minus,
   Palette,
   PanelLeft,
+  PanelTop,
   Plus,
   RotateCcw,
   Type,
@@ -21,6 +22,7 @@ import {
   UI_FONT_SIZE_RANGE,
   WORKSPACE_FONT_SIZE_RANGE,
   WORKSPACE_WIDTH_RANGE,
+  TOPBAR_HEIGHT_RANGE,
   type AccentPreset,
   type MonoFontFamily,
   type UiFontFamily,
@@ -596,6 +598,8 @@ export function SettingsView() {
   const setSidebarWidth = useWorkspace((state) => state.setSidebarWidth);
   const workspaceWidth = useWorkspace((state) => state.workspaceWidth);
   const setWorkspaceWidth = useWorkspace((state) => state.setWorkspaceWidth);
+  const topbarHeight = useWorkspace((state) => state.topbarHeight);
+  const setTopbarHeight = useWorkspace((state) => state.setTopbarHeight);
   const restoreAppearanceDefaults = useWorkspace((state) => state.restoreAppearanceDefaults);
   const environment = useWorkspace((state) => state.environment);
   const hostStatus = useWorkspace((state) => state.hostStatus);
@@ -664,8 +668,8 @@ export function SettingsView() {
               <strong>{workspaceWidth}px</strong>
             </span>
             <span>
-              <small>层级</small>
-              <strong>3 组独立字号</strong>
+              <small>顶栏</small>
+              <strong>{topbarHeight}px</strong>
             </span>
           </div>
         </div>
@@ -789,7 +793,7 @@ export function SettingsView() {
             <Maximize2 size={18} />
             <div>
               <h3>工作区尺寸</h3>
-              <span>独立调节内容承载宽度与左侧工作台导航，不影响收起后的紧凑模式。</span>
+              <span>独立调节内容承载宽度、左侧工作台导航与顶部标题区域。</span>
             </div>
           </div>
           <div className="dimension-control-list">
@@ -812,6 +816,16 @@ export function SettingsView() {
               onChange={setSidebarWidth}
               step={SIDEBAR_WIDTH_RANGE.step}
               value={sidebarWidth}
+            />
+            <DimensionControl
+              description="控制标题、状态与全局操作所在顶栏的纵向空间"
+              icon={<PanelTop size={17} />}
+              label="顶栏高度"
+              maximum={TOPBAR_HEIGHT_RANGE.maximum}
+              minimum={TOPBAR_HEIGHT_RANGE.minimum}
+              onChange={setTopbarHeight}
+              step={TOPBAR_HEIGHT_RANGE.step}
+              value={topbarHeight}
             />
           </div>
           <p className="layout-setting-note">

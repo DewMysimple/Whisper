@@ -328,170 +328,175 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
       <span aria-live="polite" className="sr-only">
         {armedDelete?.label ?? ''}
       </span>
-      <div className="task-list">
-        {visibleTasks.length === 0 && <div className="empty-tasks">没有符合条件的任务。</div>}
-        {visibleTasks.map((task) => {
-          const resumable = canResumeTask(task);
-          return (
-            <article className={`task-row is-${taskStatusTone(task)}`} key={task.id}>
-              <button
-                aria-label={`查看 ${task.title} 详情`}
-                className="task-main task-open"
-                onClick={() => void selectTask(task.id)}
-                type="button"
-              >
-                <div className="task-card-heading">
-                  <span className={`task-status ${taskStatusTone(task)}`} aria-hidden="true">
-                    <StatusIcon task={task} />
-                  </span>
-                  <span className="task-card-identity">
-                    <span className="task-title-line">
-                      <strong title={task.title}>{task.title}</strong>
+      <div className={`task-history-archive ${expanded ? '' : 'is-compact'}`}>
+        <div className="task-list">
+          {visibleTasks.length === 0 && <div className="empty-tasks">没有符合条件的任务。</div>}
+          {visibleTasks.map((task) => {
+            const resumable = canResumeTask(task);
+            return (
+              <article className={`task-row is-${taskStatusTone(task)}`} key={task.id}>
+                <button
+                  aria-label={`查看 ${task.title} 详情`}
+                  className="task-main task-open"
+                  onClick={() => void selectTask(task.id)}
+                  type="button"
+                >
+                  <div className="task-card-heading">
+                    <span className={`task-status ${taskStatusTone(task)}`} aria-hidden="true">
+                      <StatusIcon task={task} />
                     </span>
-                    <span className="task-card-subline">
-                      <time dateTime={task.createdAt}>{formatTaskCreatedAt(task.createdAt)}</time>
-                      {task.isCustom && <em>自定义</em>}
-                    </span>
-                  </span>
-                  <span className={`task-card-state is-${taskStatusTone(task)}`}>
-                    {taskStatusLabel(task)}
-                  </span>
-                  {expanded && (
-                    <span className="task-card-progress" aria-label={`任务进度 ${task.progress}%`}>
-                      <strong aria-hidden="true">{task.progress}%</strong>
-                    </span>
-                  )}
-                </div>
-                {expanded ? (
-                  <>
-                    <div className="task-history-progress-info">
-                      <span>
-                        <small>当前阶段</small>
-                        <strong title={taskStageSummary(task)}>{taskStageSummary(task)}</strong>
+                    <span className="task-card-identity">
+                      <span className="task-title-line">
+                        <strong title={task.title}>{task.title}</strong>
                       </span>
-                    </div>
-                    <dl className="task-history-facts">
-                      <div>
-                        <dt>媒体与耗时</dt>
-                        <dd>
-                          {task.sourceCount} 个 · {task.elapsed}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>总时长</dt>
-                        <dd>{formatDurationSummary(taskDurationSummary(task))}</dd>
-                      </div>
-                      <div>
-                        <dt>模型</dt>
-                        <dd>{getModelLabel(task.modelId)}</dd>
-                      </div>
-                    </dl>
-                  </>
-                ) : (
-                  <>
-                    <div className="task-meta">
-                      <span className="task-stage">
-                        {task.outputAvailability === 'missing'
-                          ? '输出文件已丢失或移动'
-                          : formatTaskStage(task.stage)}
+                      <span className="task-card-subline">
+                        <time dateTime={task.createdAt}>{formatTaskCreatedAt(task.createdAt)}</time>
+                        {task.isCustom && <em>自定义</em>}
                       </span>
-                      <span>耗时 {task.elapsed}</span>
-                      <span>{task.sourceCount} 个媒体</span>
-                      <span>{getModelLabel(task.modelId)}</span>
-                    </div>
-                    <div className="progress-track" aria-label={`任务进度 ${task.progress}%`}>
-                      <span style={{ width: `${task.progress}%` }} />
-                    </div>
-                  </>
-                )}
-              </button>
-              <div className="task-card-footer">
-                {!expanded && (
-                  <span className="task-version">{getPreset(task.presetId).label}</span>
-                )}
-                <div className="task-card-footer-actions">
-                  {!expanded && <strong className="task-percent">{task.progress}%</strong>}
-                  {task.status === 'running' || task.status === 'queued' ? (
-                    <button
-                      aria-label={`取消 ${task.title}`}
-                      className="icon-button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void cancelTask(task.id);
-                      }}
-                      type="button"
-                    >
-                      <CircleStop size={17} />
-                    </button>
-                  ) : (
-                    <div className="task-actions">
-                      <button
-                        aria-label={`${armedDelete?.key === `task:${task.id}` ? '再次点击删除' : '删除'} ${task.title} 的任务记录`}
-                        aria-pressed={armedDelete?.key === `task:${task.id}`}
-                        className={`icon-button is-danger-action ${armedDelete?.key === `task:${task.id}` ? 'is-delete-armed' : ''}`}
-                        data-delete-arm-key={`task:${task.id}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          armOrDelete(
-                            `task:${task.id}`,
-                            `再次点击删除 ${task.title} 的任务记录`,
-                            () => deleteTaskHistory(task.id),
-                          );
-                        }}
-                        type="button"
+                    </span>
+                    <span className={`task-card-state is-${taskStatusTone(task)}`}>
+                      {taskStatusLabel(task)}
+                    </span>
+                    {expanded && (
+                      <span
+                        className="task-card-progress"
+                        aria-label={`任务进度 ${task.progress}%`}
                       >
-                        <Trash2 size={17} />
-                      </button>
-                      {task.draft && (
-                        <button
-                          aria-label={`${resumable ? '继续转录' : '重新转录'} ${task.title}`}
-                          className="icon-button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            if (resumable) {
-                              void resumeTask(task.id);
-                            } else {
-                              setRetryTaskId(task.id);
-                            }
-                          }}
-                          type="button"
-                        >
-                          <RotateCcw size={17} />
-                        </button>
-                      )}
-                      {task.status === 'completed' &&
-                        task.outputAvailability !== 'missing' &&
-                        (task.outputs?.length ?? 0) > 0 && (
-                          <button
-                            aria-label={`在资源管理器中定位 ${task.title} 的输出`}
-                            className="icon-button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void revealTaskOutput(task.id);
-                            }}
-                            type="button"
-                          >
-                            <FolderOpen size={18} />
-                          </button>
-                        )}
+                        <strong aria-hidden="true">{task.progress}%</strong>
+                      </span>
+                    )}
+                  </div>
+                  {expanded ? (
+                    <>
+                      <div className="task-history-progress-info">
+                        <span>
+                          <small>当前阶段</small>
+                          <strong title={taskStageSummary(task)}>{taskStageSummary(task)}</strong>
+                        </span>
+                      </div>
+                      <dl className="task-history-facts">
+                        <div>
+                          <dt>媒体与耗时</dt>
+                          <dd>
+                            {task.sourceCount} 个 · {task.elapsed}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>总时长</dt>
+                          <dd>{formatDurationSummary(taskDurationSummary(task))}</dd>
+                        </div>
+                        <div>
+                          <dt>模型</dt>
+                          <dd>{getModelLabel(task.modelId)}</dd>
+                        </div>
+                      </dl>
+                    </>
+                  ) : (
+                    <>
+                      <div className="task-meta">
+                        <span className="task-stage">
+                          {task.outputAvailability === 'missing'
+                            ? '输出文件已丢失或移动'
+                            : formatTaskStage(task.stage)}
+                        </span>
+                        <span>耗时 {task.elapsed}</span>
+                        <span>{task.sourceCount} 个媒体</span>
+                        <span>{getModelLabel(task.modelId)}</span>
+                      </div>
+                      <div className="progress-track" aria-label={`任务进度 ${task.progress}%`}>
+                        <span style={{ width: `${task.progress}%` }} />
+                      </div>
+                    </>
+                  )}
+                </button>
+                <div className="task-card-footer">
+                  {!expanded && (
+                    <span className="task-version">{getPreset(task.presetId).label}</span>
+                  )}
+                  <div className="task-card-footer-actions">
+                    {!expanded && <strong className="task-percent">{task.progress}%</strong>}
+                    {task.status === 'running' || task.status === 'queued' ? (
                       <button
-                        aria-label={`查看 ${task.title} 详情`}
+                        aria-label={`取消 ${task.title}`}
                         className="icon-button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          void selectTask(task.id);
+                          void cancelTask(task.id);
                         }}
                         type="button"
                       >
-                        <Eye size={18} />
+                        <CircleStop size={17} />
                       </button>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="task-actions">
+                        <button
+                          aria-label={`${armedDelete?.key === `task:${task.id}` ? '再次点击删除' : '删除'} ${task.title} 的任务记录`}
+                          aria-pressed={armedDelete?.key === `task:${task.id}`}
+                          className={`icon-button is-danger-action ${armedDelete?.key === `task:${task.id}` ? 'is-delete-armed' : ''}`}
+                          data-delete-arm-key={`task:${task.id}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            armOrDelete(
+                              `task:${task.id}`,
+                              `再次点击删除 ${task.title} 的任务记录`,
+                              () => deleteTaskHistory(task.id),
+                            );
+                          }}
+                          type="button"
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                        {task.draft && (
+                          <button
+                            aria-label={`${resumable ? '继续转录' : '重新转录'} ${task.title}`}
+                            className="icon-button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (resumable) {
+                                void resumeTask(task.id);
+                              } else {
+                                setRetryTaskId(task.id);
+                              }
+                            }}
+                            type="button"
+                          >
+                            <RotateCcw size={17} />
+                          </button>
+                        )}
+                        {task.status === 'completed' &&
+                          task.outputAvailability !== 'missing' &&
+                          (task.outputs?.length ?? 0) > 0 && (
+                            <button
+                              aria-label={`在资源管理器中定位 ${task.title} 的输出`}
+                              className="icon-button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void revealTaskOutput(task.id);
+                              }}
+                              type="button"
+                            >
+                              <FolderOpen size={18} />
+                            </button>
+                          )}
+                        <button
+                          aria-label={`查看 ${task.title} 详情`}
+                          className="icon-button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void selectTask(task.id);
+                          }}
+                          type="button"
+                        >
+                          <Eye size={18} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </article>
-          );
-        })}
+              </article>
+            );
+          })}
+        </div>
       </div>
       <ConfirmDialog
         confirmLabel="载入原配置"

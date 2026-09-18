@@ -426,6 +426,7 @@ describe('desktop workspace', () => {
     expect(screen.getByRole('spinbutton', { name: '界面框架字号数值' })).toHaveValue('14');
     expect(screen.getByRole('spinbutton', { name: '工作台内容字号数值' })).toHaveValue('14');
     expect(screen.getByRole('spinbutton', { name: 'Worker 日志字号数值' })).toHaveValue('13');
+    expect(screen.getByRole('spinbutton', { name: '顶栏高度数值' })).toHaveValue('116');
     await user.click(screen.getByRole('button', { name: '增大界面框架字号' }));
     expect(document.documentElement.style.getPropertyValue('--ui-font-size')).toBe('15px');
     expect(document.documentElement.style.getPropertyValue('--workspace-font-size')).toBe('14px');
@@ -439,8 +440,10 @@ describe('desktop workspace', () => {
     expect(document.documentElement.style.getPropertyValue('--log-font-size')).toBe('16px');
     await user.click(screen.getByRole('button', { name: '扩大导航栏宽度' }));
     await user.click(screen.getByRole('button', { name: '扩大工作台内容宽度' }));
+    await user.click(screen.getByRole('button', { name: '扩大顶栏高度' }));
     expect(document.documentElement.style.getPropertyValue('--sidebar-width')).toBe('312px');
     expect(document.documentElement.style.getPropertyValue('--workspace-max')).toBe('1560px');
+    expect(document.documentElement.style.getPropertyValue('--topbar-height')).toBe('120px');
     const workspaceWidthInput = screen.getByRole('spinbutton', {
       name: '工作台内容宽度数值',
     });
@@ -478,6 +481,7 @@ describe('desktop workspace', () => {
     expect(document.documentElement.style.getPropertyValue('--log-font-size')).toBe('13px');
     expect(document.documentElement.style.getPropertyValue('--sidebar-width')).toBe('304px');
     expect(document.documentElement.style.getPropertyValue('--workspace-max')).toBe('1540px');
+    expect(document.documentElement.style.getPropertyValue('--topbar-height')).toBe('116px');
   });
 
   it('activates the independent SRT profile with complete custom controls', async () => {

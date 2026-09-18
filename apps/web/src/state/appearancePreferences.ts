@@ -15,6 +15,7 @@ export interface AppearancePreferences {
   monoFontFamily: MonoFontFamily;
   sidebarWidth: number;
   workspaceWidth: number;
+  topbarHeight: number;
 }
 
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
@@ -28,6 +29,7 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   monoFontFamily: 'cascadia-mono',
   sidebarWidth: 304,
   workspaceWidth: 1540,
+  topbarHeight: 116,
 };
 
 export const UI_FONT_SIZE_RANGE = { minimum: 12, maximum: 18 } as const;
@@ -35,6 +37,7 @@ export const WORKSPACE_FONT_SIZE_RANGE = { minimum: 12, maximum: 18 } as const;
 export const LOG_FONT_SIZE_RANGE = { minimum: 10, maximum: 16 } as const;
 export const SIDEBAR_WIDTH_RANGE = { minimum: 264, maximum: 360, step: 8 } as const;
 export const WORKSPACE_WIDTH_RANGE = { minimum: 1200, maximum: 1760, step: 20 } as const;
+export const TOPBAR_HEIGHT_RANGE = { minimum: 96, maximum: 168, step: 4 } as const;
 
 export function applyThemePreference(theme: ThemePreference): void {
   const resolved =
@@ -104,6 +107,7 @@ export function applyAppearancePreferences(preferences: AppearancePreferences): 
     `${Math.max(240, preferences.sidebarWidth - 28)}px`,
   );
   root.style.setProperty('--workspace-max', `${preferences.workspaceWidth}px`);
+  root.style.setProperty('--topbar-height', `${preferences.topbarHeight}px`);
   if (preferences.accentPreset === 'custom') {
     const custom =
       normalizeHexColor(preferences.customAccentColor) ?? DEFAULT_APPEARANCE.customAccentColor;

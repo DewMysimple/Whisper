@@ -19,6 +19,7 @@ export function preferencesFromState(state: WorkspaceState): WorkspacePreference
     monoFontFamily: state.monoFontFamily,
     sidebarWidth: state.sidebarWidth,
     workspaceWidth: state.workspaceWidth,
+    topbarHeight: state.topbarHeight,
     selectedModelId: state.selectedModelId,
     selectedPresetId: state.selectedPresetId,
     profileMode: state.profileMode,
@@ -46,6 +47,7 @@ export function appearanceFromState(
     | 'monoFontFamily'
     | 'sidebarWidth'
     | 'workspaceWidth'
+    | 'topbarHeight'
   >,
 ) {
   return {
@@ -59,6 +61,7 @@ export function appearanceFromState(
     monoFontFamily: state.monoFontFamily,
     sidebarWidth: state.sidebarWidth,
     workspaceWidth: state.workspaceWidth,
+    topbarHeight: state.topbarHeight,
   };
 }
 

@@ -11174,3 +11174,104 @@ body.sidebar-resizing .app-shell {
     margin-left: 0;
   }
 }
+
+/* Workspace geometry and archive grouping refinements. Keep these rules last:
+   the legacy stylesheet still contains earlier diagnostic and history layouts. */
+.topbar {
+  height: var(--topbar-height, 116px);
+  min-height: var(--topbar-height, 116px);
+  box-sizing: border-box;
+  padding-block: 12px;
+}
+
+.worker-log-status {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 9%, var(--border));
+  border-radius: 18px;
+  background:
+    radial-gradient(
+      circle at 100% 0,
+      color-mix(in srgb, var(--accent) 6%, transparent),
+      transparent 36%
+    ),
+    var(--surface-raised);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--text) 4%, transparent),
+    0 16px 40px color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.worker-log-status > article {
+  min-height: 112px;
+  padding: 18px 20px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.worker-log-status > article:first-child {
+  border-left: 0;
+}
+
+.worker-log-status > article::after {
+  right: 18px;
+  left: 18px;
+  height: 2px;
+  border-radius: 999px 999px 0 0;
+}
+
+.task-history-archive {
+  margin-top: var(--space-5);
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--text) 8%, var(--border));
+  border-radius: 20px;
+  background: var(--surface-raised);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--text) 4%, transparent),
+    0 18px 44px color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.task-history-archive.is-compact {
+  display: contents;
+}
+
+.task-history-shell .task-panel.is-expanded > .task-history-archive > .task-list {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .worker-log-status {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .worker-log-status > article:nth-child(3) {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .worker-log-status > article:nth-child(4) {
+    border-top: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 680px) {
+  .worker-log-status {
+    grid-template-columns: 1fr;
+  }
+
+  .worker-log-status > article,
+  .worker-log-status > article:nth-child(4) {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .worker-log-status > article:first-child {
+    border-top: 0;
+  }
+
+  .task-history-archive {
+    padding: 12px;
+  }
+}

@@ -955,6 +955,27 @@ test('supports workspace navigation, theme and configuration export', async ({
     radius: 20,
   });
   await expect(
+    page.locator('.task-history-shell').evaluate((shell) => {
+      const manager = shell.querySelector('.task-history-manager')!.getBoundingClientRect();
+      const archive = shell.querySelector('.task-history-archive')!.getBoundingClientRect();
+      const firstCard = shell.querySelector('.task-row')!.getBoundingClientRect();
+      const style = getComputedStyle(shell.querySelector('.task-history-archive')!);
+      return {
+        blocksAreSeparated: archive.top - manager.bottom,
+        cardLeftInset: firstCard.left - archive.left,
+        cardTopInset: firstCard.top - archive.top,
+        padding: style.padding,
+        radius: Number.parseFloat(style.borderTopLeftRadius),
+      };
+    }),
+  ).resolves.toEqual({
+    blocksAreSeparated: 24,
+    cardLeftInset: 21,
+    cardTopInset: 21,
+    padding: '20px',
+    radius: 20,
+  });
+  await expect(
     page
       .locator('.task-summary-card strong')
       .first()
@@ -1226,6 +1247,37 @@ test('opens the independent Worker log workspace and exposes only the restored s
   await expect(page.getByRole('heading', { name: '实时诊断输出' })).toBeVisible();
   await expect(page.getByLabel('Worker 日志状态')).toContainText('BUFFER');
   await expect(page.getByLabel('Worker 日志状态').locator('article')).toHaveCount(4);
+  await expect(
+    page.getByLabel('Worker 日志状态').evaluate((status) => {
+      const cards = Array.from(status.querySelectorAll('article'), (card) =>
+        card.getBoundingClientRect(),
+      );
+      const style = getComputedStyle(status);
+      const ready = cards.length > 0 ? status.querySelector('article')! : null;
+      const greenProbe = document.createElement('span');
+      greenProbe.style.color = 'var(--green)';
+      status.appendChild(greenProbe);
+      const semanticGreen = getComputedStyle(greenProbe).color;
+      greenProbe.remove();
+      return {
+        firstJoin: Math.abs(cards[0]!.right - cards[1]!.left),
+        gap: style.gap,
+        overflow: style.overflow,
+        radius: Number.parseFloat(style.borderTopLeftRadius),
+        readyIconIsGreen:
+          getComputedStyle(ready!.querySelector('.worker-log-status-icon')!).color ===
+          semanticGreen,
+        readyLineIsGreen: getComputedStyle(ready!, '::after').backgroundColor === semanticGreen,
+      };
+    }),
+  ).resolves.toEqual({
+    firstJoin: 0,
+    gap: '0px',
+    overflow: 'hidden',
+    radius: 18,
+    readyIconIsGreen: true,
+    readyLineIsGreen: true,
+  });
   await expect(page.getByRole('log').locator('code')).toHaveCount(3);
   await expect(page.getByRole('log').locator('.worker-log-source')).toHaveText([
     'WORKER',
@@ -1279,6 +1331,7 @@ test('keeps full-screen layout and typography personalization independent', asyn
   await expect(page.getByRole('spinbutton', { name: 'Worker 日志字号数值' })).toHaveValue('13');
   await expect(page.getByRole('slider', { name: '工作台内容宽度滑杆' })).toHaveValue('1540');
   await expect(page.getByRole('slider', { name: '导航栏宽度滑杆' })).toHaveValue('304');
+  await expect(page.getByRole('slider', { name: '顶栏高度滑杆' })).toHaveValue('116');
   await expect(
     page.locator('.settings-preference-grid').evaluate((element) => {
       const columns = getComputedStyle(element).gridTemplateColumns.split(' ');
@@ -1306,12 +1359,17 @@ test('keeps full-screen layout and typography personalization independent', asyn
 
   await page.getByRole('spinbutton', { name: '导航栏宽度数值' }).fill('333');
   await page.getByRole('spinbutton', { name: '工作台内容宽度数值' }).fill('1655');
+  await page.getByRole('spinbutton', { name: '顶栏高度数值' }).fill('148');
   await expect(
     page.locator('html').evaluate((element) => ({
       sidebar: element.style.getPropertyValue('--sidebar-width'),
       workspace: element.style.getPropertyValue('--workspace-max'),
+      topbar: element.style.getPropertyValue('--topbar-height'),
     })),
-  ).resolves.toEqual({ sidebar: '333px', workspace: '1655px' });
+  ).resolves.toEqual({ sidebar: '333px', workspace: '1655px', topbar: '148px' });
+  await expect(
+    page.locator('.topbar').evaluate((element) => element.getBoundingClientRect().height),
+  ).resolves.toBe(148);
   await expect(page.getByRole('spinbutton', { name: '工作台内容宽度数值' })).toHaveAttribute(
     'type',
     'text',

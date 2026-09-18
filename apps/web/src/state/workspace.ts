@@ -37,6 +37,7 @@ import {
   UI_FONT_SIZE_RANGE,
   WORKSPACE_FONT_SIZE_RANGE,
   WORKSPACE_WIDTH_RANGE,
+  TOPBAR_HEIGHT_RANGE,
   LOG_FONT_SIZE_RANGE,
   type AccentPreset,
   type MonoFontFamily,
@@ -255,6 +256,7 @@ export interface WorkspaceState {
   monoFontFamily: MonoFontFamily;
   sidebarWidth: number;
   workspaceWidth: number;
+  topbarHeight: number;
   selectedTaskId: string | null;
   outputPreview: OutputPreview | null;
   previewLoading: boolean;
@@ -283,6 +285,7 @@ export interface WorkspaceState {
   setMonoFontFamily(family: MonoFontFamily): void;
   setSidebarWidth(width: number): void;
   setWorkspaceWidth(width: number): void;
+  setTopbarHeight(height: number): void;
   restoreAppearanceDefaults(): void;
   setTaskFilter(filter: TaskFilter): void;
   setTaskSearch(search: string): void;
@@ -518,6 +521,18 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const next = { ...appearanceFromState(get()), workspaceWidth };
     applyAppearancePreferences(next);
     set({ workspaceWidth });
+    persistLater(get);
+  },
+  setTopbarHeight: (topbarHeight) => {
+    if (
+      !Number.isInteger(topbarHeight) ||
+      topbarHeight < TOPBAR_HEIGHT_RANGE.minimum ||
+      topbarHeight > TOPBAR_HEIGHT_RANGE.maximum
+    )
+      return;
+    const next = { ...appearanceFromState(get()), topbarHeight };
+    applyAppearancePreferences(next);
+    set({ topbarHeight });
     persistLater(get);
   },
   restoreAppearanceDefaults: () => {

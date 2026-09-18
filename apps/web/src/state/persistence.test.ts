@@ -22,6 +22,7 @@ const preferences: WorkspacePreferences = {
   monoFontFamily: 'consolas',
   sidebarWidth: 320,
   workspaceWidth: 1600,
+  topbarHeight: 132,
   selectedModelId: 'large-v3-turbo',
   selectedPresetId: 'en_v1',
   profileMode: 'transcript',
@@ -178,6 +179,7 @@ describe('desktop workspace persistence', () => {
     delete legacy.preferences.monoFontFamily;
     delete legacy.preferences.sidebarWidth;
     delete legacy.preferences.workspaceWidth;
+    delete legacy.preferences.topbarHeight;
     delete legacy.preferences.selectedModelId;
     legacy.preferences.hardwarePreference = {
       mode: 'cpu',
@@ -201,6 +203,7 @@ describe('desktop workspace persistence', () => {
         monoFontFamily: 'cascadia-mono',
         sidebarWidth: 304,
         workspaceWidth: 1540,
+        topbarHeight: 116,
         selectedModelId: 'large-v3-turbo',
       }),
     );
@@ -219,6 +222,7 @@ describe('desktop workspace persistence', () => {
     delete preSeparation.preferences.workspaceFontSize;
     delete preSeparation.preferences.sidebarWidth;
     delete preSeparation.preferences.workspaceWidth;
+    delete preSeparation.preferences.topbarHeight;
     preSeparation.preferences.uiFontSize = 17;
 
     expect(importPreferences(JSON.stringify(preSeparation))).toEqual(
@@ -227,6 +231,7 @@ describe('desktop workspace persistence', () => {
         workspaceFontSize: 17,
         sidebarWidth: 304,
         workspaceWidth: 1540,
+        topbarHeight: 116,
       }),
     );
   });
@@ -251,6 +256,9 @@ describe('desktop workspace persistence', () => {
     invalid.preferences.workspaceWidth = 2000;
     expect(() => importPreferences(JSON.stringify(invalid))).toThrow(/字段或参数范围/);
     invalid.preferences.workspaceWidth = 1600;
+    invalid.preferences.topbarHeight = 95;
+    expect(() => importPreferences(JSON.stringify(invalid))).toThrow(/字段或参数范围/);
+    invalid.preferences.topbarHeight = 116;
     invalid.preferences.uiFontFamily = 'unknown';
     expect(() => importPreferences(JSON.stringify(invalid))).toThrow(/字段或参数范围/);
   });
