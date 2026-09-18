@@ -11358,19 +11358,12 @@ body.topbar-resizing * {
 }
 
 .task-history-config-cell:first-child {
-  padding-right: 4px;
   padding-left: 0;
   border-left: 0;
 }
 
 .task-history-config-cell:last-child {
   padding-right: 0;
-  padding-left: 4px;
-}
-
-.task-history-config-cell.is-formats {
-  padding-right: 4px;
-  padding-left: 4px;
 }
 
 .task-history-config-cell small,
@@ -11408,7 +11401,7 @@ body.topbar-resizing * {
   min-height: 54px;
   align-content: center;
   gap: 2px;
-  padding: 7px 9px;
+  padding: 7px 8px;
   border-left: 1px solid var(--border);
 }
 

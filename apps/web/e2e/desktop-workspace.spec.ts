@@ -956,6 +956,14 @@ test('supports workspace navigation, theme and configuration export', async ({
         const configCells = Array.from(card.querySelectorAll('.task-history-config-cell'), (cell) =>
           cell.getBoundingClientRect(),
         );
+        const configLabels = Array.from(
+          card.querySelectorAll('.task-history-config-cell > small'),
+          (label) => label.getBoundingClientRect(),
+        );
+        const statLabels = Array.from(
+          card.querySelectorAll('.task-history-stat-line dd > span > small'),
+          (label) => label.getBoundingClientRect(),
+        );
         const formatCell = configCells[1]!;
         const parameterCell = configCells[2]!;
         const parameterText = card.querySelector('.task-history-config-cell.is-parameters strong')!;
@@ -998,6 +1006,9 @@ test('supports workspace navigation, theme and configuration export', async ({
           configAndStatsColumnsAlign: configCells.every(
             (cell, index) => Math.abs(cell.left - statCells[index]!.left) <= 1,
           ),
+          configAndStatsTextAlign: configLabels.every(
+            (label, index) => Math.abs(label.left - statLabels[index]!.left) <= 1,
+          ),
           parameterCellIsThird: parameterCell.left >= configCells[1]!.right - 1,
           statRulesFillRow: statCells.every(
             (cell) =>
@@ -1015,6 +1026,7 @@ test('supports workspace navigation, theme and configuration export', async ({
     factsReachCardEdges: true,
     configRulesJoinRowBorders: true,
     configAndStatsColumnsAlign: true,
+    configAndStatsTextAlign: true,
     parameterCellIsThird: true,
     statRulesFillRow: true,
   });
