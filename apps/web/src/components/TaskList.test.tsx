@@ -85,4 +85,13 @@ describe('TaskList destructive history controls', () => {
     await user.click(screen.getByRole('button', { name: /再次点击清除/ }));
     expect(screen.queryByText('已完成访谈.wav')).not.toBeInTheDocument();
   });
+
+  it('shows progress as card information without a progress track', () => {
+    const { container } = render(<TaskList expanded />);
+
+    expect(screen.getByText('进度')).toBeInTheDocument();
+    expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(screen.getByText('输出已生成')).toBeInTheDocument();
+    expect(container.querySelector('.progress-track')).toBeNull();
+  });
 });

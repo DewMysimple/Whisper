@@ -8,7 +8,10 @@ import {
   Eye,
   LoaderCircle,
   RotateCcw,
+  Search,
+  SlidersHorizontal,
   Trash2,
+  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -40,6 +43,19 @@ function StatusIcon({ task }: { task: TaskSnapshot }) {
   if (task.status === 'cancelled') return <CircleStop size={17} />;
   if (task.status === 'failed') return <AlertCircle size={17} />;
   return <Clock3 size={17} />;
+}
+
+function taskStatusLabel(task: TaskSnapshot): string {
+  if (task.outputAvailability === 'missing') return '输出缺失';
+  if (task.status === 'running') return '运行中';
+  if (task.status === 'completed') return '已完成';
+  if (task.status === 'cancelled') return '已取消';
+  if (task.status === 'failed') return '失败';
+  return '等待中';
+}
+
+function taskStatusTone(task: TaskSnapshot): string {
+  return task.outputAvailability === 'missing' ? 'failed' : task.status;
 }
 
 export function TaskList({ expanded = false }: { expanded?: boolean }) {
@@ -130,29 +146,50 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
     >
       <div className="panel-heading">
         <div>
-          <p className="step-label">
-            {expanded ? 'CONTROLLED LOCAL IPC' : 'LOCAL QUEUE / 本机队列'}
-          </p>
+          <p className="step-label">{expanded ? 'LOCAL TASK ARCHIVE' : 'LOCAL QUEUE / 本机队列'}</p>
           <h2 id="task-title">{expanded ? '本机任务历史' : '最近任务'}</h2>
         </div>
-        <span className="task-count">{tasks.length} 项</span>
+        <span className="task-count">
+          {expanded ? `显示 ${visibleTasks.length} / ${tasks.length}` : `${tasks.length} 项`}
+        </span>
       </div>
       {expanded && (
         <div className="task-control-deck">
+          <div className="task-control-heading">
+            <span aria-hidden="true">
+              <SlidersHorizontal size={17} />
+            </span>
+            <div>
+              <strong>查找与筛选</strong>
+              <small>按名称、日期和状态定位本机任务记录</small>
+            </div>
+            <em>{visibleTasks.length} 条结果</em>
+          </div>
           <div className="task-toolbar">
-            <input
-              aria-label="搜索任务"
-              id="task-history-search"
-              onChange={(event) => setTaskSearch(event.target.value)}
-              placeholder="按文件名搜索历史…"
-              type="search"
-              value={taskSearch}
-            />
+            <div className="task-search-field">
+              <Search aria-hidden="true" size={16} />
+              <input
+                aria-label="搜索任务"
+                id="task-history-search"
+                onChange={(event) => setTaskSearch(event.target.value)}
+                placeholder="搜索文件名或任务名称…"
+                type="search"
+                value={taskSearch}
+              />
+              {taskSearch && (
+                <button aria-label="清除任务搜索" onClick={() => setTaskSearch('')} type="button">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
             <TaskDateFilter
               availableDates={taskDates}
               onChange={setTaskDateRange}
               range={taskDateRange}
             />
+          </div>
+          <div className="task-filter-line">
+            <span>任务状态</span>
             <div className="filter-tabs" aria-label="任务状态筛选">
               {(['all', 'running', 'completed', 'failed', 'cancelled'] as const).map((filter) => (
                 <button
@@ -168,7 +205,10 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
             </div>
           </div>
           <div className="task-history-tools" aria-label="任务历史维护">
-            <span>只清理本机历史，不删除输出文件</span>
+            <span>
+              <strong>记录维护</strong>
+              <small>只清理本机历史，不删除已经生成的输出文件</small>
+            </span>
             <button
               aria-pressed={armedDelete?.key === 'clear-completed'}
               className={`secondary-button ${armedDelete?.key === 'clear-completed' ? 'is-delete-armed' : ''}`}
@@ -210,35 +250,82 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
         {visibleTasks.map((task) => {
           const resumable = canResumeTask(task);
           return (
-            <article className="task-row" key={task.id}>
-              <div
-                className={`task-status ${task.outputAvailability === 'missing' ? 'failed' : task.status}`}
-              >
-                <StatusIcon task={task} />
-              </div>
+            <article className={`task-row is-${taskStatusTone(task)}`} key={task.id}>
               <button
                 aria-label={`查看 ${task.title} 详情`}
                 className="task-main task-open"
                 onClick={() => void selectTask(task.id)}
                 type="button"
               >
-                <div className="task-title-line">
-                  <strong>{task.title}</strong>
-                  {task.isCustom && <em>自定义</em>}
-                </div>
-                <div className="task-meta">
-                  <span className="task-stage">
-                    {task.outputAvailability === 'missing' ? '输出文件已丢失或移动' : task.stage}
+                <div className="task-card-heading">
+                  <span className={`task-status ${taskStatusTone(task)}`} aria-hidden="true">
+                    <StatusIcon task={task} />
                   </span>
-                  <span>耗时 {task.elapsed}</span>
-                  <span>{task.sourceCount} 个媒体</span>
-                  <span>总时长 {formatDurationSummary(taskDurationSummary(task))}</span>
-                  <span>{getModelLabel(task.modelId)}</span>
-                  <time dateTime={task.createdAt}>{formatTaskCreatedAt(task.createdAt)}</time>
+                  <span className="task-card-identity">
+                    <span className="task-title-line">
+                      <strong title={task.title}>{task.title}</strong>
+                    </span>
+                    <span className="task-card-subline">
+                      <time dateTime={task.createdAt}>{formatTaskCreatedAt(task.createdAt)}</time>
+                      {task.isCustom && <em>自定义</em>}
+                    </span>
+                  </span>
+                  <span className={`task-card-state is-${taskStatusTone(task)}`}>
+                    {taskStatusLabel(task)}
+                  </span>
+                  {expanded && (
+                    <span className="task-card-progress">
+                      <small>进度</small>
+                      <strong>{task.progress}%</strong>
+                    </span>
+                  )}
                 </div>
-                <div className="progress-track" aria-label={`任务进度 ${task.progress}%`}>
-                  <span style={{ width: `${task.progress}%` }} />
-                </div>
+                {expanded ? (
+                  <>
+                    <div className="task-history-progress-info">
+                      <span>
+                        <small>当前阶段</small>
+                        <strong>
+                          {task.outputAvailability === 'missing'
+                            ? '输出文件已丢失或移动'
+                            : task.stage}
+                        </strong>
+                      </span>
+                    </div>
+                    <dl className="task-history-facts">
+                      <div>
+                        <dt>媒体与耗时</dt>
+                        <dd>
+                          {task.sourceCount} 个 · {task.elapsed}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>总时长</dt>
+                        <dd>{formatDurationSummary(taskDurationSummary(task))}</dd>
+                      </div>
+                      <div>
+                        <dt>模型</dt>
+                        <dd>{getModelLabel(task.modelId)}</dd>
+                      </div>
+                    </dl>
+                  </>
+                ) : (
+                  <>
+                    <div className="task-meta">
+                      <span className="task-stage">
+                        {task.outputAvailability === 'missing'
+                          ? '输出文件已丢失或移动'
+                          : task.stage}
+                      </span>
+                      <span>耗时 {task.elapsed}</span>
+                      <span>{task.sourceCount} 个媒体</span>
+                      <span>{getModelLabel(task.modelId)}</span>
+                    </div>
+                    <div className="progress-track" aria-label={`任务进度 ${task.progress}%`}>
+                      <span style={{ width: `${task.progress}%` }} />
+                    </div>
+                  </>
+                )}
               </button>
               <div className="task-card-footer">
                 <span className="task-version">
@@ -246,7 +333,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                   {recognitionStrategyLabel(task.recognitionStrategy)}
                 </span>
                 <div className="task-card-footer-actions">
-                  <strong className="task-percent">{task.progress}%</strong>
+                  {!expanded && <strong className="task-percent">{task.progress}%</strong>}
                   {task.status === 'running' || task.status === 'queued' ? (
                     <button
                       aria-label={`取消 ${task.title}`}

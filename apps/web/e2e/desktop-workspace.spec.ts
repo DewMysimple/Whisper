@@ -735,6 +735,9 @@ test('supports workspace navigation, theme and configuration export', async ({
   ).resolves.toBe('14px 18px');
   await page.getByRole('searchbox', { name: '搜索任务' }).fill('Interview');
   await expect(page.getByText('Product Interview 06.mkv', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '清除任务搜索' }).click();
+  await expect(page.getByText('设计评审会议.m4a', { exact: true })).toBeVisible();
+  await expect(page.locator('.task-panel.is-expanded .progress-track')).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('tasks-light.png') });
@@ -787,9 +790,13 @@ test('monitors the active task and manages dated history in a responsive grid', 
     .getByRole('button', { name: /任务监控/ })
     .click();
   await expect(page.getByRole('heading', { name: '设计评审会议.m4a' })).toBeVisible();
-  await expect(page.locator('.task-monitor-source')).toHaveText('多文件路径 · 2 个媒体文件');
+  await expect(page.locator('.task-monitor-source')).toContainText('多文件路径 · 2 个媒体文件');
+  await expect(page.locator('.task-monitor-progress-card')).toHaveCount(2);
+  await expect(page.locator('.task-monitor-support-grid')).toContainText('已生成 0 个文件');
   await expect(page.getByRole('heading', { name: '媒体文件进度' })).toBeVisible();
   await expect(page.locator('.task-monitor-stop')).toBeVisible();
+  await page.waitForTimeout(220);
+  await page.screenshot({ fullPage: true, path: testInfo.outputPath('task-monitor-redesign.png') });
   await page.locator('.task-monitor-stop').click();
   await expect(page.locator('.confirm-dialog')).toBeVisible();
   await page.locator('.confirm-dialog .secondary-button').click();
@@ -805,7 +812,15 @@ test('monitors the active task and manages dated history in a responsive grid', 
         (element) =>
           getComputedStyle(element).gridTemplateColumns.split(' ').filter(Boolean).length,
       ),
-  ).resolves.toBe(1);
+  ).resolves.toBe(4);
+  await expect(page.locator('.task-panel.is-expanded .task-row')).toHaveCount(2);
+  await expect(
+    page
+      .locator('.task-panel.is-expanded .task-row')
+      .first()
+      .evaluate((element) => getComputedStyle(element).borderRadius),
+  ).resolves.toBe('18px');
+  await expect(page.locator('.task-panel.is-expanded .progress-track')).toHaveCount(0);
 
   await page.getByRole('button', { name: '全部日期' }).click();
   const calendar = page.getByRole('dialog', { name: '按任务日期筛选' });
@@ -860,7 +875,7 @@ test('monitors the active task and manages dated history in a responsive grid', 
         (element) =>
           getComputedStyle(element).gridTemplateColumns.split(' ').filter(Boolean).length,
       ),
-  ).resolves.toBe(1);
+  ).resolves.toBe(3);
 });
 
 test('clears completed and abnormal history independently', async ({ page }) => {

@@ -210,84 +210,108 @@ export function TaskMonitor() {
             </span>
             <span>{formatDurationSummary(taskDurationSummary(activeTask))}</span>
           </div>
-          {sourceSummary !== null && (
-            <div className="task-monitor-source">
-              <FolderTree size={15} />
-              <span>{sourceSummary}</span>
-            </div>
-          )}
-          <div className="task-overall-progress">
-            <div>
-              <span>整体进度</span>
-              <strong>
-                {Math.min(currentIndex, processingTotal)} / {processingTotal}
-                {waitingCount > 0 ? ` · 另有 ${waitingCount} 项等待` : ''}
-              </strong>
-            </div>
-            <div
-              aria-label={`任务整体进度 ${activeTask.progress}%`}
-              aria-valuemax={100}
-              aria-valuemin={0}
-              aria-valuenow={activeTask.progress}
-              className="task-overall-track"
-              role="progressbar"
-            >
-              <span style={{ width: `${activeTask.progress}%` }} />
-            </div>
-            <strong>{activeTask.progress}%</strong>
+          <div className="task-monitor-progress-grid">
+            <section className="task-monitor-progress-card is-overall" aria-label="整体进度">
+              <div className="task-monitor-progress-heading">
+                <span>整体进度</span>
+                <strong>{activeTask.progress}%</strong>
+              </div>
+              <div className="task-monitor-progress-copy">
+                <strong>
+                  {Math.min(currentIndex, processingTotal)} / {processingTotal}
+                </strong>
+                <span>个媒体已进入处理流程</span>
+              </div>
+              <div
+                aria-label={`任务整体进度 ${activeTask.progress}%`}
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={activeTask.progress}
+                className="task-overall-track"
+                role="progressbar"
+              >
+                <span style={{ width: `${activeTask.progress}%` }} />
+              </div>
+              <footer>
+                <span>{activeTask.stage}</span>
+                {waitingCount > 0 && <span>另有 {waitingCount} 项等待</span>}
+              </footer>
+            </section>
+
+            <section className="task-monitor-progress-card is-current" aria-label="当前媒体进度">
+              <div className="task-monitor-progress-heading">
+                <span>当前媒体</span>
+                <strong>
+                  {currentMedia?.progress === null || currentMedia?.progress === undefined
+                    ? '—'
+                    : `${Math.round(currentMedia.progress)}%`}
+                </strong>
+              </div>
+              <div className="task-monitor-progress-copy">
+                <strong>
+                  {currentMedia ? `正在处理：${fileName(currentMedia.path)}` : '尚未进入媒体处理'}
+                </strong>
+                <span>{currentIndex > 0 ? `第 ${currentIndex} 个媒体` : '等待任务开始'}</span>
+              </div>
+              <div
+                aria-label={
+                  currentMedia?.progress === null || currentMedia?.progress === undefined
+                    ? '当前媒体进度未知'
+                    : `当前媒体进度 ${Math.round(currentMedia.progress)}%`
+                }
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={currentMedia?.progress ?? undefined}
+                className={`task-overall-track is-media ${
+                  currentMedia?.progress === null || currentMedia?.progress === undefined
+                    ? 'is-indeterminate'
+                    : ''
+                }`}
+                role="progressbar"
+              >
+                {currentMedia?.progress !== null && currentMedia?.progress !== undefined && (
+                  <span
+                    style={{
+                      width: `${Math.max(0, Math.min(100, currentMedia.progress))}%`,
+                    }}
+                  />
+                )}
+              </div>
+              <footer>
+                <span>已耗时 {formatElapsedSeconds(timing.mediaSeconds)}</span>
+                <span>时长 {formatMediaDuration(currentMedia?.durationSeconds)}</span>
+              </footer>
+            </section>
           </div>
-          <div className="task-current-progress">
-            <div>
-              <span>
-                当前媒体
-                {currentMedia ? ` · ${fileName(currentMedia.path)}` : ''}
+
+          <div className="task-monitor-support-grid">
+            {sourceSummary !== null && (
+              <div className="task-monitor-source">
+                <span aria-hidden="true">
+                  <FolderTree size={16} />
+                </span>
+                <div>
+                  <small>输入来源</small>
+                  <strong>{sourceSummary}</strong>
+                </div>
+              </div>
+            )}
+            <div className="task-monitor-output">
+              <span aria-hidden="true">
+                <FolderOpen size={16} />
               </span>
-              <strong>
-                {currentMedia?.progress === null || currentMedia?.progress === undefined
-                  ? '—'
-                  : `${Math.round(currentMedia.progress)}%`}
-              </strong>
+              <div>
+                <small>输出结果</small>
+                <strong>已生成 {outputPaths.length} 个文件</strong>
+              </div>
+              <button
+                disabled={outputPaths.length === 0}
+                onClick={() => void openTaskOutputDirectory(activeTask.id)}
+                type="button"
+              >
+                打开目录
+              </button>
             </div>
-            <div
-              aria-label={
-                currentMedia?.progress === null || currentMedia?.progress === undefined
-                  ? '当前媒体进度未知'
-                  : `当前媒体进度 ${Math.round(currentMedia.progress)}%`
-              }
-              aria-valuemax={100}
-              aria-valuemin={0}
-              aria-valuenow={currentMedia?.progress ?? undefined}
-              className={`task-overall-track is-media ${
-                currentMedia?.progress === null || currentMedia?.progress === undefined
-                  ? 'is-indeterminate'
-                  : ''
-              }`}
-              role="progressbar"
-            >
-              {currentMedia?.progress !== null && currentMedia?.progress !== undefined && (
-                <span
-                  style={{
-                    width: `${Math.max(0, Math.min(100, currentMedia.progress))}%`,
-                  }}
-                />
-              )}
-            </div>
-            <small>
-              已耗时 {formatElapsedSeconds(timing.mediaSeconds)} / 时长{' '}
-              {formatMediaDuration(currentMedia?.durationSeconds)}
-            </small>
-          </div>
-          <div className="task-monitor-output">
-            <span>
-              已生成 <strong>{outputPaths.length}</strong> 个输出文件
-            </span>
-            <button
-              disabled={outputPaths.length === 0}
-              onClick={() => void openTaskOutputDirectory(activeTask.id)}
-              type="button"
-            >
-              <FolderOpen size={15} /> 打开输出目录
-            </button>
           </div>
         </section>
 

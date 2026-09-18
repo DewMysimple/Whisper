@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-18 | ui | - | archived | task-monitor-and-history-redesign | [[日志/2026-09-18-重构任务监控与历史记录.md|重构任务监控与历史记录]] |
 | 2026-09-18 | ui | - | archived | output-panel-and-development-input-preview | [[日志/2026-09-17-重构文件输出与开发态输入预览.md|重构文件输出与开发态输入预览]] |
 | 2026-09-17 | ui | - | archived | preflight-task-checklist | [[日志/2026-09-17-重塑执行前任务清单.md|重塑执行前任务清单]] |
 | 2026-09-17 | maintenance | 在保留当前完整源码和唯一最新正式发布套件的前提下，删除长期累积的旧版本、旧构建和缓存，缓解工程所在磁盘压力，并建立可重复的安全清理入口。 | archived | workspace-cleanup | [[日志/2026-09-17-清理旧构建与工程瘦身.md|清理旧构建与工程瘦身]] |
