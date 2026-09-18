@@ -1274,8 +1274,10 @@ test('keeps full-screen layout and typography personalization independent', asyn
         const input = element.querySelector('input')!.getBoundingClientRect();
         const unit = element.querySelector('small')!.getBoundingClientRect();
         const style = getComputedStyle(element.querySelector('input')!);
+        const numericRegionCenter = field.left + (field.width - unit.width) / 2;
         return {
-          centerOffset: Math.abs(field.left + field.width / 2 - (input.left + input.width / 2)),
+          fontSize: style.fontSize,
+          numericRegionCenterOffset: Math.abs(numericRegionCenter - (input.left + input.width / 2)),
           color: style.color,
           paddingLeft: style.paddingLeft,
           paddingRight: style.paddingRight,
@@ -1285,10 +1287,11 @@ test('keeps full-screen layout and typography personalization independent', asyn
       }),
   ).resolves.toEqual(
     expect.objectContaining({
-      centerOffset: 0,
       color: 'rgb(255, 91, 4)',
-      paddingLeft: '30px',
-      paddingRight: '30px',
+      fontSize: '14px',
+      numericRegionCenterOffset: 0,
+      paddingLeft: '0px',
+      paddingRight: '0px',
       textAlign: 'center',
       unitWidth: 30,
     }),
@@ -1353,6 +1356,7 @@ test('keeps full-screen layout and typography personalization independent', asyn
       return {
         fontFamilyMatches: valueStyle.fontFamily === dimensionStyle.fontFamily,
         fontSizeMatches: valueStyle.fontSize === dimensionStyle.fontSize,
+        fontSize: valueStyle.fontSize,
         fontWeightMatches: valueStyle.fontWeight === dimensionStyle.fontWeight,
         horizontalOffset: Math.abs(field.left + field.width / 2 - (value.left + value.width / 2)),
         textAlign: valueStyle.textAlign,
@@ -1362,6 +1366,7 @@ test('keeps full-screen layout and typography personalization independent', asyn
   ).resolves.toEqual({
     fontFamilyMatches: true,
     fontSizeMatches: true,
+    fontSize: '15px',
     fontWeightMatches: true,
     horizontalOffset: 0,
     textAlign: 'center',

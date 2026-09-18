@@ -10044,7 +10044,7 @@ body.sidebar-resizing .app-shell {
   background: transparent;
   color: var(--text);
   font-family: var(--mono);
-  font-size: max(12px, var(--font-caption));
+  font-size: calc(var(--font-caption) + 2px);
   font-variant-numeric: tabular-nums;
   font-weight: 720;
   letter-spacing: 0.01em;
@@ -10070,9 +10070,11 @@ body.sidebar-resizing .app-shell {
   grid-template-columns: 36px minmax(100px, 1fr) 36px minmax(104px, 112px);
 }
 
-.dimension-number-input {
+.settings-card .dimension-number-input {
   position: relative;
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 0;
   min-width: 0;
   min-height: 38px;
   overflow: hidden;
@@ -10090,12 +10092,12 @@ body.sidebar-resizing .app-shell {
   width: 100%;
   min-width: 0;
   min-height: 36px;
-  padding: 0 30px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--accent);
   font-family: var(--mono);
-  font-size: var(--font-caption);
+  font-size: calc(var(--font-caption) + 2px);
   font-variant-numeric: tabular-nums;
   font-weight: 720;
   letter-spacing: 0.01em;
@@ -10107,11 +10109,12 @@ body.sidebar-resizing .app-shell {
 }
 
 .dimension-number-input small {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  padding-right: 9px;
+  position: static;
+  display: grid;
+  width: 30px;
+  min-height: 36px;
+  padding: 0;
+  place-items: center;
   color: var(--text-faint);
   font-family: var(--mono);
   font-size: 9px;
@@ -10154,8 +10157,8 @@ body.sidebar-resizing .app-shell {
 }
 
 .dimension-number-input input {
-  padding: 0 30px;
-  font-size: max(12px, var(--font-caption));
+  padding: 0;
+  font-size: calc(var(--font-caption) + 2px);
   letter-spacing: 0.01em;
 }
 
