@@ -23,6 +23,7 @@ import {
 } from '../state/mediaDuration';
 import { formatTaskCreatedAt } from '../state/taskHistory';
 import { taskSourceSummary } from '../state/taskSourceSummary';
+import { formatTaskStage } from '../state/taskStage';
 import {
   createDevelopmentInputPreview,
   DEVELOPMENT_INPUT_PREVIEW_ID,
@@ -46,7 +47,7 @@ function fileName(path: string): string {
 
 function mediaStatusLabel(media: TaskMediaSnapshot): string {
   if (media.status === 'completed') return '已完成';
-  if (media.status === 'running') return media.stage;
+  if (media.status === 'running') return formatTaskStage(media.stage);
   if (media.status === 'failed') return '处理失败';
   if (media.status === 'skipped') return '已跳过';
   return '等待处理';
@@ -233,7 +234,7 @@ export function TaskMonitor() {
                 <span style={{ width: `${activeTask.progress}%` }} />
               </div>
               <footer>
-                <span>{activeTask.stage}</span>
+                <span>{formatTaskStage(activeTask.stage)}</span>
                 {waitingCount > 0 && <span>另有 {waitingCount} 项等待</span>}
               </footer>
             </section>
@@ -375,7 +376,7 @@ export function TaskMonitor() {
               <p className="step-label">PROCESS</p>
               <h3 id="task-process-title">当前任务处理链路</h3>
             </div>
-            <span>{activeTask.stage}</span>
+            <span>{formatTaskStage(activeTask.stage)}</span>
           </header>
           <ol>
             {PROCESS_STEPS.map((step) => {
@@ -392,7 +393,9 @@ export function TaskMonitor() {
                 >
                   <span>{completed ? <Check size={14} /> : <i />}</span>
                   <strong>{step.label}</strong>
-                  <small>{completed ? '已完成' : active ? activeTask.stage : '等待'}</small>
+                  <small>
+                    {completed ? '已完成' : active ? formatTaskStage(activeTask.stage) : '等待'}
+                  </small>
                 </li>
               );
             })}
@@ -417,7 +420,7 @@ export function TaskMonitor() {
           </div>
           <div>
             <dt>当前阶段</dt>
-            <dd>{activeTask.stage}</dd>
+            <dd>{formatTaskStage(activeTask.stage)}</dd>
           </div>
         </dl>
       </ConfirmDialog>

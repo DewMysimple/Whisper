@@ -16,6 +16,7 @@ import {
   taskDurationSummary,
 } from '../state/mediaDuration';
 import { formatTaskCreatedAt } from '../state/taskHistory';
+import { formatTaskStage } from '../state/taskStage';
 import { useWorkspace } from '../state/workspace';
 import {
   capacityDetail,
@@ -260,7 +261,7 @@ export function PerformanceView() {
               <div>
                 <p className="step-label">LIVE TASK MONITOR</p>
                 <strong>{activeTask.title}</strong>
-                <span>{activeTask.stage}</span>
+                <span>{formatTaskStage(activeTask.stage)}</span>
               </div>
             </div>
             <div className="task-progress-meta" aria-label="当前任务日期版本与模型">

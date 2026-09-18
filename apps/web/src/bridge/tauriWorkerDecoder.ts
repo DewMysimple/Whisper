@@ -20,7 +20,7 @@ export const STAGE_LABELS: Record<string, string> = {
   'input.validating': '校验输入',
   'input.discovering': '展开媒体文件',
   'model.loading': '准备本地模型',
-  'transcription.running': 'GPU 转录中',
+  'transcription.running': '转录中',
   'postprocess.running': '文本后处理',
   'output.writing': '写入输出',
   'task.finalizing': '汇总任务结果',

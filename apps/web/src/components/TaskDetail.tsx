@@ -10,6 +10,7 @@ import {
   taskDurationSummary,
 } from '../state/mediaDuration';
 import { formatTaskCreatedAt } from '../state/taskHistory';
+import { formatTaskStage } from '../state/taskStage';
 import { canResumeTask, useWorkspace } from '../state/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -110,7 +111,11 @@ export function TaskDetail() {
           <span>{formatTaskCreatedAt(task.createdAt)}</span>
           <span>{task.elapsed}</span>
           <span>{formatDurationSummary(taskDurationSummary(task))}</span>
-          <span>{task.outputAvailability === 'missing' ? '输出文件已丢失或移动' : task.stage}</span>
+          <span>
+            {task.outputAvailability === 'missing'
+              ? '输出文件已丢失或移动'
+              : formatTaskStage(task.stage)}
+          </span>
         </div>
 
         <section className="detail-section">

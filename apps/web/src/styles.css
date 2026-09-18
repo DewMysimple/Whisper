@@ -1801,10 +1801,10 @@ textarea::placeholder {
 
 .task-workspace-switcher > button {
   display: flex;
-  min-height: 62px;
+  min-height: 66px;
   align-items: center;
-  gap: 10px;
-  padding: 10px 13px;
+  gap: 12px;
+  padding: 11px 15px;
   border: 1px solid transparent;
   border-radius: 11px;
   background: transparent;
@@ -1830,12 +1830,14 @@ textarea::placeholder {
 }
 
 .task-workspace-switcher strong {
-  font-size: max(11px, calc(var(--ui-font-size) - 1px));
+  font-size: var(--font-body);
+  line-height: 1.35;
 }
 
 .task-workspace-switcher small {
   color: var(--text-faint);
-  font-size: max(9px, calc(var(--ui-font-size) - 4px));
+  font-size: var(--font-caption);
+  line-height: 1.4;
 }
 
 .task-workspace-switcher > button.is-active {
@@ -1868,7 +1870,7 @@ textarea::placeholder {
 .task-monitor-hero,
 .task-media-monitor,
 .task-process-monitor {
-  padding: 20px;
+  padding: 24px;
 }
 
 .task-monitor-hero {
@@ -1899,16 +1901,29 @@ textarea::placeholder {
   letter-spacing: -0.025em;
 }
 
+.task-monitor-hero h2 {
+  font-size: calc(var(--ui-font-size) + 8px);
+  font-weight: 740;
+  line-height: 1.25;
+}
+
+.task-media-monitor h3,
+.task-process-monitor h3 {
+  font-size: calc(var(--ui-font-size) + 3px);
+  font-weight: 720;
+  line-height: 1.3;
+}
+
 .task-monitor-live {
   display: inline-flex;
-  min-height: 30px;
+  min-height: 34px;
   align-items: center;
   gap: 6px;
-  padding: 0 10px;
+  padding: 0 12px;
   border-radius: 999px;
   background: var(--surface-soft);
   color: var(--text-muted);
-  font-size: max(9px, calc(var(--ui-font-size) - 4px));
+  font-size: var(--font-meta);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1921,20 +1936,22 @@ textarea::placeholder {
 .task-monitor-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 14px;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 .task-monitor-meta > span {
   display: inline-flex;
-  min-height: 27px;
+  min-height: 32px;
   align-items: center;
-  gap: 5px;
-  padding: 0 8px;
+  gap: 6px;
+  padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
   color: var(--text-muted);
-  font-size: max(9px, calc(var(--ui-font-size) - 4px));
+  font-size: var(--font-caption);
+  line-height: 1.35;
 }
 
 .task-monitor-source {
@@ -2061,7 +2078,8 @@ textarea::placeholder {
 .task-media-monitor > header > span,
 .task-process-monitor > header > span {
   color: var(--text-faint);
-  font-size: max(9px, calc(var(--ui-font-size) - 4px));
+  font-size: var(--font-caption);
+  line-height: 1.4;
 }
 
 .task-media-list {
@@ -2096,7 +2114,7 @@ textarea::placeholder {
 .task-media-index {
   color: var(--text-faint);
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--font-caption);
 }
 
 .task-media-icon {
@@ -2128,13 +2146,15 @@ textarea::placeholder {
 }
 
 .task-media-copy strong {
-  font-size: max(10px, calc(var(--ui-font-size) - 2px));
+  font-size: var(--font-meta);
+  line-height: 1.4;
 }
 
 .task-media-copy > span {
   color: var(--text-faint);
   font-family: var(--mono);
-  font-size: max(8px, calc(var(--log-font-size) - 2px));
+  font-size: max(11px, calc(var(--log-font-size) - 1px));
+  line-height: 1.4;
 }
 
 .task-media-track {
@@ -2161,7 +2181,7 @@ textarea::placeholder {
 .task-media-state strong {
   color: var(--accent);
   font-family: var(--mono);
-  font-size: max(10px, calc(var(--ui-font-size) - 2px));
+  font-size: var(--font-meta);
 }
 
 .task-media-state span,
@@ -2169,7 +2189,8 @@ textarea::placeholder {
   max-width: 120px;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: max(8px, calc(var(--ui-font-size) - 5px));
+  font-size: var(--font-caption);
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2228,14 +2249,16 @@ textarea::placeholder {
 .task-process-monitor li strong {
   align-self: end;
   color: var(--text);
-  font-size: max(10px, calc(var(--ui-font-size) - 2px));
+  font-size: var(--font-meta);
+  line-height: 1.35;
 }
 
 .task-process-monitor li small {
   align-self: start;
   margin-top: 3px;
   color: currentColor;
-  font-size: max(8px, calc(var(--ui-font-size) - 5px));
+  font-size: var(--font-caption);
+  line-height: 1.4;
 }
 
 .task-monitor-empty {
@@ -5896,15 +5919,16 @@ button:active:not(:disabled) {
 .task-date-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 39px;
+  gap: 8px;
+  min-height: 44px;
   max-width: 250px;
-  padding: 0 11px;
+  padding: 0 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface-raised);
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-caption);
+  font-weight: 650;
 }
 
 .task-date-trigger span {
@@ -5924,10 +5948,10 @@ button:active:not(:disabled) {
   z-index: 20;
   top: calc(100% + 8px);
   right: 0;
-  width: 292px;
-  padding: 12px;
+  width: 356px;
+  padding: 16px;
   border: 1px solid color-mix(in srgb, var(--text) 11%, transparent);
-  border-radius: 16px;
+  border-radius: 18px;
   background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
   box-shadow: 0 22px 60px rgba(29, 29, 31, 0.18);
   backdrop-filter: blur(20px) saturate(150%);
@@ -5945,33 +5969,35 @@ button:active:not(:disabled) {
 
 .task-calendar-heading > button {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
   place-items: center;
   border: 0;
-  border-radius: 9px;
+  border-radius: 11px;
   background: var(--surface-soft);
   color: var(--text-muted);
 }
 
 .task-calendar-heading strong {
-  font-size: 11px;
+  font-size: var(--font-meta);
+  font-weight: 720;
 }
 
 .task-calendar-weekdays,
 .task-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 3px;
+  gap: 5px;
 }
 
 .task-calendar-weekdays {
-  margin: 11px 0 5px;
+  margin: 14px 0 7px;
 }
 
 .task-calendar-weekdays span {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: 11px;
+  font-weight: 650;
   text-align: center;
 }
 
@@ -5983,11 +6009,12 @@ button:active:not(:disabled) {
 
 .task-calendar-grid > button {
   border: 0;
-  border-radius: 9px;
+  border-radius: 11px;
   background: transparent;
   color: var(--text);
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .task-calendar-grid > button:not(:disabled):hover {
@@ -6000,31 +6027,35 @@ button:active:not(:disabled) {
 }
 
 .task-calendar-grid > button:disabled {
-  color: color-mix(in srgb, var(--text-faint) 50%, transparent);
+  color: var(--text-faint);
   cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .task-calendar-footer {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
   border-top: 1px solid var(--border);
 }
 
 .task-calendar-footer > span {
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .task-calendar-footer > button {
   display: inline-flex;
+  min-height: 32px;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: 5px;
+  padding: 0 10px;
   border: 0;
   border-radius: 8px;
   background: var(--surface-soft);
   color: var(--text-muted);
-  font-size: 8px;
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .task-panel.is-expanded .task-list {
@@ -6932,17 +6963,17 @@ button:active:not(:disabled) {
 .task-monitor-stop,
 .task-monitor-output button {
   display: inline-flex;
-  min-height: 31px;
+  min-height: 34px;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--surface-raised);
   color: var(--text-muted);
   font: inherit;
-  font-size: max(9px, calc(var(--ui-font-size) - 4px));
+  font-size: var(--font-meta);
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -7751,6 +7782,10 @@ output,
   box-shadow: 0 12px 30px color-mix(in srgb, var(--text) 6%, transparent);
 }
 
+.view-content:not(.is-home) .task-summary.task-summary-band {
+  gap: 0;
+}
+
 .view-content:not(.is-home) .task-summary-band .task-summary-card {
   position: relative;
   min-height: 96px;
@@ -8515,7 +8550,7 @@ output,
   display: grid;
   min-width: 0;
   align-content: start;
-  padding: var(--space-4);
+  padding: 20px;
   border: 1px solid var(--border);
   border-radius: 15px;
   background: color-mix(in srgb, var(--surface) 72%, var(--surface-raised));
@@ -8536,7 +8571,7 @@ output,
 
 .task-monitor-progress-heading > span {
   color: var(--text-muted);
-  font-size: var(--font-caption);
+  font-size: var(--font-meta);
   font-weight: 680;
 }
 
@@ -8550,8 +8585,8 @@ output,
 .task-monitor-progress-copy {
   display: grid;
   min-width: 0;
-  gap: 3px;
-  margin-top: 12px;
+  gap: 5px;
+  margin-top: 14px;
 }
 
 .task-monitor-progress-copy > strong,
@@ -8563,21 +8598,23 @@ output,
 
 .task-monitor-progress-copy > strong {
   color: var(--text);
-  font-size: var(--font-body);
+  font-size: calc(var(--ui-font-size) + 1px);
+  line-height: 1.4;
 }
 
 .task-monitor-progress-copy > span,
 .task-monitor-progress-card footer {
   color: var(--text-faint);
   font-size: var(--font-caption);
+  line-height: 1.4;
 }
 
 .task-monitor-progress-card .task-overall-track {
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .task-monitor-progress-card footer {
-  margin-top: 9px;
+  margin-top: 11px;
 }
 
 .task-monitor-support-grid {
@@ -8591,12 +8628,12 @@ output,
 .task-monitor-support-grid .task-monitor-output {
   display: grid;
   min-width: 0;
-  min-height: 62px;
+  min-height: 72px;
   grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin: 0;
-  padding: 11px 12px;
+  padding: 13px 14px;
   border: 1px solid var(--border);
   border-radius: 13px;
   background: var(--surface);
@@ -8629,12 +8666,14 @@ output,
 .task-monitor-support-grid small {
   color: var(--text-faint);
   font-size: var(--font-caption);
+  line-height: 1.35;
 }
 
 .task-monitor-support-grid strong {
   overflow: hidden;
   color: var(--text);
-  font-size: var(--font-caption);
+  font-size: var(--font-body);
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

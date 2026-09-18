@@ -101,7 +101,7 @@ export function TaskDateFilter({ availableDates, range, onChange }: TaskDateFilt
         ref={triggerRef}
         type="button"
       >
-        <CalendarRange size={16} />
+        <CalendarRange size={18} />
         <span>{rangeLabel(range)}</span>
       </button>
       {open && (
@@ -113,7 +113,7 @@ export function TaskDateFilter({ availableDates, range, onChange }: TaskDateFilt
               onClick={() => setVisibleMonth((value) => shiftMonth(value, -1))}
               type="button"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={18} />
             </button>
             <strong>{visibleMonth.replace('-', ' 年 ')} 月</strong>
             <button
@@ -122,7 +122,7 @@ export function TaskDateFilter({ availableDates, range, onChange }: TaskDateFilt
               onClick={() => setVisibleMonth((value) => shiftMonth(value, 1))}
               type="button"
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={18} />
             </button>
           </div>
           <div className="task-calendar-weekdays" aria-hidden="true">
@@ -161,7 +161,7 @@ export function TaskDateFilter({ availableDates, range, onChange }: TaskDateFilt
               }}
               type="button"
             >
-              <X size={14} /> 全部日期
+              <X size={15} /> 全部日期
             </button>
           </div>
         </div>

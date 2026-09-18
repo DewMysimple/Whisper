@@ -109,7 +109,7 @@ const INITIAL_TASKS: TaskSnapshot[] = [
     isCustom: false,
     status: 'running',
     progress: 63,
-    stage: 'GPU 转录中',
+    stage: '转录中',
     elapsed: '03:18',
     createdAt: '2026-07-22T21:42:00+08:00',
     draft: {

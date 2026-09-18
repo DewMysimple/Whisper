@@ -732,7 +732,8 @@ test('supports workspace navigation, theme and configuration export', async ({
   await historyFilters.getByRole('button', { name: /全部任务/ }).click();
   await expect(page.locator('.task-card-progress').first()).toHaveText('63%');
   await expect(page.locator('.task-card-progress').first()).not.toContainText('进度');
-  await expect(page.getByText('中文防幻觉 · GPU 转录中 · TXT / MD')).toBeVisible();
+  await expect(page.getByText('中文防幻觉 · 转录中 · TXT / MD')).toBeVisible();
+  await expect(page.getByText('中文防幻觉 · GPU 转录中 · TXT / MD')).toHaveCount(0);
   await expect(page.getByText('英文转录 · 已完成 · TXT')).toBeVisible();
   await expect(page.getByText('稳定主语言')).toHaveCount(0);
   await expect(
@@ -749,6 +750,14 @@ test('supports workspace navigation, theme and configuration export', async ({
     page.locator('.task-toolbar').evaluate((toolbar) => {
       const tops = Array.from(toolbar.children, (child) => child.getBoundingClientRect().top);
       return Math.max(...tops) - Math.min(...tops);
+    }),
+  ).resolves.toBeLessThan(1);
+  await expect(
+    historyFilters.evaluate((summary) => {
+      const cards = summary.querySelectorAll('.task-summary-card');
+      const first = cards[0]!.getBoundingClientRect();
+      const second = cards[1]!.getBoundingClientRect();
+      return Math.abs(second.left - first.right);
     }),
   ).resolves.toBeLessThan(1);
   await expect(
@@ -825,6 +834,13 @@ test('monitors the active task and manages dated history in a responsive grid', 
   await expect(page.locator('.task-monitor-support-grid')).toContainText('已生成 0 个文件');
   await expect(page.getByRole('heading', { name: '媒体文件进度' })).toBeVisible();
   await expect(page.locator('.task-monitor-stop')).toBeVisible();
+  await expect(page.locator('.task-monitor-hero')).not.toContainText('GPU 转录中');
+  await expect(
+    page
+      .locator('.task-monitor-meta > span')
+      .first()
+      .evaluate((element) => parseFloat(getComputedStyle(element).fontSize)),
+  ).resolves.toBeGreaterThanOrEqual(12);
   await page.waitForTimeout(220);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('task-monitor-redesign.png') });
   await page.locator('.task-monitor-stop').click();
@@ -856,6 +872,14 @@ test('monitors the active task and manages dated history in a responsive grid', 
   const calendar = page.getByRole('dialog', { name: '按任务日期筛选' });
   await expect(calendar.getByRole('button', { name: '2026-07-22' })).toBeEnabled();
   await expect(calendar.getByRole('button', { name: '2026-07-20' })).toBeDisabled();
+  await expect(
+    calendar.evaluate((element) => parseFloat(getComputedStyle(element).width)),
+  ).resolves.toBe(356);
+  await expect(
+    calendar
+      .getByRole('button', { name: '2026-07-22' })
+      .evaluate((element) => parseFloat(getComputedStyle(element).fontSize)),
+  ).resolves.toBeGreaterThanOrEqual(12);
   await page.waitForTimeout(220);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('task-date-calendar.png') });
   await calendar.getByRole('button', { name: '2026-07-22' }).click();

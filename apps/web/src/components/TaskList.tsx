@@ -25,6 +25,7 @@ import {
   formatTaskCreatedAt,
   taskMatchesDateRange,
 } from '../state/taskHistory';
+import { formatTaskStage } from '../state/taskStage';
 import { ConfirmDialog } from './ConfirmDialog';
 import { TaskDateFilter } from './TaskDateFilter';
 
@@ -85,7 +86,7 @@ function taskPhaseLabel(task: TaskSnapshot): string {
   if (task.status === 'failed') return '执行失败';
   if (task.status === 'cancelled') return '已取消';
   if (task.status === 'queued') return '等待执行';
-  return task.stage;
+  return formatTaskStage(task.stage);
 }
 
 function taskStageSummary(task: TaskSnapshot): string {
@@ -333,7 +334,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                       <span className="task-stage">
                         {task.outputAvailability === 'missing'
                           ? '输出文件已丢失或移动'
-                          : task.stage}
+                          : formatTaskStage(task.stage)}
                       </span>
                       <span>耗时 {task.elapsed}</span>
                       <span>{task.sourceCount} 个媒体</span>
