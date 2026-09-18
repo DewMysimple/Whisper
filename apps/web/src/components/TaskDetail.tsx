@@ -105,7 +105,6 @@ export function TaskDetail() {
           </span>
           <span>{getPreset(task.presetId).label}</span>
           <span>{transcriptionTaskLabel(task.draft?.effectiveParameters.task)}</span>
-          <span>{recognitionStrategyLabel(task.recognitionStrategy)}</span>
           <span>{getModelLabel(task.modelId)}</span>
           <span>{formatResolvedHardware(task.hardware)}</span>
           <span>{formatTaskCreatedAt(task.createdAt)}</span>
@@ -200,10 +199,7 @@ export function TaskDetail() {
                       {diagnostics.segmentCount} 段 · 最高温度{' '}
                       {diagnostics.maxTemperature.toFixed(1)}
                     </span>
-                    <span>
-                      {recognitionStrategyLabel(diagnostics.recognitionStrategy)} ·{' '}
-                      {diagnostics.secondaryPassCount ?? 0} 次局部复识别
-                    </span>
+                    <span>{diagnostics.secondaryPassCount ?? 0} 次局部复识别</span>
                     {diagnostics.languageRegions?.length ? (
                       <div className="language-region-list">
                         {diagnostics.languageRegions.map((region) => (
@@ -402,10 +398,6 @@ export function TaskDetail() {
             <dd>{getPreset(task.presetId).label}</dd>
           </div>
           <div>
-            <dt>识别策略</dt>
-            <dd>{recognitionStrategyLabel(task.recognitionStrategy)}</dd>
-          </div>
-          <div>
             <dt>任务类型</dt>
             <dd>{transcriptionTaskLabel(task.draft?.effectiveParameters.task)}</dd>
           </div>
@@ -453,14 +445,6 @@ function formatDiagnosticNumber(value: number | null): string {
 
 function formatProbabilityChange(before: number | null, after: number | null): string {
   return `${formatDiagnosticNumber(before)} → ${formatDiagnosticNumber(after)}`;
-}
-
-function recognitionStrategyLabel(
-  strategy: import('../contracts/desktop').RecognitionStrategy | undefined,
-): string {
-  if (strategy === 'mixed_zh_en') return '复杂中英混合';
-  if (strategy === 'zh_detail_review') return '中文细节增强';
-  return '稳定主语言';
 }
 
 function qualityReasonLabel(

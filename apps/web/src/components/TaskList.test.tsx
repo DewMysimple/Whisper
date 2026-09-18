@@ -77,7 +77,7 @@ describe('TaskList destructive history controls', () => {
   it('uses the same two-stage interaction for bulk history clearing', async () => {
     const user = userEvent.setup();
     render(<TaskList expanded />);
-    const clear = screen.getByRole('button', { name: /清除已完成历史/ });
+    const clear = screen.getByRole('button', { name: /清除历史/ });
 
     await user.click(clear);
     expect(clear).toHaveAttribute('aria-pressed', 'true');
@@ -89,9 +89,32 @@ describe('TaskList destructive history controls', () => {
   it('shows progress as card information without a progress track', () => {
     const { container } = render(<TaskList expanded />);
 
-    expect(screen.getByText('进度')).toBeInTheDocument();
+    expect(screen.queryByText('进度')).not.toBeInTheDocument();
     expect(screen.getByText('100%')).toBeInTheDocument();
-    expect(screen.getByText('输出已生成')).toBeInTheDocument();
+    expect(screen.getByText('中文防幻觉 · 已完成 · TXT')).toBeInTheDocument();
+    expect(screen.queryByText('稳定主语言')).not.toBeInTheDocument();
     expect(container.querySelector('.progress-track')).toBeNull();
+  });
+
+  it('shows only failed tasks in the attention filter', () => {
+    useWorkspace.setState({
+      tasks: [
+        { ...FINISHED_TASK, id: 'failed', title: '失败任务.wav', status: 'failed' },
+        { ...FINISHED_TASK, id: 'cancelled', title: '取消任务.wav', status: 'cancelled' },
+        {
+          ...FINISHED_TASK,
+          id: 'missing-output',
+          title: '输出缺失.wav',
+          outputAvailability: 'missing',
+        },
+      ],
+      taskFilter: 'failed',
+    });
+
+    render(<TaskList expanded />);
+
+    expect(screen.getByText('失败任务.wav')).toBeInTheDocument();
+    expect(screen.queryByText('取消任务.wav')).not.toBeInTheDocument();
+    expect(screen.queryByText('输出缺失.wav')).not.toBeInTheDocument();
   });
 });

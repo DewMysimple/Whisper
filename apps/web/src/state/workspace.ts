@@ -21,7 +21,6 @@ import type {
   RecognitionStrategy,
   SubtitleParameters,
   TaskSnapshot,
-  TaskStatus,
   TranscriptionDraft,
   WorkerEnvironment,
 } from '../contracts/desktop';
@@ -194,7 +193,7 @@ const INITIAL_TASKS: TaskSnapshot[] = [
   },
 ];
 
-export type TaskFilter = 'all' | TaskStatus;
+export type TaskFilter = 'all' | 'active' | 'completed' | 'failed';
 export type TaskWorkspaceMode = 'monitor' | 'history';
 export type WorkspaceViewId = 'workspace' | 'performance' | 'tasks' | 'logs' | 'settings';
 

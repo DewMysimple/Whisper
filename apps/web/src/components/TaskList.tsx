@@ -19,7 +19,7 @@ import type { TaskSnapshot } from '../contracts/desktop';
 import { getModelLabel } from '../data/models';
 import { formatDurationSummary, taskDurationSummary } from '../state/mediaDuration';
 import { getPreset, transcriptionTaskLabel } from '../data/presets';
-import { canResumeTask, isAbnormalTask, useWorkspace } from '../state/workspace';
+import { canResumeTask, isAbnormalTask, useWorkspace, type TaskFilter } from '../state/workspace';
 import {
   availableTaskDates,
   formatTaskCreatedAt,
@@ -27,14 +27,6 @@ import {
 } from '../state/taskHistory';
 import { ConfirmDialog } from './ConfirmDialog';
 import { TaskDateFilter } from './TaskDateFilter';
-
-const FILTER_LABELS = {
-  all: '全部',
-  running: '运行中',
-  completed: '已完成',
-  failed: '失败',
-  cancelled: '已取消',
-} as const;
 
 function StatusIcon({ task }: { task: TaskSnapshot }) {
   if (task.outputAvailability === 'missing') return <AlertCircle size={17} />;
@@ -58,6 +50,48 @@ function taskStatusTone(task: TaskSnapshot): string {
   return task.outputAvailability === 'missing' ? 'failed' : task.status;
 }
 
+function taskMatchesFilter(task: TaskSnapshot, filter: TaskFilter): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'active') return task.status === 'queued' || task.status === 'running';
+  if (filter === 'completed') {
+    return task.status === 'completed' && task.outputAvailability !== 'missing';
+  }
+  return task.status === 'failed';
+}
+
+function taskOutputFormatLabel(task: TaskSnapshot): string {
+  const formats: string[] = [];
+  const output = task.draft?.output;
+  if (output?.txtEnabled) formats.push('TXT');
+  if (output?.markdownEnabled) formats.push('MD');
+  if (output?.srtEnabled) formats.push('SRT');
+
+  if (formats.length === 0) {
+    for (const path of task.outputs ?? []) {
+      const extension = path.split('.').at(-1)?.toLocaleLowerCase();
+      const label = extension === 'markdown' ? 'MD' : extension?.toLocaleUpperCase();
+      if (label && ['TXT', 'MD', 'SRT'].includes(label) && !formats.includes(label)) {
+        formats.push(label);
+      }
+    }
+  }
+
+  return formats.length > 0 ? formats.join(' / ') : '格式未记录';
+}
+
+function taskPhaseLabel(task: TaskSnapshot): string {
+  if (task.outputAvailability === 'missing') return '输出缺失';
+  if (task.status === 'completed') return '已完成';
+  if (task.status === 'failed') return '执行失败';
+  if (task.status === 'cancelled') return '已取消';
+  if (task.status === 'queued') return '等待执行';
+  return task.stage;
+}
+
+function taskStageSummary(task: TaskSnapshot): string {
+  return `${getPreset(task.presetId).label} · ${taskPhaseLabel(task)} · ${taskOutputFormatLabel(task)}`;
+}
+
 export function TaskList({ expanded = false }: { expanded?: boolean }) {
   const tasks = useWorkspace((state) => state.tasks);
   const cancelTask = useWorkspace((state) => state.cancelTask);
@@ -70,7 +104,6 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
   const auditTaskOutputs = useWorkspace((state) => state.auditTaskOutputs);
   const outputAuditPending = useWorkspace((state) => state.outputAuditPending);
   const taskFilter = useWorkspace((state) => state.taskFilter);
-  const setTaskFilter = useWorkspace((state) => state.setTaskFilter);
   const taskSearch = useWorkspace((state) => state.taskSearch);
   const setTaskSearch = useWorkspace((state) => state.setTaskSearch);
   const taskDateRange = useWorkspace((state) => state.taskDateRange);
@@ -80,7 +113,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
   const [retryTaskId, setRetryTaskId] = useState<string | null>(null);
   const [armedDelete, setArmedDelete] = useState<{ key: string; label: string } | null>(null);
   const visibleTasks = tasks
-    .filter((task) => taskFilter === 'all' || task.status === taskFilter)
+    .filter((task) => taskMatchesFilter(task, taskFilter))
     .filter((task) => task.title.toLocaleLowerCase().includes(taskSearch.toLocaleLowerCase()))
     .filter((task) => taskMatchesDateRange(task, taskDateRange))
     .slice(0, expanded ? undefined : 4);
@@ -187,57 +220,47 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
               onChange={setTaskDateRange}
               range={taskDateRange}
             />
-          </div>
-          <div className="task-filter-line">
-            <span>任务状态</span>
-            <div className="filter-tabs" aria-label="任务状态筛选">
-              {(['all', 'running', 'completed', 'failed', 'cancelled'] as const).map((filter) => (
-                <button
-                  aria-pressed={taskFilter === filter}
-                  className={taskFilter === filter ? 'is-active' : ''}
-                  key={filter}
-                  onClick={() => setTaskFilter(filter)}
-                  type="button"
-                >
-                  {FILTER_LABELS[filter]}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="task-history-tools" aria-label="任务历史维护">
-            <span>
-              <strong>记录维护</strong>
-              <small>只清理本机历史，不删除已经生成的输出文件</small>
-            </span>
             <button
+              aria-label={
+                armedDelete?.key === 'clear-completed'
+                  ? '再次点击清除历史；只移除本机记录，不删除输出文件'
+                  : `清除历史 · ${completedCount}；只移除本机记录，不删除输出文件`
+              }
               aria-pressed={armedDelete?.key === 'clear-completed'}
-              className={`secondary-button ${armedDelete?.key === 'clear-completed' ? 'is-delete-armed' : ''}`}
+              className={`secondary-button task-history-clear ${armedDelete?.key === 'clear-completed' ? 'is-delete-armed' : ''}`}
               data-delete-arm-key="clear-completed"
               disabled={outputAuditPending || completedCount === 0}
               onClick={() =>
-                armOrDelete('clear-completed', '再次点击清除已完成历史', clearCompletedHistory)
+                armOrDelete('clear-completed', '再次点击清除历史', clearCompletedHistory)
               }
+              title="只移除本机已完成记录，不删除输出文件"
               type="button"
             >
               <Eraser size={15} />{' '}
               {armedDelete?.key === 'clear-completed'
                 ? '再次点击清除'
-                : `清除已完成历史 · ${completedCount}`}
+                : `清除历史 · ${completedCount}`}
             </button>
             <button
+              aria-label={
+                armedDelete?.key === 'clear-abnormal'
+                  ? '再次点击清除异常；只移除本机记录，不删除输出文件'
+                  : `清除异常 · ${abnormalCount}；只移除本机记录，不删除输出文件`
+              }
               aria-pressed={armedDelete?.key === 'clear-abnormal'}
-              className={`secondary-button is-danger-subtle ${armedDelete?.key === 'clear-abnormal' ? 'is-delete-armed' : ''}`}
+              className={`secondary-button task-history-clear is-danger-subtle ${armedDelete?.key === 'clear-abnormal' ? 'is-delete-armed' : ''}`}
               data-delete-arm-key="clear-abnormal"
               disabled={outputAuditPending || abnormalCount === 0}
               onClick={() =>
-                armOrDelete('clear-abnormal', '再次点击清除异常历史', clearAbnormalHistory)
+                armOrDelete('clear-abnormal', '再次点击清除异常', clearAbnormalHistory)
               }
+              title="移除失败、取消或输出缺失的本机记录"
               type="button"
             >
               <AlertCircle size={15} />{' '}
               {armedDelete?.key === 'clear-abnormal'
                 ? '再次点击清除'
-                : `清除异常历史 · ${abnormalCount}`}
+                : `清除异常 · ${abnormalCount}`}
             </button>
           </div>
         </div>
@@ -274,9 +297,8 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                     {taskStatusLabel(task)}
                   </span>
                   {expanded && (
-                    <span className="task-card-progress">
-                      <small>进度</small>
-                      <strong>{task.progress}%</strong>
+                    <span className="task-card-progress" aria-label={`任务进度 ${task.progress}%`}>
+                      <strong aria-hidden="true">{task.progress}%</strong>
                     </span>
                   )}
                 </div>
@@ -285,11 +307,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                     <div className="task-history-progress-info">
                       <span>
                         <small>当前阶段</small>
-                        <strong>
-                          {task.outputAvailability === 'missing'
-                            ? '输出文件已丢失或移动'
-                            : task.stage}
-                        </strong>
+                        <strong title={taskStageSummary(task)}>{taskStageSummary(task)}</strong>
                       </span>
                     </div>
                     <dl className="task-history-facts">
@@ -328,10 +346,9 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                 )}
               </button>
               <div className="task-card-footer">
-                <span className="task-version">
-                  {getPreset(task.presetId).label} ·{' '}
-                  {recognitionStrategyLabel(task.recognitionStrategy)}
-                </span>
+                {!expanded && (
+                  <span className="task-version">{getPreset(task.presetId).label}</span>
+                )}
                 <div className="task-card-footer-actions">
                   {!expanded && <strong className="task-percent">{task.progress}%</strong>}
                   {task.status === 'running' || task.status === 'queued' ? (
@@ -436,10 +453,6 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
               <dd>{getPreset(retryCandidate.presetId).label}</dd>
             </div>
             <div>
-              <dt>识别策略</dt>
-              <dd>{recognitionStrategyLabel(retryCandidate.recognitionStrategy)}</dd>
-            </div>
-            <div>
               <dt>任务类型</dt>
               <dd>{transcriptionTaskLabel(retryCandidate.draft?.effectiveParameters.task)}</dd>
             </div>
@@ -460,12 +473,4 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
       </ConfirmDialog>
     </section>
   );
-}
-
-function recognitionStrategyLabel(
-  strategy: import('../contracts/desktop').RecognitionStrategy | undefined,
-): string {
-  if (strategy === 'mixed_zh_en') return '复杂中英混合';
-  if (strategy === 'zh_detail_review') return '中文细节增强';
-  return '稳定主语言';
 }

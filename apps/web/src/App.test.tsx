@@ -346,10 +346,27 @@ describe('desktop workspace', () => {
       'true',
     );
     await user.click(within(taskSwitcher).getByRole('button', { name: /历史记录/ }));
-    expect(screen.getByLabelText('任务概览')).toHaveTextContent('全部任务');
+    const historyFilters = screen.getByLabelText('历史任务筛选');
+    expect(historyFilters).toHaveTextContent('全部任务');
+    expect(within(historyFilters).getByRole('button', { name: /全部任务/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await user.click(within(historyFilters).getByRole('button', { name: /已完成/ }));
+    expect(useWorkspace.getState().taskFilter).toBe('completed');
+    expect(screen.getByText('Product Interview 06.mkv', { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText('设计评审会议.m4a', { exact: true })).not.toBeInTheDocument();
+    await user.click(within(historyFilters).getByRole('button', { name: /正在运行/ }));
+    expect(useWorkspace.getState().taskFilter).toBe('active');
+    expect(screen.getByText('设计评审会议.m4a', { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText('Product Interview 06.mkv', { exact: true })).not.toBeInTheDocument();
+    await user.click(within(historyFilters).getByRole('button', { name: /需要处理/ }));
+    expect(useWorkspace.getState().taskFilter).toBe('failed');
+    expect(screen.getByText('没有符合条件的任务。')).toBeInTheDocument();
+    await user.click(within(historyFilters).getByRole('button', { name: /全部任务/ }));
     expect(screen.getByRole('heading', { name: '本机任务历史' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /清除已完成历史/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /清除异常历史/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /清除历史/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /清除异常/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /全部日期/ })).toBeInTheDocument();
     expect(screen.getByText('2026-07-22 21:42')).toBeInTheDocument();
     expect(

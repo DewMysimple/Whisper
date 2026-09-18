@@ -720,7 +720,37 @@ test('supports workspace navigation, theme and configuration export', async ({
     .getByRole('button', { name: /历史记录/ })
     .click();
   await expect(page.getByRole('heading', { name: '本机任务历史' })).toBeVisible();
-  await expect(page.getByLabel('任务概览')).toContainText('全部任务');
+  await expect(page.getByLabel('历史任务筛选')).toContainText('全部任务');
+  const historyFilters = page.getByLabel('历史任务筛选');
+  await expect(historyFilters.getByRole('button', { name: /全部任务/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await historyFilters.getByRole('button', { name: /已完成/ }).click();
+  await expect(page.getByText('Product Interview 06.mkv', { exact: true })).toBeVisible();
+  await expect(page.getByText('设计评审会议.m4a', { exact: true })).toHaveCount(0);
+  await historyFilters.getByRole('button', { name: /全部任务/ }).click();
+  await expect(page.locator('.task-card-progress').first()).toHaveText('63%');
+  await expect(page.locator('.task-card-progress').first()).not.toContainText('进度');
+  await expect(page.getByText('中文防幻觉 · GPU 转录中 · TXT / MD')).toBeVisible();
+  await expect(page.getByText('英文转录 · 已完成 · TXT')).toBeVisible();
+  await expect(page.getByText('稳定主语言')).toHaveCount(0);
+  await expect(
+    page
+      .locator('.task-row')
+      .first()
+      .evaluate((card) => {
+        const state = card.querySelector('.task-card-state')!.getBoundingClientRect();
+        const progress = card.querySelector('.task-card-progress')!.getBoundingClientRect();
+        return Math.abs(state.top + state.height / 2 - (progress.top + progress.height / 2));
+      }),
+  ).resolves.toBeLessThan(1);
+  await expect(
+    page.locator('.task-toolbar').evaluate((toolbar) => {
+      const tops = Array.from(toolbar.children, (child) => child.getBoundingClientRect().top);
+      return Math.max(...tops) - Math.min(...tops);
+    }),
+  ).resolves.toBeLessThan(1);
   await expect(
     page
       .locator('.task-summary-card strong')
@@ -885,8 +915,8 @@ test('clears completed and abnormal history independently', async ({ page }) => 
     .getByRole('button', { name: /历史记录/ })
     .click();
 
-  const clearCompleted = page.getByRole('button', { name: /清除已完成历史 · 1/ });
-  const clearAbnormal = page.getByRole('button', { name: /清除异常历史 · 0/ });
+  const clearCompleted = page.getByRole('button', { name: /清除历史 · 1/ });
+  const clearAbnormal = page.getByRole('button', { name: /清除异常 · 0/ });
   await expect(clearCompleted).toBeEnabled();
   await expect(clearAbnormal).toBeDisabled();
   await clearCompleted.click();
@@ -896,7 +926,7 @@ test('clears completed and abnormal history independently', async ({ page }) => 
   await expect(page.getByText('Product Interview 06.mkv')).toHaveCount(0);
 
   await page.getByRole('button', { name: /取消 设计评审会议.m4a/ }).click();
-  const clearCancelled = page.getByRole('button', { name: /清除异常历史 · 1/ });
+  const clearCancelled = page.getByRole('button', { name: /清除异常 · 1/ });
   await expect(clearCancelled).toBeEnabled();
   await clearCancelled.click();
   await page.getByRole('button', { name: /再次点击清除/ }).click();
