@@ -5,7 +5,7 @@
     sans-serif;
   --ui-font-size: 14px;
   --workspace-font-size: 14px;
-  --log-font-size: 12px;
+  --log-font-size: 13px;
   font-family: var(--ui-font-family);
   font-synthesis: none;
   font-optical-sizing: auto;
@@ -10099,5 +10099,308 @@ body.sidebar-resizing .app-shell {
 
   .dimension-control-input {
     grid-template-columns: 36px minmax(80px, 1fr) 36px minmax(78px, 90px);
+  }
+}
+
+/* Phase 4 / modification 34: tighter preference controls, structured logs,
+   integrated history and one shared workspace-state language. */
+.theme-choice-grid label {
+  grid-template-rows: auto auto;
+}
+
+.theme-choice-copy {
+  gap: 0;
+}
+
+.dimension-control-input {
+  min-width: 0;
+  grid-template-columns: 32px minmax(72px, 1fr) 32px 94px;
+  gap: 7px;
+}
+
+.dimension-control-input button {
+  width: 32px;
+  height: 32px;
+}
+
+.dimension-number-input {
+  max-width: 100%;
+  grid-template-columns: minmax(0, 1fr) 28px;
+}
+
+.dimension-number-input input {
+  padding: 0 10px;
+  font-size: max(12px, var(--font-caption));
+  letter-spacing: 0.01em;
+}
+
+.dimension-number-input small {
+  display: grid;
+  min-height: 36px;
+  padding: 0;
+  place-items: center;
+  border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+}
+
+.mode-chip,
+.preflight-status {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: var(--font-caption) !important;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.mode-chip svg,
+.preflight-status svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  stroke-width: 2;
+}
+
+.mode-chip.is-active {
+  border-color: color-mix(in srgb, var(--green) 24%, var(--border));
+  background: color-mix(in srgb, var(--green-soft) 68%, var(--surface-raised));
+  color: var(--green);
+}
+
+.mode-chip.is-inactive,
+.mode-chip.is-custom,
+.subtitle-mode-chip.is-inactive,
+.subtitle-mode-chip.is-custom,
+.preflight-status:not(.is-ready) {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface-raised));
+  color: var(--accent);
+}
+
+.subtitle-mode-chip.is-active {
+  border-color: color-mix(in srgb, var(--green) 24%, var(--border));
+  background: color-mix(in srgb, var(--green-soft) 68%, var(--surface-raised));
+  color: var(--green);
+}
+
+.preset-panel .panel-heading > .mode-chip,
+.launch-heading > .preflight-status {
+  align-self: flex-start;
+}
+
+.preflight-item.needs-attention {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface));
+}
+
+.preflight-item.needs-attention .preflight-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.worker-log-stream.log-view,
+:root[data-theme='dark'] .worker-log-stream.log-view {
+  padding: 8px 0;
+  background: var(--log-console-bg);
+}
+
+.worker-log-stream code,
+:root[data-theme='dark'] .worker-log-stream code {
+  display: grid;
+  min-width: max-content;
+  min-height: 48px;
+  grid-template-columns: 42px 126px minmax(82px, auto) minmax(340px, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 7px 18px;
+  border-bottom: 1px solid var(--log-console-grid);
+  font-size: var(--log-font-size);
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.worker-log-stream code:last-child {
+  border-bottom: 0;
+}
+
+.worker-log-stream code > .worker-log-line-number {
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  border-right: 1px solid var(--log-console-border);
+  color: var(--log-console-muted);
+  font-size: max(9px, calc(var(--log-font-size) - 3px));
+  font-variant-numeric: tabular-nums;
+}
+
+.worker-log-timestamp {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  color: var(--log-console-muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.worker-log-timestamp small {
+  font-size: max(9px, calc(var(--log-font-size) - 3px));
+  letter-spacing: 0.02em;
+}
+
+.worker-log-timestamp strong {
+  color: var(--log-console-text);
+  font-size: max(11px, calc(var(--log-font-size) - 1px));
+  font-weight: 650;
+}
+
+.worker-log-stream code > .worker-log-source {
+  display: inline-flex;
+  min-height: 25px;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--green) 22%, var(--log-console-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--green-soft) 54%, var(--log-console-bg));
+  color: var(--green);
+  font-size: max(9px, calc(var(--log-font-size) - 2px));
+  font-weight: 760;
+  letter-spacing: 0.035em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.worker-log-stream code > .worker-log-source[data-tone='task'] {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--log-console-border));
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--log-console-bg));
+  color: var(--accent);
+}
+
+.worker-log-stream code > .worker-log-source[data-tone='model'] {
+  border-color: color-mix(in srgb, var(--blue) 24%, var(--log-console-border));
+  background: color-mix(in srgb, var(--blue-soft) 60%, var(--log-console-bg));
+  color: var(--blue);
+}
+
+.worker-log-stream code > .worker-log-source[data-tone='error'],
+.worker-log-stream code > .worker-log-source[data-tone='stderr'] {
+  border-color: color-mix(in srgb, var(--danger) 24%, var(--log-console-border));
+  background: color-mix(in srgb, var(--danger-soft) 60%, var(--log-console-bg));
+  color: var(--danger);
+}
+
+.worker-log-stream code > .worker-log-message {
+  min-width: 0;
+  color: var(--log-console-text);
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.task-history-shell {
+  display: grid;
+  min-width: 0;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+}
+
+.task-history-shell .task-summary-band {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.task-history-shell .task-panel.is-expanded {
+  padding: 22px 24px 24px;
+  background: transparent;
+}
+
+.task-history-shell .task-panel.is-expanded .task-control-deck {
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.task-title-line,
+.task-panel.is-expanded .task-title-line,
+.task-panel.is-expanded .task-title-line strong {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.task-panel.is-expanded .task-title-line strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .view-content:not(.is-home) .task-summary-band .task-summary-card:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .view-content:not(.is-home) .task-summary-band .task-summary-card:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 760px) {
+  .dimension-control-input {
+    grid-template-columns: 36px minmax(72px, 1fr) 36px minmax(88px, 108px);
+    gap: 8px;
+  }
+
+  .dimension-control-input button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .worker-log-stream code,
+  :root[data-theme='dark'] .worker-log-stream code {
+    grid-template-columns: 36px 82px minmax(160px, 1fr);
+    gap: 10px;
+    padding-inline: 12px;
+  }
+
+  .worker-log-timestamp small {
+    display: none;
+  }
+
+  .worker-log-stream code > .worker-log-source {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .worker-log-stream code > .worker-log-message {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    padding-bottom: 4px;
+  }
+
+  .task-history-shell .task-panel.is-expanded {
+    padding: 18px 14px;
+  }
+}
+
+@media (max-width: 680px) {
+  .view-content:not(.is-home) .task-summary-band .task-summary-card {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .view-content:not(.is-home) .task-summary-band .task-summary-card:first-child {
+    border-top: 0;
   }
 }

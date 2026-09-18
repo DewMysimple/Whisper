@@ -283,7 +283,7 @@ export class MockDesktopBridge implements DesktopBridge {
 
   subscribe(listener: (event: DesktopEvent) => void): Unlisten {
     this.listeners.add(listener);
-    queueMicrotask(() =>
+    queueMicrotask(() => {
       listener({
         type: 'worker.environment',
         environment: {
@@ -292,8 +292,15 @@ export class MockDesktopBridge implements DesktopBridge {
           python: '3.13.5',
           platform: 'Windows mock',
         },
-      }),
-    );
+      });
+      for (const line of [
+        '[2026-09-18 15:16:52] [WORKER] ready · PID 4242',
+        '[2026-09-18 15:17:04] [MODEL] unloaded · 任务开始时按需加载',
+        '[2026-09-18 15:17:09] [TASK a1b2c3d4] progress · transcription.running · 1/2',
+      ]) {
+        listener({ type: 'worker.log', line });
+      }
+    });
     if (this.performanceTimer === undefined) {
       this.performanceTimer = setInterval(
         () => this.emitPerformance(),

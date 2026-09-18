@@ -196,7 +196,7 @@ describe('desktop workspace persistence', () => {
         customAccentColor: '#FF5B04',
         uiFontSize: 14,
         workspaceFontSize: 12,
-        logFontSize: 12,
+        logFontSize: 13,
         uiFontFamily: 'system',
         monoFontFamily: 'cascadia-mono',
         sidebarWidth: 304,

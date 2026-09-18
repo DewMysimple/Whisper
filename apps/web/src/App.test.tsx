@@ -49,6 +49,9 @@ describe('desktop workspace', () => {
     expect(screen.getByRole('button', { name: '无操作' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '关机' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '休眠' })).not.toBeInTheDocument();
+    expect(screen.getByText('当前输出 TXT / MD')).toHaveClass('is-active');
+    expect(screen.getByText('选择以启用')).toHaveClass('is-inactive');
+    expect(screen.getByText('待补充')).not.toHaveClass('is-ready');
     const checklist = screen.getByLabelText('执行前清单');
     expect(checklist).toHaveTextContent('版本与模型');
     expect(checklist).toHaveTextContent('英文转录');
@@ -347,6 +350,9 @@ describe('desktop workspace', () => {
     );
     await user.click(within(taskSwitcher).getByRole('button', { name: /历史记录/ }));
     const historyFilters = screen.getByLabelText('历史任务筛选');
+    expect(historyFilters.closest('.task-history-shell')).toContainElement(
+      screen.getByRole('heading', { name: '本机任务历史' }),
+    );
     expect(historyFilters).toHaveTextContent('全部任务');
     expect(within(historyFilters).getByRole('button', { name: /全部任务/ })).toHaveAttribute(
       'aria-pressed',
@@ -386,16 +392,16 @@ describe('desktop workspace', () => {
     expect(screen.queryByRole('button', { name: /清除已结束历史/ })).not.toBeInTheDocument();
     expect(screen.getByText('网络端口')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: '跟随 Windows' })).toBeChecked();
-    expect(screen.getByText(/跟随 Windows 的浅色或深色应用模式/)).toBeInTheDocument();
-    expect(screen.getByText('固定使用明亮背景与深色文字')).toBeInTheDocument();
-    expect(screen.getByText('固定使用深色背景与浅色文字')).toBeInTheDocument();
+    expect(screen.queryByText(/跟随 Windows 的浅色或深色应用模式/)).not.toBeInTheDocument();
+    expect(screen.queryByText('固定使用明亮背景与深色文字')).not.toBeInTheDocument();
+    expect(screen.queryByText('固定使用深色背景与浅色文字')).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: '界面框架字号' })).toHaveTextContent('14px');
     expect(screen.getByRole('group', { name: '工作台内容字号' })).toHaveTextContent('14px');
-    expect(screen.getByRole('group', { name: 'Worker 日志字号' })).toHaveTextContent('12px');
+    expect(screen.getByRole('group', { name: 'Worker 日志字号' })).toHaveTextContent('13px');
     await user.click(screen.getByRole('button', { name: '增大界面框架字号' }));
     expect(document.documentElement.style.getPropertyValue('--ui-font-size')).toBe('15px');
     expect(document.documentElement.style.getPropertyValue('--workspace-font-size')).toBe('14px');
-    expect(document.documentElement.style.getPropertyValue('--log-font-size')).toBe('12px');
+    expect(document.documentElement.style.getPropertyValue('--log-font-size')).toBe('13px');
     await user.click(screen.getByRole('button', { name: '增大工作台内容字号' }));
     expect(document.documentElement.style.getPropertyValue('--ui-font-size')).toBe('15px');
     expect(document.documentElement.style.getPropertyValue('--workspace-font-size')).toBe('15px');
@@ -430,6 +436,7 @@ describe('desktop workspace', () => {
     await user.click(screen.getByRole('button', { name: '恢复外观默认值' }));
     expect(document.documentElement.style.getPropertyValue('--ui-font-size')).toBe('14px');
     expect(document.documentElement.style.getPropertyValue('--workspace-font-size')).toBe('14px');
+    expect(document.documentElement.style.getPropertyValue('--log-font-size')).toBe('13px');
     expect(document.documentElement.style.getPropertyValue('--sidebar-width')).toBe('304px');
     expect(document.documentElement.style.getPropertyValue('--workspace-max')).toBe('1540px');
   });

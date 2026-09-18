@@ -50,17 +50,14 @@ const MONO_FONTS: Array<{ id: MonoFontFamily; label: string }> = [
 
 const THEMES = [
   {
-    description: '跟随 Windows 的浅色或深色应用模式',
     id: 'system',
     label: '跟随 Windows',
   },
   {
-    description: '固定使用明亮背景与深色文字',
     id: 'light',
     label: '浅色',
   },
   {
-    description: '固定使用深色背景与浅色文字',
     id: 'dark',
     label: '深色',
   },
@@ -516,7 +513,6 @@ export function SettingsView() {
                 </span>
                 <span className="theme-choice-copy">
                   <strong>{option.label}</strong>
-                  <small>{option.description}</small>
                 </span>
               </label>
             ))}

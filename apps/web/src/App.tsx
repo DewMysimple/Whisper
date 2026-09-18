@@ -179,7 +179,7 @@ function TasksView() {
       {mode === 'monitor' ? (
         <TaskMonitor />
       ) : (
-        <>
+        <div className="task-history-shell">
           <div className="task-summary task-summary-band" aria-label="历史任务筛选">
             <button
               aria-pressed={taskFilter === 'all'}
@@ -223,7 +223,7 @@ function TasksView() {
             </button>
           </div>
           <TaskList expanded />
-        </>
+        </div>
       )}
     </div>
   );

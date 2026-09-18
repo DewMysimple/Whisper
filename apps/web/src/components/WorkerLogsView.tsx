@@ -16,6 +16,36 @@ import { desktopBridge } from '../bridge';
 import { useWorkspace } from '../state/workspace';
 import { useAutoFollow } from './useAutoFollow';
 
+interface ParsedWorkerLogLine {
+  date: string | null;
+  message: string;
+  scope: string;
+  time: string | null;
+  tone: 'error' | 'model' | 'stderr' | 'task' | 'worker';
+}
+
+export function parseWorkerLogLine(line: string): ParsedWorkerLogLine {
+  const match = line.match(/^\[(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\]\s+\[([^\]]+)\]\s*(.*)$/);
+  const scope = match?.[3] ?? 'SYSTEM';
+  const normalizedScope = scope.toLocaleUpperCase();
+  const tone = normalizedScope.startsWith('TASK')
+    ? 'task'
+    : normalizedScope === 'MODEL'
+      ? 'model'
+      : normalizedScope === 'ERROR'
+        ? 'error'
+        : normalizedScope === 'STDERR'
+          ? 'stderr'
+          : 'worker';
+  return {
+    date: match?.[1] ?? null,
+    message: match?.[4] || line,
+    scope,
+    time: match?.[2] ?? null,
+    tone,
+  };
+}
+
 export function WorkerLogsView() {
   const logs = useWorkspace((state) => state.logs);
   const hostStatus = useWorkspace((state) => state.hostStatus);
@@ -213,12 +243,29 @@ export function WorkerLogsView() {
               </div>
             </div>
           ) : (
-            logs.map((line, index) => (
-              <code key={`${index}-${line}`}>
-                <span>{String(index + 1).padStart(3, '0')}</span>
-                {line}
-              </code>
-            ))
+            logs.map((line, index) => {
+              const parsed = parseWorkerLogLine(line);
+              return (
+                <code key={`${index}-${line}`}>
+                  <span className="worker-log-line-number">
+                    {String(index + 1).padStart(3, '0')}
+                  </span>
+                  <time
+                    className="worker-log-timestamp"
+                    dateTime={
+                      parsed.date && parsed.time ? `${parsed.date}T${parsed.time}` : undefined
+                    }
+                  >
+                    {parsed.date ? <small>{parsed.date}</small> : <small>LOCAL</small>}
+                    <strong>{parsed.time ?? '--:--:--'}</strong>
+                  </time>
+                  <span className="worker-log-source" data-tone={parsed.tone}>
+                    {parsed.scope}
+                  </span>
+                  <span className="worker-log-message">{parsed.message}</span>
+                </code>
+              );
+            })
           )}
         </div>
         <div className="worker-log-footer">

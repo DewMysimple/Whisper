@@ -23,7 +23,7 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   customAccentColor: '#FF5B04',
   uiFontSize: 14,
   workspaceFontSize: 14,
-  logFontSize: 12,
+  logFontSize: 13,
   uiFontFamily: 'system',
   monoFontFamily: 'cascadia-mono',
   sidebarWidth: 304,

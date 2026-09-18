@@ -96,6 +96,17 @@ describe('TaskList destructive history controls', () => {
     expect(container.querySelector('.progress-track')).toBeNull();
   });
 
+  it('keeps a long task name available while marking its visual line for tail truncation', () => {
+    const title = '当你拥有一棵赛博粒子交互的圣诞树并继续附加很长的任务说明.mkv';
+    useWorkspace.setState({ tasks: [{ ...FINISHED_TASK, title }] });
+
+    render(<TaskList expanded />);
+
+    const taskTitle = screen.getByText(title);
+    expect(taskTitle).toHaveAttribute('title', title);
+    expect(taskTitle.closest('.task-title-line')).not.toBeNull();
+  });
+
   it('shows only failed tasks in the attention filter', () => {
     useWorkspace.setState({
       tasks: [

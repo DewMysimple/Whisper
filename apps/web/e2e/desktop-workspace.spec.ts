@@ -144,6 +144,43 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   expect(preflightLayout.itemBorderStyle).toBe('solid');
   expect(preflightLayout.itemRadius).toBeGreaterThanOrEqual(10);
   expect(preflightLayout.attentionBackground).not.toBe(preflightLayout.itemBackground);
+  const stateChipLayout = await page.evaluate(() => {
+    const active = document.querySelector<HTMLElement>(
+      '.preset-panel:not(.subtitle-profile-panel) .mode-chip',
+    )!;
+    const inactive = document.querySelector<HTMLElement>('.subtitle-profile-panel .mode-chip')!;
+    const pending = document.querySelector<HTMLElement>('.preflight-status')!;
+    const iconTextOffset = (chip: HTMLElement) => {
+      const icon = chip.querySelector('svg')!.getBoundingClientRect();
+      const text = chip.lastChild!;
+      const range = document.createRange();
+      range.selectNode(text);
+      const textRect = range.getBoundingClientRect();
+      return Math.abs(icon.top + icon.height / 2 - (textRect.top + textRect.height / 2));
+    };
+    return {
+      activeHeight: active.getBoundingClientRect().height,
+      inactiveHeight: inactive.getBoundingClientRect().height,
+      pendingHeight: pending.getBoundingClientRect().height,
+      inactiveColor: getComputedStyle(inactive).color,
+      pendingColor: getComputedStyle(pending).color,
+      accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
+      activeOffset: iconTextOffset(active),
+      inactiveOffset: iconTextOffset(inactive),
+      pendingOffset: iconTextOffset(pending),
+    };
+  });
+  expect(stateChipLayout.activeHeight).toBeCloseTo(stateChipLayout.inactiveHeight, 1);
+  expect(stateChipLayout.pendingHeight).toBeCloseTo(stateChipLayout.inactiveHeight, 1);
+  expect(stateChipLayout.pendingColor).toBe(stateChipLayout.inactiveColor);
+  expect(stateChipLayout.accent).not.toBe('');
+  expect(
+    Math.max(
+      stateChipLayout.activeOffset,
+      stateChipLayout.inactiveOffset,
+      stateChipLayout.pendingOffset,
+    ),
+  ).toBeLessThanOrEqual(1);
 
   const intakeRatio = await page.evaluate(() => {
     const local = document.querySelector('.drop-zone')!.getBoundingClientRect();
@@ -549,11 +586,11 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.getByRole('heading', { name: '桌面外观' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '本地运行环境' })).toBeVisible();
   await expect(page.getByRole('radio', { name: '跟随 Windows' })).toBeChecked();
-  await expect(page.getByText('固定使用明亮背景与深色文字')).toBeVisible();
-  await expect(page.getByText('固定使用深色背景与浅色文字')).toBeVisible();
+  await expect(page.getByText('固定使用明亮背景与深色文字')).toHaveCount(0);
+  await expect(page.getByText('固定使用深色背景与浅色文字')).toHaveCount(0);
   await expect(page.getByRole('group', { name: '界面框架字号' })).toContainText('14px');
   await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('14px');
-  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('12px');
+  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('13px');
   await expect(page.getByRole('button', { name: '橙色强调色' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -626,7 +663,7 @@ test('supports workspace navigation, theme and configuration export', async ({
   ).resolves.toBe('14px');
   await expect(
     page.locator('html').evaluate((element) => element.style.getPropertyValue('--log-font-size')),
-  ).resolves.toBe('12px');
+  ).resolves.toBe('13px');
   await page.getByRole('button', { name: '增大工作台内容字号' }).click();
   await page.getByRole('button', { name: '增大工作台内容字号' }).click();
   await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('16px');
@@ -706,7 +743,7 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('18px');
   await expect(page.getByRole('button', { name: '增大工作台内容字号' })).toBeDisabled();
   await page.getByRole('button', { name: '增大Worker 日志字号' }).click();
-  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('13px');
+  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('14px');
   await page.getByRole('button', { name: '转录工作台' }).click();
   await expect(
     page
@@ -824,6 +861,17 @@ test('supports workspace navigation, theme and configuration export', async ({
     }),
   ).resolves.toBeLessThan(1);
   await expect(
+    page.locator('.task-history-shell').evaluate((shell) => {
+      const summary = shell.querySelector('.task-summary-band')!.getBoundingClientRect();
+      const panel = shell.querySelector('.task-panel.is-expanded')!.getBoundingClientRect();
+      return {
+        gap: Math.abs(panel.top - summary.bottom),
+        overflow: getComputedStyle(shell).overflow,
+        radius: Number.parseFloat(getComputedStyle(shell).borderTopLeftRadius),
+      };
+    }),
+  ).resolves.toEqual({ gap: 0, overflow: 'hidden', radius: 20 });
+  await expect(
     page
       .locator('.task-summary-card strong')
       .first()
@@ -839,6 +887,24 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.getByText('Product Interview 06.mkv', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '清除任务搜索' }).click();
   await expect(page.getByText('设计评审会议.m4a', { exact: true })).toBeVisible();
+  const longTitleMetrics = await page
+    .locator('.task-title-line strong')
+    .first()
+    .evaluate((title) => {
+      title.textContent = '当你拥有一棵赛博粒子交互的圣诞树并继续附加很长的任务说明.mkv';
+      const style = getComputedStyle(title);
+      return {
+        clientWidth: title.clientWidth,
+        overflow: style.overflow,
+        scrollWidth: title.scrollWidth,
+        textOverflow: style.textOverflow,
+        whiteSpace: style.whiteSpace,
+      };
+    });
+  expect(longTitleMetrics.scrollWidth).toBeGreaterThan(longTitleMetrics.clientWidth);
+  expect(longTitleMetrics).toEqual(
+    expect.objectContaining({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
+  );
   await expect(page.locator('.task-panel.is-expanded .progress-track')).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
@@ -1073,8 +1139,22 @@ test('opens the independent Worker log workspace and exposes only the restored s
   await expect(page.getByRole('heading', { name: '实时诊断输出' })).toBeVisible();
   await expect(page.getByLabel('Worker 日志状态')).toContainText('BUFFER');
   await expect(page.getByLabel('Worker 日志状态').locator('article')).toHaveCount(4);
-  await expect(page.getByText('诊断通道已就绪')).toBeVisible();
-  await expect(page.getByLabel('日志采集阶段')).toContainText('Worker 启动');
+  await expect(page.getByRole('log').locator('code')).toHaveCount(3);
+  await expect(page.getByRole('log').locator('.worker-log-source')).toHaveText([
+    'WORKER',
+    'MODEL',
+    'TASK a1b2c3d4',
+  ]);
+  await expect(page.getByRole('log').locator('.worker-log-message').first()).toHaveText(
+    'ready · PID 4242',
+  );
+  await expect(
+    page
+      .getByRole('log')
+      .locator('.worker-log-message')
+      .first()
+      .evaluate((element) => getComputedStyle(element).textAlign),
+  ).resolves.toBe('left');
   await expect(
     page.locator('.worker-logs-workspace').evaluate((element) => element.clientWidth),
   ).resolves.toBeGreaterThan(1200);
@@ -1109,7 +1189,7 @@ test('keeps full-screen layout and typography personalization independent', asyn
   await expect(page.getByRole('heading', { name: '工作区尺寸' })).toBeVisible();
   await expect(page.getByRole('group', { name: '界面框架字号' })).toContainText('14px');
   await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('14px');
-  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('12px');
+  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('13px');
   await expect(page.getByRole('slider', { name: '工作台内容宽度滑杆' })).toHaveValue('1540');
   await expect(page.getByRole('slider', { name: '导航栏宽度滑杆' })).toHaveValue('304');
   await expect(
@@ -1145,6 +1225,38 @@ test('keeps full-screen layout and typography personalization independent', asyn
       workspace: element.style.getPropertyValue('--workspace-max'),
     })),
   ).resolves.toEqual({ sidebar: '333px', workspace: '1655px' });
+  await expect(
+    page
+      .locator('.dimension-number-input')
+      .first()
+      .evaluate((element) => {
+        const input = element.querySelector('input')!.getBoundingClientRect();
+        const unit = element.querySelector('small')!.getBoundingClientRect();
+        return {
+          inputRight: Math.round(input.right),
+          unitLeft: Math.round(unit.left),
+          unitWidth: Math.round(unit.width),
+        };
+      }),
+  ).resolves.toEqual(
+    expect.objectContaining({
+      unitWidth: 28,
+    }),
+  );
+  const dimensionCells = await page
+    .locator('.dimension-number-input')
+    .first()
+    .evaluate((element) => {
+      const input = element.querySelector('input')!.getBoundingClientRect();
+      const unit = element.querySelector('small')!.getBoundingClientRect();
+      return { inputRight: input.right, unitLeft: unit.left };
+    });
+  expect(dimensionCells.inputRight).toBeLessThanOrEqual(dimensionCells.unitLeft);
+  const layoutCardWidth = await page.locator('.layout-settings-card').evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(layoutCardWidth.scrollWidth - layoutCardWidth.clientWidth).toBeLessThanOrEqual(1);
 
   await page.getByRole('button', { name: '增大界面框架字号' }).click();
   await expect(
@@ -1153,7 +1265,7 @@ test('keeps full-screen layout and typography personalization independent', asyn
       workspace: element.style.getPropertyValue('--workspace-font-size'),
       log: element.style.getPropertyValue('--log-font-size'),
     })),
-  ).resolves.toEqual({ frame: '15px', workspace: '14px', log: '12px' });
+  ).resolves.toEqual({ frame: '15px', workspace: '14px', log: '13px' });
   await expect(
     page
       .locator('.view-content')
@@ -1166,7 +1278,7 @@ test('keeps full-screen layout and typography personalization independent', asyn
       workspace: element.style.getPropertyValue('--workspace-font-size'),
       log: element.style.getPropertyValue('--log-font-size'),
     })),
-  ).resolves.toEqual({ frame: '15px', workspace: '15px', log: '12px' });
+  ).resolves.toEqual({ frame: '15px', workspace: '15px', log: '13px' });
   await expect(
     page
       .locator('.view-content')

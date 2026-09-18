@@ -1,4 +1,4 @@
-import { Captions, Check, Sparkles } from 'lucide-react';
+import { Check, CirclePlus, Sparkles } from 'lucide-react';
 
 import { SUBTITLE_PRESETS } from '../data/subtitlePresets';
 import { useWorkspace } from '../state/workspace';
@@ -25,13 +25,15 @@ export function SubtitleProfilePanel() {
           <p className="step-label">03 / SRT SUBTITLE PROFILE</p>
           <h2 id="subtitle-profile-title">SRT 字幕识别与参数</h2>
         </div>
-        <span className={`mode-chip subtitle-mode-chip ${isCustom ? 'is-custom' : ''}`}>
+        <span
+          className={`mode-chip subtitle-mode-chip ${isCustom ? 'is-custom' : active ? 'is-active' : 'is-inactive'}`}
+        >
           {isCustom ? (
             <Sparkles size={13} />
           ) : active ? (
             <Check size={13} />
           ) : (
-            <Captions size={13} />
+            <CirclePlus size={14} />
           )}
           {isCustom ? '字幕自定义' : active ? '当前输出 SRT' : '选择以启用'}
         </span>

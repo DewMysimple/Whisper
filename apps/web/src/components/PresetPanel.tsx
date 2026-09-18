@@ -1,4 +1,4 @@
-import { Check, FileText, Sparkles } from 'lucide-react';
+import { Check, CirclePlus, Sparkles } from 'lucide-react';
 
 import { PRESETS } from '../data/presets';
 import { useWorkspace } from '../state/workspace';
@@ -21,13 +21,15 @@ export function PresetPanel() {
           <p className="step-label">02 / TRANSCRIPTION PROFILE</p>
           <h2 id="preset-title">文本识别模式</h2>
         </div>
-        <span className={`mode-chip ${isCustom ? 'is-custom' : ''}`}>
+        <span
+          className={`mode-chip ${isCustom ? 'is-custom' : active ? 'is-active' : 'is-inactive'}`}
+        >
           {isCustom ? (
             <Sparkles size={13} />
           ) : active ? (
             <Check size={13} />
           ) : (
-            <FileText size={13} />
+            <CirclePlus size={14} />
           )}
           {isCustom ? '派生自定义' : active ? '当前输出 TXT / MD' : '选择以启用'}
         </span>
