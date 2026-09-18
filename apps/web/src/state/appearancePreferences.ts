@@ -9,9 +9,12 @@ export interface AppearancePreferences {
   accentPreset: AccentPreset;
   customAccentColor: string;
   uiFontSize: number;
+  workspaceFontSize: number;
   logFontSize: number;
   uiFontFamily: UiFontFamily;
   monoFontFamily: MonoFontFamily;
+  sidebarWidth: number;
+  workspaceWidth: number;
 }
 
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
@@ -19,13 +22,19 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   accentPreset: 'orange',
   customAccentColor: '#FF5B04',
   uiFontSize: 14,
+  workspaceFontSize: 14,
   logFontSize: 12,
   uiFontFamily: 'system',
   monoFontFamily: 'cascadia-mono',
+  sidebarWidth: 304,
+  workspaceWidth: 1540,
 };
 
 export const UI_FONT_SIZE_RANGE = { minimum: 12, maximum: 18 } as const;
+export const WORKSPACE_FONT_SIZE_RANGE = { minimum: 12, maximum: 18 } as const;
 export const LOG_FONT_SIZE_RANGE = { minimum: 10, maximum: 16 } as const;
+export const SIDEBAR_WIDTH_RANGE = { minimum: 264, maximum: 360, step: 8 } as const;
+export const WORKSPACE_WIDTH_RANGE = { minimum: 1200, maximum: 1760, step: 20 } as const;
 
 export function applyThemePreference(theme: ThemePreference): void {
   const resolved =
@@ -85,9 +94,16 @@ export function applyAppearancePreferences(preferences: AppearancePreferences): 
   root.removeAttribute('data-content-font-size');
   root.dataset.accentPreset = preferences.accentPreset;
   root.style.setProperty('--ui-font-size', `${preferences.uiFontSize}px`);
+  root.style.setProperty('--workspace-font-size', `${preferences.workspaceFontSize}px`);
   root.style.setProperty('--log-font-size', `${preferences.logFontSize}px`);
   root.style.setProperty('--ui-font-family', UI_FONT_STACKS[preferences.uiFontFamily]);
   root.style.setProperty('--mono', MONO_FONT_STACKS[preferences.monoFontFamily]);
+  root.style.setProperty('--sidebar-width', `${preferences.sidebarWidth}px`);
+  root.style.setProperty(
+    '--sidebar-compact-width',
+    `${Math.max(240, preferences.sidebarWidth - 28)}px`,
+  );
+  root.style.setProperty('--workspace-max', `${preferences.workspaceWidth}px`);
   if (preferences.accentPreset === 'custom') {
     const custom =
       normalizeHexColor(preferences.customAccentColor) ?? DEFAULT_APPEARANCE.customAccentColor;

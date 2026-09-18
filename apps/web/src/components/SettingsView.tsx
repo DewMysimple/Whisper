@@ -1,11 +1,24 @@
-import { Download, Minus, Palette, Plus, RotateCcw, Type, Upload } from 'lucide-react';
-import type { CSSProperties } from 'react';
+import {
+  Download,
+  Maximize2,
+  Minus,
+  Palette,
+  PanelLeft,
+  Plus,
+  RotateCcw,
+  Type,
+  Upload,
+} from 'lucide-react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 
 import {
   LOG_FONT_SIZE_RANGE,
   normalizeHexColor,
+  SIDEBAR_WIDTH_RANGE,
   UI_FONT_SIZE_RANGE,
+  WORKSPACE_FONT_SIZE_RANGE,
+  WORKSPACE_WIDTH_RANGE,
   type AccentPreset,
   type MonoFontFamily,
   type UiFontFamily,
@@ -38,12 +51,14 @@ function NumberStepper({
   maximum,
   minimum,
   onChange,
+  step = 1,
   value,
 }: {
   label: string;
   maximum: number;
   minimum: number;
   onChange(value: number): void;
+  step?: number;
   value: number;
 }) {
   return (
@@ -51,7 +66,7 @@ function NumberStepper({
       <button
         aria-label={`减小${label}`}
         disabled={value <= minimum}
-        onClick={() => onChange(value - 1)}
+        onClick={() => onChange(Math.max(minimum, value - step))}
         type="button"
       >
         <Minus size={15} />
@@ -63,11 +78,71 @@ function NumberStepper({
       <button
         aria-label={`增大${label}`}
         disabled={value >= maximum}
-        onClick={() => onChange(value + 1)}
+        onClick={() => onChange(Math.min(maximum, value + step))}
         type="button"
       >
         <Plus size={15} />
       </button>
+    </div>
+  );
+}
+
+function DimensionControl({
+  description,
+  icon,
+  label,
+  maximum,
+  minimum,
+  onChange,
+  step,
+  value,
+}: {
+  description: string;
+  icon: ReactNode;
+  label: string;
+  maximum: number;
+  minimum: number;
+  onChange(value: number): void;
+  step: number;
+  value: number;
+}) {
+  return (
+    <div className="dimension-control">
+      <div className="dimension-control-copy">
+        <span>{icon}</span>
+        <div>
+          <strong>{label}</strong>
+          <small>{description}</small>
+        </div>
+      </div>
+      <div className="dimension-control-input">
+        <button
+          aria-label={`缩小${label}`}
+          disabled={value <= minimum}
+          onClick={() => onChange(Math.max(minimum, value - step))}
+          type="button"
+        >
+          <Minus size={15} />
+        </button>
+        <input
+          aria-label={`${label}滑杆`}
+          max={maximum}
+          min={minimum}
+          onChange={(event) => onChange(Number(event.target.value))}
+          step={step}
+          type="range"
+          value={value}
+        />
+        <button
+          aria-label={`扩大${label}`}
+          disabled={value >= maximum}
+          onClick={() => onChange(Math.min(maximum, value + step))}
+          type="button"
+        >
+          <Plus size={15} />
+        </button>
+        <output aria-live="polite">{value}px</output>
+      </div>
     </div>
   );
 }
@@ -81,12 +156,18 @@ export function SettingsView() {
   const setCustomAccentColor = useWorkspace((state) => state.setCustomAccentColor);
   const uiFontSize = useWorkspace((state) => state.uiFontSize);
   const setUiFontSize = useWorkspace((state) => state.setUiFontSize);
+  const workspaceFontSize = useWorkspace((state) => state.workspaceFontSize);
+  const setWorkspaceFontSize = useWorkspace((state) => state.setWorkspaceFontSize);
   const logFontSize = useWorkspace((state) => state.logFontSize);
   const setLogFontSize = useWorkspace((state) => state.setLogFontSize);
   const uiFontFamily = useWorkspace((state) => state.uiFontFamily);
   const setUiFontFamily = useWorkspace((state) => state.setUiFontFamily);
   const monoFontFamily = useWorkspace((state) => state.monoFontFamily);
   const setMonoFontFamily = useWorkspace((state) => state.setMonoFontFamily);
+  const sidebarWidth = useWorkspace((state) => state.sidebarWidth);
+  const setSidebarWidth = useWorkspace((state) => state.setSidebarWidth);
+  const workspaceWidth = useWorkspace((state) => state.workspaceWidth);
+  const setWorkspaceWidth = useWorkspace((state) => state.setWorkspaceWidth);
   const restoreAppearanceDefaults = useWorkspace((state) => state.restoreAppearanceDefaults);
   const environment = useWorkspace((state) => state.environment);
   const hostStatus = useWorkspace((state) => state.hostStatus);
@@ -103,11 +184,12 @@ export function SettingsView() {
 
   return (
     <div className="settings-workspace">
-      <section className="panel settings-card appearance-card">
+      <section className="panel settings-card settings-hero">
         <div className="appearance-heading">
           <div>
             <p className="step-label">DESK APPEARANCE</p>
             <h2>桌面外观</h2>
+            <p>分别管理桌面框架、工作台内容和诊断日志，不再由一个字号牵动全部页面。</p>
           </div>
           <button
             className="secondary-button appearance-reset"
@@ -118,7 +200,13 @@ export function SettingsView() {
           </button>
         </div>
 
-        <div className="appearance-preview" aria-label="当前外观实时预览">
+        <div
+          className="appearance-preview"
+          aria-label="当前外观实时预览"
+          style={
+            { '--preview-sidebar-width': `${Math.round(sidebarWidth / 4)}px` } as CSSProperties
+          }
+        >
           <div className="appearance-preview-rail">
             <span />
             <i />
@@ -129,7 +217,7 @@ export function SettingsView() {
             <p>LOCAL TRANSCRIPTION</p>
             <strong>清晰、稳定的本地工作台</strong>
             <span>
-              当前 UI {uiFontSize}px · 日志 {logFontSize}px
+              框架 {uiFontSize}px · 内容 {workspaceFontSize}px · 日志 {logFontSize}px
             </span>
             <div>
               <button type="button" tabIndex={-1}>
@@ -138,14 +226,30 @@ export function SettingsView() {
               <code>[WORKER] ready · LOCAL IPC</code>
             </div>
           </div>
+          <div className="appearance-preview-facts" aria-hidden="true">
+            <span>
+              <small>导航栏</small>
+              <strong>{sidebarWidth}px</strong>
+            </span>
+            <span>
+              <small>工作台</small>
+              <strong>{workspaceWidth}px</strong>
+            </span>
+            <span>
+              <small>层级</small>
+              <strong>3 组独立字号</strong>
+            </span>
+          </div>
         </div>
+      </section>
 
-        <div className="appearance-section">
+      <div className="settings-preference-grid">
+        <section className="panel settings-card settings-section-card theme-settings-card">
           <div className="appearance-section-title">
-            <Palette size={17} />
+            <Palette size={18} />
             <div>
-              <strong>主题与强调色</strong>
-              <span>背景与文字保持正式配色，强调色用于操作、焦点与状态。</span>
+              <h3>主题与强调色</h3>
+              <span>背景保持正式克制，强调色只服务操作、焦点与状态。</span>
             </div>
           </div>
           <fieldset className="theme-choice-grid">
@@ -243,19 +347,57 @@ export function SettingsView() {
               请输入完整的十六进制颜色，例如 #FF5B04。
             </p>
           )}
-        </div>
+        </section>
 
-        <div className="appearance-section">
+        <section className="panel settings-card settings-section-card layout-settings-card">
           <div className="appearance-section-title">
-            <Type size={17} />
+            <Maximize2 size={18} />
             <div>
-              <strong>字体与字号</strong>
-              <span>UI 作用于所有工作台和桌面框架；日志与等宽数据独立设置。</span>
+              <h3>工作区尺寸</h3>
+              <span>独立调节内容承载宽度与左侧工作台导航，不影响收起后的紧凑模式。</span>
             </div>
           </div>
-          <div className="typography-setting-grid">
+          <div className="dimension-control-list">
+            <DimensionControl
+              description="控制卡片工作区在大屏上的最大展开宽度"
+              icon={<Maximize2 size={17} />}
+              label="工作台内容宽度"
+              maximum={WORKSPACE_WIDTH_RANGE.maximum}
+              minimum={WORKSPACE_WIDTH_RANGE.minimum}
+              onChange={setWorkspaceWidth}
+              step={WORKSPACE_WIDTH_RANGE.step}
+              value={workspaceWidth}
+            />
+            <DimensionControl
+              description="控制工作台选择栏的横向占用空间"
+              icon={<PanelLeft size={17} />}
+              label="导航栏宽度"
+              maximum={SIDEBAR_WIDTH_RANGE.maximum}
+              minimum={SIDEBAR_WIDTH_RANGE.minimum}
+              onChange={setSidebarWidth}
+              step={SIDEBAR_WIDTH_RANGE.step}
+              value={sidebarWidth}
+            />
+          </div>
+          <p className="layout-setting-note">
+            小窗口仍会自动采用响应式布局；这里调整的是全屏和宽屏下的舒适阅读比例。
+          </p>
+        </section>
+
+        <section className="panel settings-card settings-section-card typography-settings-card">
+          <div className="appearance-section-title">
+            <Type size={18} />
+            <div>
+              <h3>字体与字号</h3>
+              <span>字体家族全局统一；桌面框架、工作台内容与日志字号分别生效。</span>
+            </div>
+          </div>
+          <div className="font-family-grid">
             <label>
-              <span>UI 字体</span>
+              <span>
+                <strong>UI 字体</strong>
+                <small>用于导航、标题、卡片和控件</small>
+              </span>
               <select
                 aria-label="UI 字体"
                 onChange={(event) => setUiFontFamily(event.target.value as UiFontFamily)}
@@ -268,18 +410,11 @@ export function SettingsView() {
                 ))}
               </select>
             </label>
-            <div className="typography-size-row">
-              <span>UI 字号</span>
-              <NumberStepper
-                label="UI 字号"
-                maximum={UI_FONT_SIZE_RANGE.maximum}
-                minimum={UI_FONT_SIZE_RANGE.minimum}
-                onChange={setUiFontSize}
-                value={uiFontSize}
-              />
-            </div>
             <label>
-              <span>等宽字体</span>
+              <span>
+                <strong>等宽字体</strong>
+                <small>用于 Worker 日志、路径与诊断数据</small>
+              </span>
               <select
                 aria-label="等宽字体"
                 onChange={(event) => setMonoFontFamily(event.target.value as MonoFontFamily)}
@@ -292,10 +427,41 @@ export function SettingsView() {
                 ))}
               </select>
             </label>
+          </div>
+          <div className="typography-setting-grid">
             <div className="typography-size-row">
-              <span>日志字号</span>
+              <span>
+                <strong>界面框架字号</strong>
+                <small>仅侧栏、顶栏与全局框架</small>
+              </span>
               <NumberStepper
-                label="日志字号"
+                label="界面框架字号"
+                maximum={UI_FONT_SIZE_RANGE.maximum}
+                minimum={UI_FONT_SIZE_RANGE.minimum}
+                onChange={setUiFontSize}
+                value={uiFontSize}
+              />
+            </div>
+            <div className="typography-size-row">
+              <span>
+                <strong>工作台内容字号</strong>
+                <small>卡片、说明、数据与操作项</small>
+              </span>
+              <NumberStepper
+                label="工作台内容字号"
+                maximum={WORKSPACE_FONT_SIZE_RANGE.maximum}
+                minimum={WORKSPACE_FONT_SIZE_RANGE.minimum}
+                onChange={setWorkspaceFontSize}
+                value={workspaceFontSize}
+              />
+            </div>
+            <div className="typography-size-row">
+              <span>
+                <strong>Worker 日志字号</strong>
+                <small>只改变实时诊断代码行</small>
+              </span>
+              <NumberStepper
+                label="Worker 日志字号"
                 maximum={LOG_FONT_SIZE_RANGE.maximum}
                 minimum={LOG_FONT_SIZE_RANGE.minimum}
                 onChange={setLogFontSize}
@@ -303,13 +469,14 @@ export function SettingsView() {
               />
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <div className="settings-support-grid">
-        <section className="panel settings-card">
+        <section className="panel settings-card runtime-card">
           <p className="step-label">LOCAL RUNTIME</p>
           <h2>本地运行环境</h2>
+          <p>只读展示当前桌面 Host、Worker 与模型的真实运行状态。</p>
           <dl>
             <dt>启动模式</dt>
             <dd>{hostStatus.launchKind?.toUpperCase() ?? 'PENDING'}</dd>
@@ -334,7 +501,7 @@ export function SettingsView() {
         <section className="panel settings-card config-card">
           <p className="step-label">PORTABLE SETTINGS</p>
           <h2>便携配置</h2>
-          <p>导出外观、Preset、参数覆盖和输出策略，不包含任务历史或日志。</p>
+          <p>导出外观、布局、Preset、参数覆盖和输出策略，不包含任务历史或日志。</p>
           <textarea
             aria-label="配置 JSON"
             onChange={(event) => setConfigText(event.target.value)}

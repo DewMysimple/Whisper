@@ -16,9 +16,12 @@ const preferences: WorkspacePreferences = {
   accentPreset: 'blue',
   customAccentColor: '#1A73E8',
   uiFontSize: 15,
+  workspaceFontSize: 16,
   logFontSize: 13,
   uiFontFamily: 'microsoft-yahei-ui',
   monoFontFamily: 'consolas',
+  sidebarWidth: 320,
+  workspaceWidth: 1600,
   selectedModelId: 'large-v3-turbo',
   selectedPresetId: 'en_v1',
   profileMode: 'transcript',
@@ -169,9 +172,12 @@ describe('desktop workspace persistence', () => {
     delete legacy.preferences.accentPreset;
     delete legacy.preferences.customAccentColor;
     delete legacy.preferences.uiFontSize;
+    delete legacy.preferences.workspaceFontSize;
     delete legacy.preferences.logFontSize;
     delete legacy.preferences.uiFontFamily;
     delete legacy.preferences.monoFontFamily;
+    delete legacy.preferences.sidebarWidth;
+    delete legacy.preferences.workspaceWidth;
     delete legacy.preferences.selectedModelId;
     legacy.preferences.hardwarePreference = {
       mode: 'cpu',
@@ -188,10 +194,13 @@ describe('desktop workspace persistence', () => {
       expect.objectContaining({
         accentPreset: 'orange',
         customAccentColor: '#FF5B04',
-        uiFontSize: 12,
+        uiFontSize: 14,
+        workspaceFontSize: 12,
         logFontSize: 12,
         uiFontFamily: 'system',
         monoFontFamily: 'cascadia-mono',
+        sidebarWidth: 304,
+        workspaceWidth: 1540,
         selectedModelId: 'large-v3-turbo',
       }),
     );
@@ -200,9 +209,26 @@ describe('desktop workspace persistence', () => {
     expect(migrated).not.toHaveProperty('hardwarePreference');
 
     legacy.preferences.contentFontSize = 'balanced';
-    expect(importPreferences(JSON.stringify(legacy)).uiFontSize).toBe(14);
+    expect(importPreferences(JSON.stringify(legacy)).workspaceFontSize).toBe(14);
     legacy.preferences.contentFontSize = 'large';
-    expect(importPreferences(JSON.stringify(legacy)).uiFontSize).toBe(16);
+    expect(importPreferences(JSON.stringify(legacy)).workspaceFontSize).toBe(16);
+  });
+
+  it('keeps the former shared UI size as the initial workspace size', () => {
+    const preSeparation = JSON.parse(exportPreferences(preferences));
+    delete preSeparation.preferences.workspaceFontSize;
+    delete preSeparation.preferences.sidebarWidth;
+    delete preSeparation.preferences.workspaceWidth;
+    preSeparation.preferences.uiFontSize = 17;
+
+    expect(importPreferences(JSON.stringify(preSeparation))).toEqual(
+      expect.objectContaining({
+        uiFontSize: 17,
+        workspaceFontSize: 17,
+        sidebarWidth: 304,
+        workspaceWidth: 1540,
+      }),
+    );
   });
 
   it('rejects invalid appearance ranges, colors and font identifiers', () => {
@@ -210,12 +236,21 @@ describe('desktop workspace persistence', () => {
     invalid.preferences.uiFontSize = 19;
     expect(() => importPreferences(JSON.stringify(invalid))).toThrow(/字段或参数范围/);
     invalid.preferences.uiFontSize = 14;
+    invalid.preferences.workspaceFontSize = 19;
+    expect(() => importPreferences(JSON.stringify(invalid))).toThrow(/字段或参数范围/);
+    invalid.preferences.workspaceFontSize = 16;
     invalid.preferences.logFontSize = 9;
     expect(() => importPreferences(JSON.stringify(invalid))).toThrow(/字段或参数范围/);
     invalid.preferences.logFontSize = 12;
     invalid.preferences.customAccentColor = '#12345';
     expect(() => importPreferences(JSON.stringify(invalid))).toThrow(/字段或参数范围/);
     invalid.preferences.customAccentColor = '#123456';
+    invalid.preferences.sidebarWidth = 200;
+    expect(() => importPreferences(JSON.stringify(invalid))).toThrow(/字段或参数范围/);
+    invalid.preferences.sidebarWidth = 320;
+    invalid.preferences.workspaceWidth = 2000;
+    expect(() => importPreferences(JSON.stringify(invalid))).toThrow(/字段或参数范围/);
+    invalid.preferences.workspaceWidth = 1600;
     invalid.preferences.uiFontFamily = 'unknown';
     expect(() => importPreferences(JSON.stringify(invalid))).toThrow(/字段或参数范围/);
   });

@@ -17,6 +17,7 @@ supersedes: null
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-18 | ui | - | archived | history-filter-and-stage-redesign | [[日志/2026-09-18-重构历史状态筛选与阶段信息.md|重构历史状态筛选与阶段信息]] |
 | 2026-09-18 | ui | - | archived | task-monitor-and-history-redesign | [[日志/2026-09-18-重构任务监控与历史记录.md|重构任务监控与历史记录]] |
+| 2026-09-18 | ui | - | archived | worker-logs-and-appearance-personalization | [[日志/2026-09-18-重构Worker日志与桌面个性化设置.md|重构 Worker 日志与桌面个性化设置]] |
 | 2026-09-18 | ui | - | archived | task-monitor-visual-hierarchy | [[日志/2026-09-18-协调任务监控视觉层级.md|协调任务监控视觉层级]] |
 | 2026-09-18 | ui | - | archived | output-panel-and-development-input-preview | [[日志/2026-09-17-重构文件输出与开发态输入预览.md|重构文件输出与开发态输入预览]] |
 | 2026-09-17 | ui | - | archived | preflight-task-checklist | [[日志/2026-09-17-重塑执行前任务清单.md|重塑执行前任务清单]] |

@@ -33,6 +33,11 @@ import {
   importPreferences,
   loadWorkspaceState,
   normalizeHexColor,
+  SIDEBAR_WIDTH_RANGE,
+  UI_FONT_SIZE_RANGE,
+  WORKSPACE_FONT_SIZE_RANGE,
+  WORKSPACE_WIDTH_RANGE,
+  LOG_FONT_SIZE_RANGE,
   type AccentPreset,
   type MonoFontFamily,
   type ThemePreference,
@@ -244,9 +249,12 @@ export interface WorkspaceState {
   accentPreset: AccentPreset;
   customAccentColor: string;
   uiFontSize: number;
+  workspaceFontSize: number;
   logFontSize: number;
   uiFontFamily: UiFontFamily;
   monoFontFamily: MonoFontFamily;
+  sidebarWidth: number;
+  workspaceWidth: number;
   selectedTaskId: string | null;
   outputPreview: OutputPreview | null;
   previewLoading: boolean;
@@ -269,9 +277,12 @@ export interface WorkspaceState {
   setAccentPreset(preset: AccentPreset): void;
   setCustomAccentColor(color: string): void;
   setUiFontSize(size: number): void;
+  setWorkspaceFontSize(size: number): void;
   setLogFontSize(size: number): void;
   setUiFontFamily(family: UiFontFamily): void;
   setMonoFontFamily(family: MonoFontFamily): void;
+  setSidebarWidth(width: number): void;
+  setWorkspaceWidth(width: number): void;
   restoreAppearanceDefaults(): void;
   setTaskFilter(filter: TaskFilter): void;
   setTaskSearch(search: string): void;
@@ -438,14 +449,36 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     persistLater(get);
   },
   setUiFontSize: (uiFontSize) => {
-    if (!Number.isInteger(uiFontSize) || uiFontSize < 12 || uiFontSize > 18) return;
+    if (
+      !Number.isInteger(uiFontSize) ||
+      uiFontSize < UI_FONT_SIZE_RANGE.minimum ||
+      uiFontSize > UI_FONT_SIZE_RANGE.maximum
+    )
+      return;
     const next = { ...appearanceFromState(get()), uiFontSize };
     applyAppearancePreferences(next);
     set({ uiFontSize });
     persistLater(get);
   },
+  setWorkspaceFontSize: (workspaceFontSize) => {
+    if (
+      !Number.isInteger(workspaceFontSize) ||
+      workspaceFontSize < WORKSPACE_FONT_SIZE_RANGE.minimum ||
+      workspaceFontSize > WORKSPACE_FONT_SIZE_RANGE.maximum
+    )
+      return;
+    const next = { ...appearanceFromState(get()), workspaceFontSize };
+    applyAppearancePreferences(next);
+    set({ workspaceFontSize });
+    persistLater(get);
+  },
   setLogFontSize: (logFontSize) => {
-    if (!Number.isInteger(logFontSize) || logFontSize < 10 || logFontSize > 16) return;
+    if (
+      !Number.isInteger(logFontSize) ||
+      logFontSize < LOG_FONT_SIZE_RANGE.minimum ||
+      logFontSize > LOG_FONT_SIZE_RANGE.maximum
+    )
+      return;
     const next = { ...appearanceFromState(get()), logFontSize };
     applyAppearancePreferences(next);
     set({ logFontSize });
@@ -461,6 +494,30 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const next = { ...appearanceFromState(get()), monoFontFamily };
     applyAppearancePreferences(next);
     set({ monoFontFamily });
+    persistLater(get);
+  },
+  setSidebarWidth: (sidebarWidth) => {
+    if (
+      !Number.isInteger(sidebarWidth) ||
+      sidebarWidth < SIDEBAR_WIDTH_RANGE.minimum ||
+      sidebarWidth > SIDEBAR_WIDTH_RANGE.maximum
+    )
+      return;
+    const next = { ...appearanceFromState(get()), sidebarWidth };
+    applyAppearancePreferences(next);
+    set({ sidebarWidth });
+    persistLater(get);
+  },
+  setWorkspaceWidth: (workspaceWidth) => {
+    if (
+      !Number.isInteger(workspaceWidth) ||
+      workspaceWidth < WORKSPACE_WIDTH_RANGE.minimum ||
+      workspaceWidth > WORKSPACE_WIDTH_RANGE.maximum
+    )
+      return;
+    const next = { ...appearanceFromState(get()), workspaceWidth };
+    applyAppearancePreferences(next);
+    set({ workspaceWidth });
     persistLater(get);
   },
   restoreAppearanceDefaults: () => {

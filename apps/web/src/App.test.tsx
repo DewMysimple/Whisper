@@ -387,11 +387,20 @@ describe('desktop workspace', () => {
     expect(screen.getByText('网络端口')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: '跟随 Windows' })).toBeChecked();
     expect(screen.getByText(/跟随 Windows 的浅色或深色应用模式/)).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'UI 字号' })).toHaveTextContent('14px');
-    expect(screen.getByRole('group', { name: '日志字号' })).toHaveTextContent('12px');
-    await user.click(screen.getByRole('button', { name: '增大UI 字号' }));
+    expect(screen.getByRole('group', { name: '界面框架字号' })).toHaveTextContent('14px');
+    expect(screen.getByRole('group', { name: '工作台内容字号' })).toHaveTextContent('14px');
+    expect(screen.getByRole('group', { name: 'Worker 日志字号' })).toHaveTextContent('12px');
+    await user.click(screen.getByRole('button', { name: '增大界面框架字号' }));
     expect(document.documentElement.style.getPropertyValue('--ui-font-size')).toBe('15px');
+    expect(document.documentElement.style.getPropertyValue('--workspace-font-size')).toBe('14px');
     expect(document.documentElement.style.getPropertyValue('--log-font-size')).toBe('12px');
+    await user.click(screen.getByRole('button', { name: '增大工作台内容字号' }));
+    expect(document.documentElement.style.getPropertyValue('--ui-font-size')).toBe('15px');
+    expect(document.documentElement.style.getPropertyValue('--workspace-font-size')).toBe('15px');
+    await user.click(screen.getByRole('button', { name: '扩大导航栏宽度' }));
+    await user.click(screen.getByRole('button', { name: '扩大工作台内容宽度' }));
+    expect(document.documentElement.style.getPropertyValue('--sidebar-width')).toBe('312px');
+    expect(document.documentElement.style.getPropertyValue('--workspace-max')).toBe('1560px');
     await user.click(screen.getByRole('button', { name: '蓝色强调色' }));
     expect(document.documentElement).toHaveAttribute('data-accent-preset', 'blue');
     expect(screen.getByRole('button', { name: '恢复橙色' })).toBeEnabled();
@@ -403,6 +412,9 @@ describe('desktop workspace', () => {
     );
     await user.click(screen.getByRole('button', { name: '恢复外观默认值' }));
     expect(document.documentElement.style.getPropertyValue('--ui-font-size')).toBe('14px');
+    expect(document.documentElement.style.getPropertyValue('--workspace-font-size')).toBe('14px');
+    expect(document.documentElement.style.getPropertyValue('--sidebar-width')).toBe('304px');
+    expect(document.documentElement.style.getPropertyValue('--workspace-max')).toBe('1540px');
   });
 
   it('activates the independent SRT profile with complete custom controls', async () => {

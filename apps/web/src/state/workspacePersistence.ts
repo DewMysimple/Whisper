@@ -13,9 +13,12 @@ export function preferencesFromState(state: WorkspaceState): WorkspacePreference
     accentPreset: state.accentPreset,
     customAccentColor: state.customAccentColor,
     uiFontSize: state.uiFontSize,
+    workspaceFontSize: state.workspaceFontSize,
     logFontSize: state.logFontSize,
     uiFontFamily: state.uiFontFamily,
     monoFontFamily: state.monoFontFamily,
+    sidebarWidth: state.sidebarWidth,
+    workspaceWidth: state.workspaceWidth,
     selectedModelId: state.selectedModelId,
     selectedPresetId: state.selectedPresetId,
     profileMode: state.profileMode,
@@ -37,9 +40,12 @@ export function appearanceFromState(
     | 'accentPreset'
     | 'customAccentColor'
     | 'uiFontSize'
+    | 'workspaceFontSize'
     | 'logFontSize'
     | 'uiFontFamily'
     | 'monoFontFamily'
+    | 'sidebarWidth'
+    | 'workspaceWidth'
   >,
 ) {
   return {
@@ -47,9 +53,12 @@ export function appearanceFromState(
     accentPreset: state.accentPreset,
     customAccentColor: state.customAccentColor,
     uiFontSize: state.uiFontSize,
+    workspaceFontSize: state.workspaceFontSize,
     logFontSize: state.logFontSize,
     uiFontFamily: state.uiFontFamily,
     monoFontFamily: state.monoFontFamily,
+    sidebarWidth: state.sidebarWidth,
+    workspaceWidth: state.workspaceWidth,
   };
 }
 

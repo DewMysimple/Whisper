@@ -1,4 +1,14 @@
-import { Activity, Braces, CircleDot, Copy, Download, Trash2 } from 'lucide-react';
+import {
+  Activity,
+  ArrowRight,
+  Braces,
+  CheckCircle2,
+  CircleDot,
+  Copy,
+  Download,
+  Terminal,
+  Trash2,
+} from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -91,70 +101,92 @@ export function WorkerLogsView() {
   return (
     <div className="worker-logs-workspace">
       <section className="worker-log-status" aria-label="Worker 日志状态">
-        <div>
-          <span className={`worker-log-pulse ${isReady ? 'is-ready' : ''}`} />
+        <article data-tone={isReady ? 'ready' : 'waiting'}>
+          <span className="worker-log-status-icon">
+            <span className={`worker-log-pulse ${isReady ? 'is-ready' : ''}`} />
+          </span>
           <div>
             <small>WORKER</small>
-            <strong>{hostStatus.state.toUpperCase()}</strong>
+            <strong>{isReady ? '运行就绪' : hostStatus.state.toUpperCase()}</strong>
+            <span>{isReady ? '诊断通道连接正常' : '正在等待本地服务'}</span>
           </div>
-        </div>
-        <div>
-          <Activity size={17} />
+        </article>
+        <article>
+          <span className="worker-log-status-icon">
+            <Activity size={18} />
+          </span>
           <div>
             <small>PROCESS</small>
             <strong>{hostStatus.pid === null ? '等待启动' : `PID ${hostStatus.pid}`}</strong>
+            <span>{hostStatus.pid === null ? '进程尚未分配' : '受桌面 Host 监管'}</span>
           </div>
-        </div>
-        <div>
-          <Braces size={17} />
+        </article>
+        <article>
+          <span className="worker-log-status-icon">
+            <Braces size={18} />
+          </span>
           <div>
             <small>MODEL</small>
-            <strong>{model.state.toUpperCase()}</strong>
+            <strong>{model.state === 'unloaded' ? '按需加载' : model.state.toUpperCase()}</strong>
+            <span>{model.modelId ?? '任务开始时自动选择'}</span>
           </div>
-        </div>
-        <div>
-          <CircleDot size={17} />
+        </article>
+        <article>
+          <span className="worker-log-status-icon">
+            <CircleDot size={18} />
+          </span>
           <div>
             <small>BUFFER</small>
-            <strong>{logs.length} 行</strong>
+            <strong>{logs.length} 行日志</strong>
+            <span>仅保留当前桌面会话</span>
           </div>
-        </div>
+        </article>
       </section>
 
       <section className="worker-log-console panel" aria-labelledby="worker-log-title">
         <div className="worker-log-console-heading">
-          <div>
-            <p className="step-label">WORKER / LIFECYCLE / STDERR · LIVE</p>
-            <h2 id="worker-log-title">实时诊断输出</h2>
+          <div className="worker-log-title-group">
+            <span className="worker-log-title-icon">
+              <Terminal size={20} />
+            </span>
+            <div>
+              <p className="step-label">WORKER / LIFECYCLE / STDERR</p>
+              <h2 id="worker-log-title">实时诊断输出</h2>
+              <p>集中查看 Worker 启动、模型加载、转录执行与异常信息。</p>
+            </div>
           </div>
           <div className="worker-log-heading-actions">
-            <span>{isReady ? '持续接收' : '等待 Worker'}</span>
-            <button
-              className="secondary-button"
-              disabled={logs.length === 0}
-              onClick={() => void copyLogs()}
-              type="button"
-            >
-              <Copy size={15} /> 复制全部
-            </button>
-            <button
-              className="secondary-button"
-              disabled={logs.length === 0}
-              onClick={() => void exportLogs()}
-              type="button"
-            >
-              <Download size={15} /> 导出 TXT
-            </button>
-            <button
-              aria-pressed={clearArmed}
-              className={`secondary-button is-danger-subtle ${clearArmed ? 'is-delete-armed' : ''}`}
-              data-log-clear
-              disabled={logs.length === 0}
-              onClick={() => void clearLogs()}
-              type="button"
-            >
-              <Trash2 size={15} /> {clearArmed ? '再次点击清空' : '清空日志'}
-            </button>
+            <span className={`worker-log-live-state ${isReady ? 'is-ready' : ''}`}>
+              <i /> {isReady ? '实时接收中' : '等待 Worker'}
+            </span>
+            <div>
+              <button
+                className="secondary-button"
+                disabled={logs.length === 0}
+                onClick={() => void copyLogs()}
+                type="button"
+              >
+                <Copy size={15} /> 复制全部
+              </button>
+              <button
+                className="secondary-button"
+                disabled={logs.length === 0}
+                onClick={() => void exportLogs()}
+                type="button"
+              >
+                <Download size={15} /> 导出 TXT
+              </button>
+              <button
+                aria-pressed={clearArmed}
+                className={`secondary-button is-danger-subtle ${clearArmed ? 'is-delete-armed' : ''}`}
+                data-log-clear
+                disabled={logs.length === 0}
+                onClick={() => void clearLogs()}
+                type="button"
+              >
+                <Trash2 size={15} /> {clearArmed ? '再次点击清空' : '清空日志'}
+              </button>
+            </div>
           </div>
         </div>
         <div
@@ -166,9 +198,19 @@ export function WorkerLogsView() {
         >
           {logs.length === 0 ? (
             <div className="worker-log-empty">
-              <Braces size={22} />
-              <strong>暂无 Worker 日志</strong>
-              <span>Worker 启动、模型加载和任务诊断信息会在这里实时出现。</span>
+              <span className="worker-log-empty-icon">
+                <CheckCircle2 size={24} />
+              </span>
+              <p className="step-label">DIAGNOSTIC CHANNEL READY</p>
+              <strong>诊断通道已就绪</strong>
+              <span>当前没有需要展示的日志；后续事件会自动进入此控制台。</span>
+              <div className="worker-log-empty-flow" aria-label="日志采集阶段">
+                <span>Worker 启动</span>
+                <ArrowRight size={14} />
+                <span>模型加载</span>
+                <ArrowRight size={14} />
+                <span>任务执行</span>
+              </div>
             </div>
           ) : (
             logs.map((line, index) => (

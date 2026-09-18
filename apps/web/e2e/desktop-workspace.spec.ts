@@ -549,8 +549,9 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.getByRole('heading', { name: '桌面外观' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '本地运行环境' })).toBeVisible();
   await expect(page.getByRole('radio', { name: '跟随 Windows' })).toBeChecked();
-  await expect(page.getByRole('group', { name: 'UI 字号' })).toContainText('14px');
-  await expect(page.getByRole('group', { name: '日志字号' })).toContainText('12px');
+  await expect(page.getByRole('group', { name: '界面框架字号' })).toContainText('14px');
+  await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('14px');
+  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('12px');
   await expect(page.getByRole('button', { name: '橙色强调色' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -577,15 +578,39 @@ test('supports workspace navigation, theme and configuration export', async ({
     page.locator('html').evaluate((element) => element.style.getPropertyValue('--mono')),
   ).resolves.toContain('Consolas');
 
-  await page.getByRole('button', { name: '增大UI 字号' }).click();
-  await page.getByRole('button', { name: '增大UI 字号' }).click();
-  await expect(page.getByRole('group', { name: 'UI 字号' })).toContainText('16px');
+  await page.getByRole('button', { name: '增大界面框架字号' }).click();
+  await page.getByRole('button', { name: '增大界面框架字号' }).click();
+  await expect(page.getByRole('group', { name: '界面框架字号' })).toContainText('16px');
   await expect(
     page.locator('html').evaluate((element) => element.style.getPropertyValue('--ui-font-size')),
   ).resolves.toBe('16px');
   await expect(
+    page
+      .locator('html')
+      .evaluate((element) => element.style.getPropertyValue('--workspace-font-size')),
+  ).resolves.toBe('14px');
+  await expect(
     page.locator('html').evaluate((element) => element.style.getPropertyValue('--log-font-size')),
   ).resolves.toBe('12px');
+  await page.getByRole('button', { name: '增大工作台内容字号' }).click();
+  await page.getByRole('button', { name: '增大工作台内容字号' }).click();
+  await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('16px');
+  await expect(
+    page.locator('html').evaluate((element) => element.style.getPropertyValue('--ui-font-size')),
+  ).resolves.toBe('16px');
+  await expect(
+    page
+      .locator('html')
+      .evaluate((element) => element.style.getPropertyValue('--workspace-font-size')),
+  ).resolves.toBe('16px');
+  await page.getByRole('button', { name: '扩大导航栏宽度' }).click();
+  await page.getByRole('button', { name: '扩大工作台内容宽度' }).click();
+  await expect(
+    page.locator('html').evaluate((element) => element.style.getPropertyValue('--sidebar-width')),
+  ).resolves.toBe('312px');
+  await expect(
+    page.locator('html').evaluate((element) => element.style.getPropertyValue('--workspace-max')),
+  ).resolves.toBe('1560px');
   await page.getByRole('button', { name: '转录工作台' }).click();
   await expect(
     page
@@ -641,12 +666,12 @@ test('supports workspace navigation, theme and configuration export', async ({
       .evaluate((element) => getComputedStyle(element).padding),
   ).resolves.toBe('14px 18px');
   await page.getByRole('button', { name: '偏好设置' }).click();
-  await page.getByRole('button', { name: '增大UI 字号' }).click();
-  await page.getByRole('button', { name: '增大UI 字号' }).click();
-  await expect(page.getByRole('group', { name: 'UI 字号' })).toContainText('18px');
-  await expect(page.getByRole('button', { name: '增大UI 字号' })).toBeDisabled();
-  await page.getByRole('button', { name: '增大日志字号' }).click();
-  await expect(page.getByRole('group', { name: '日志字号' })).toContainText('13px');
+  await page.getByRole('button', { name: '增大工作台内容字号' }).click();
+  await page.getByRole('button', { name: '增大工作台内容字号' }).click();
+  await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('18px');
+  await expect(page.getByRole('button', { name: '增大工作台内容字号' })).toBeDisabled();
+  await page.getByRole('button', { name: '增大Worker 日志字号' }).click();
+  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('13px');
   await page.getByRole('button', { name: '转录工作台' }).click();
   await expect(
     page
@@ -704,7 +729,10 @@ test('supports workspace navigation, theme and configuration export', async ({
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.getByRole('button', { name: '生成导出配置' }).click();
   await expect(page.getByRole('textbox', { name: '配置 JSON' })).toContainText('schemaVersion');
-  await expect(page.getByRole('textbox', { name: '配置 JSON' })).toContainText('"uiFontSize": 18');
+  await expect(page.getByRole('textbox', { name: '配置 JSON' })).toContainText('"uiFontSize": 16');
+  await expect(page.getByRole('textbox', { name: '配置 JSON' })).toContainText(
+    '"workspaceFontSize": 18',
+  );
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('settings-light.png') });
@@ -994,6 +1022,7 @@ test('creates an SRT task from the independent subtitle profile', async ({ page 
 test('opens the independent Worker log workspace and exposes only the restored shortcut', async ({
   page,
 }, testInfo) => {
+  await page.setViewportSize({ width: 1728, height: 1080 });
   const navigation = page.getByRole('navigation', { name: '主导航' });
   await expect(navigation.getByRole('button')).toHaveText([
     '转录工作台',
@@ -1008,9 +1037,73 @@ test('opens the independent Worker log workspace and exposes only the restored s
   await page.getByRole('button', { name: 'Worker 日志' }).click();
   await expect(page.getByRole('heading', { name: '实时诊断输出' })).toBeVisible();
   await expect(page.getByLabel('Worker 日志状态')).toContainText('BUFFER');
+  await expect(page.getByLabel('Worker 日志状态').locator('article')).toHaveCount(4);
+  await expect(page.getByText('诊断通道已就绪')).toBeVisible();
+  await expect(page.getByLabel('日志采集阶段')).toContainText('Worker 启动');
+  await expect(
+    page.locator('.worker-logs-workspace').evaluate((element) => element.clientWidth),
+  ).resolves.toBeGreaterThan(1200);
+  await page.waitForTimeout(400);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('worker-logs.png') });
   await page.evaluate(() => {
     document.documentElement.dataset.theme = 'dark';
   });
+  await page.waitForTimeout(250);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('worker-logs-dark.png') });
+});
+
+test('keeps full-screen layout and typography personalization independent', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1728, height: 1080 });
+  await page.getByRole('button', { name: '偏好设置' }).click();
+
+  await expect(page.getByRole('heading', { name: '工作区尺寸' })).toBeVisible();
+  await expect(page.getByRole('group', { name: '界面框架字号' })).toContainText('14px');
+  await expect(page.getByRole('group', { name: '工作台内容字号' })).toContainText('14px');
+  await expect(page.getByRole('group', { name: 'Worker 日志字号' })).toContainText('12px');
+  await expect(page.getByRole('slider', { name: '工作台内容宽度滑杆' })).toHaveValue('1540');
+  await expect(page.getByRole('slider', { name: '导航栏宽度滑杆' })).toHaveValue('304');
+  await expect(
+    page.locator('.settings-preference-grid').evaluate((element) => {
+      const columns = getComputedStyle(element).gridTemplateColumns.split(' ');
+      return columns.length;
+    }),
+  ).resolves.toBe(2);
+  await expect(
+    page.locator('.app-shell').evaluate((element) => getComputedStyle(element).gridTemplateColumns),
+  ).resolves.toMatch(/^304px /);
+
+  await page.getByRole('button', { name: '增大界面框架字号' }).click();
+  await expect(
+    page.locator('html').evaluate((element) => ({
+      frame: element.style.getPropertyValue('--ui-font-size'),
+      workspace: element.style.getPropertyValue('--workspace-font-size'),
+      log: element.style.getPropertyValue('--log-font-size'),
+    })),
+  ).resolves.toEqual({ frame: '15px', workspace: '14px', log: '12px' });
+  await expect(
+    page
+      .locator('.view-content')
+      .evaluate((element) => getComputedStyle(element).getPropertyValue('--ui-font-size').trim()),
+  ).resolves.toBe('14px');
+  await page.getByRole('button', { name: '增大工作台内容字号' }).click();
+  await expect(
+    page.locator('html').evaluate((element) => ({
+      frame: element.style.getPropertyValue('--ui-font-size'),
+      workspace: element.style.getPropertyValue('--workspace-font-size'),
+      log: element.style.getPropertyValue('--log-font-size'),
+    })),
+  ).resolves.toEqual({ frame: '15px', workspace: '15px', log: '12px' });
+  await expect(
+    page
+      .locator('.view-content')
+      .evaluate((element) => getComputedStyle(element).getPropertyValue('--ui-font-size').trim()),
+  ).resolves.toBe('15px');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(400);
+  await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath('settings-personalization-fullscreen.png'),
+  });
 });

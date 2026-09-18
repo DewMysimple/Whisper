@@ -29,7 +29,10 @@ import {
 import {
   DEFAULT_APPEARANCE,
   LOG_FONT_SIZE_RANGE,
+  SIDEBAR_WIDTH_RANGE,
   UI_FONT_SIZE_RANGE,
+  WORKSPACE_FONT_SIZE_RANGE,
+  WORKSPACE_WIDTH_RANGE,
   normalizeHexColor,
   type AccentPreset,
   type AppearancePreferences,
@@ -41,7 +44,10 @@ import {
 export {
   DEFAULT_APPEARANCE,
   LOG_FONT_SIZE_RANGE,
+  SIDEBAR_WIDTH_RANGE,
   UI_FONT_SIZE_RANGE,
+  WORKSPACE_FONT_SIZE_RANGE,
+  WORKSPACE_WIDTH_RANGE,
   applyAppearancePreferences,
   applyThemePreference,
   normalizeHexColor,
@@ -133,14 +139,19 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   if (!isRecord(value)) return null;
   if (!isTheme(value.theme) || !isPreset(value.selectedPresetId)) return null;
   const legacyContentFontSize = value.contentFontSize;
-  const uiFontSize =
-    value.uiFontSize ??
+  const uiFontSize = value.uiFontSize ?? DEFAULT_APPEARANCE.uiFontSize;
+  const workspaceFontSize =
+    value.workspaceFontSize ??
     (legacyContentFontSize === 'small'
       ? 12
       : legacyContentFontSize === 'large'
         ? 16
-        : DEFAULT_APPEARANCE.uiFontSize);
+        : legacyContentFontSize === 'balanced'
+          ? 14
+          : (value.uiFontSize ?? DEFAULT_APPEARANCE.workspaceFontSize));
   const logFontSize = value.logFontSize ?? DEFAULT_APPEARANCE.logFontSize;
+  const sidebarWidth = value.sidebarWidth ?? DEFAULT_APPEARANCE.sidebarWidth;
+  const workspaceWidth = value.workspaceWidth ?? DEFAULT_APPEARANCE.workspaceWidth;
   const accentPreset = value.accentPreset ?? DEFAULT_APPEARANCE.accentPreset;
   const customAccentColor = value.customAccentColor ?? DEFAULT_APPEARANCE.customAccentColor;
   const uiFontFamily = value.uiFontFamily ?? DEFAULT_APPEARANCE.uiFontFamily;
@@ -148,7 +159,25 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   const requestedModelId = value.selectedModelId ?? DEFAULT_MODEL_ID;
   if (
     !isNumberInRange(uiFontSize, UI_FONT_SIZE_RANGE.minimum, UI_FONT_SIZE_RANGE.maximum, true) ||
+    !isNumberInRange(
+      workspaceFontSize,
+      WORKSPACE_FONT_SIZE_RANGE.minimum,
+      WORKSPACE_FONT_SIZE_RANGE.maximum,
+      true,
+    ) ||
     !isNumberInRange(logFontSize, LOG_FONT_SIZE_RANGE.minimum, LOG_FONT_SIZE_RANGE.maximum, true) ||
+    !isNumberInRange(
+      sidebarWidth,
+      SIDEBAR_WIDTH_RANGE.minimum,
+      SIDEBAR_WIDTH_RANGE.maximum,
+      true,
+    ) ||
+    !isNumberInRange(
+      workspaceWidth,
+      WORKSPACE_WIDTH_RANGE.minimum,
+      WORKSPACE_WIDTH_RANGE.maximum,
+      true,
+    ) ||
     !isAccentPreset(accentPreset) ||
     typeof customAccentColor !== 'string' ||
     normalizeHexColor(customAccentColor) === null ||
@@ -233,9 +262,12 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
     accentPreset,
     customAccentColor: normalizeHexColor(customAccentColor)!,
     uiFontSize,
+    workspaceFontSize,
     logFontSize,
     uiFontFamily,
     monoFontFamily,
+    sidebarWidth,
+    workspaceWidth,
     selectedModelId,
     selectedPresetId: value.selectedPresetId,
     profileMode,
