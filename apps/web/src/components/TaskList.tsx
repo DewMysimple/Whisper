@@ -9,7 +9,6 @@ import {
   LoaderCircle,
   RotateCcw,
   Search,
-  SlidersHorizontal,
   Trash2,
   X,
 } from 'lucide-react';
@@ -83,12 +82,6 @@ function taskOutputFormats(task: TaskSnapshot): string[] {
 function taskTitleParts(title: string): { basename: string; extension: string } | null {
   const extensionStart = title.lastIndexOf('.');
   if (extensionStart <= 0 || extensionStart === title.length - 1) return null;
-
-  const estimatedWidth = Array.from(title).reduce(
-    (width, character) => width + ((character.codePointAt(0) ?? 0) > 0xff ? 2 : 1),
-    0,
-  );
-  if (estimatedWidth <= 28) return null;
 
   return {
     basename: title.slice(0, extensionStart),
@@ -206,22 +199,10 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
               </p>
               <h2 id="task-title">{expanded ? '本机任务历史' : '最近任务'}</h2>
             </div>
-            <span className="task-count">
-              {expanded ? `显示 ${visibleTasks.length} / ${tasks.length}` : `${tasks.length} 项`}
-            </span>
+            {!expanded && <span className="task-count">{tasks.length} 项</span>}
           </div>
           {expanded && (
             <div className="task-control-deck">
-              <div className="task-control-heading">
-                <span aria-hidden="true">
-                  <SlidersHorizontal size={17} />
-                </span>
-                <div>
-                  <strong>查找与筛选</strong>
-                  <small>按名称和日期定位本机任务记录</small>
-                </div>
-                <em>{visibleTasks.length} 条结果</em>
-              </div>
               <div className="task-toolbar">
                 <div className="task-search-field">
                   <Search aria-hidden="true" size={16} />

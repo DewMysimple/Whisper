@@ -892,9 +892,13 @@ test('supports workspace navigation, theme and configuration export', async ({
     'true',
   );
   await historyFilters.getByRole('button', { name: /已完成/ }).click();
-  await expect(page.getByText('Product Interview 06.mkv', { exact: true })).toBeVisible();
-  await expect(page.getByText('设计评审会议.m4a', { exact: true })).toHaveCount(0);
+  await expect(page.getByTitle('Product Interview 06.mkv')).toBeVisible();
+  await expect(page.getByTitle('设计评审会议.m4a')).toHaveCount(0);
   await historyFilters.getByRole('button', { name: /全部任务/ }).click();
+  await expect(page.getByText('查找与筛选', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('按名称和日期定位本机任务记录', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/显示 \d+ \/ \d+/)).toHaveCount(0);
+  await expect(page.getByText(/\d+ 条结果/)).toHaveCount(0);
   await expect(page.locator('.task-card-progress').first()).toHaveText('63%');
   await expect(page.locator('.task-card-progress').first()).not.toContainText('进度');
   await expect(page.getByText('转录模式', { exact: true })).toHaveCount(2);
@@ -929,15 +933,18 @@ test('supports workspace navigation, theme and configuration export', async ({
           format.getBoundingClientRect(),
         );
         const groupBounds = formatList.getBoundingClientRect();
-        const labelStyles = formats.map((bounds, index) => {
+        const labelStyles = formats.map((_, index) => {
           const element = formatList.querySelectorAll('.task-card-format')[index]!;
           const style = getComputedStyle(element);
           return {
-            height: bounds.height,
+            background: style.backgroundColor,
+            borderWidth: style.borderTopWidth,
+            color: style.color,
             radius: style.borderTopLeftRadius,
             fontFamily: style.fontFamily,
             fontSize: style.fontSize,
             fontWeight: style.fontWeight,
+            padding: style.padding,
           };
         });
         const statRow = card.querySelector('.task-history-stat-line')!.getBoundingClientRect();
@@ -945,9 +952,7 @@ test('supports workspace navigation, theme and configuration export', async ({
           card.querySelectorAll('.task-history-stat-line dd > span'),
           (cell) => cell.getBoundingClientRect(),
         );
-        const configRow = card
-          .querySelector('.task-history-config-line dd')!
-          .getBoundingClientRect();
+        const configRow = card.querySelector('.task-history-config-line')!.getBoundingClientRect();
         const configCells = Array.from(card.querySelectorAll('.task-history-config-cell'), (cell) =>
           cell.getBoundingClientRect(),
         );
@@ -955,13 +960,9 @@ test('supports workspace navigation, theme and configuration export', async ({
         const parameterCell = configCells[2]!;
         const parameterText = card.querySelector('.task-history-config-cell.is-parameters strong')!;
         const presetText = card.querySelector('.task-history-config-cell:first-child strong')!;
+        const parameterStyle = getComputedStyle(parameterText);
         const main = card.querySelector('.task-main')!.getBoundingClientRect();
         const facts = card.querySelector('.task-history-facts')!.getBoundingClientRect();
-        const formatsAreSeparated =
-          formats.length < 2 ||
-          (Math.abs(formats[1]!.top - formats[0]!.top) <= 1
-            ? formats[1]!.left - formats[0]!.right >= 3
-            : formats[1]!.top - formats[0]!.bottom >= 3);
         return {
           allFormatsAreVisible: formats.every(
             (format) =>
@@ -976,15 +977,20 @@ test('supports workspace navigation, theme and configuration export', async ({
             parameterText.textContent === '默认参数',
           parameterTextIsFullyVisible: parameterText.scrollWidth <= parameterText.clientWidth + 1,
           presetTextIsFullyVisible: presetText.scrollWidth <= presetText.clientWidth + 1,
-          formatHeight: formats[0]!.height,
-          formatFontIsReadable: Number.parseFloat(labelStyles[0]!.fontSize) >= 12,
-          formatsAreSeparated,
-          labelsShareStyle: labelStyles.every(
-            (style) => JSON.stringify(style) === JSON.stringify(labelStyles[0]),
+          formatsUsePlainText: labelStyles.every(
+            (style) =>
+              style.background === 'rgba(0, 0, 0, 0)' &&
+              style.borderWidth === '0px' &&
+              style.radius === '0px' &&
+              style.padding === '0px' &&
+              style.color === parameterStyle.color &&
+              style.fontFamily === parameterStyle.fontFamily &&
+              style.fontSize === parameterStyle.fontSize &&
+              style.fontWeight === parameterStyle.fontWeight,
           ),
           factsReachCardEdges:
             Math.abs(facts.left - main.left) <= 1 && Math.abs(facts.right - main.right) <= 1,
-          configRulesFillRow: configCells.every(
+          configRulesJoinRowBorders: configCells.every(
             (cell) =>
               Math.abs(cell.top - configRow.top) <= 1 &&
               Math.abs(cell.bottom - configRow.bottom) <= 1,
@@ -1005,12 +1011,9 @@ test('supports workspace navigation, theme and configuration export', async ({
     parametersAreInThirdColumn: true,
     parameterTextIsFullyVisible: true,
     presetTextIsFullyVisible: true,
-    formatHeight: 28,
-    formatFontIsReadable: true,
-    formatsAreSeparated: true,
-    labelsShareStyle: true,
+    formatsUsePlainText: true,
     factsReachCardEdges: true,
-    configRulesFillRow: true,
+    configRulesJoinRowBorders: true,
     configAndStatsColumnsAlign: true,
     parameterCellIsThird: true,
     statRulesFillRow: true,
@@ -1139,9 +1142,9 @@ test('supports workspace navigation, theme and configuration export', async ({
       .evaluate((element) => getComputedStyle(element).padding),
   ).resolves.toBe('15px 20px');
   await page.getByRole('searchbox', { name: '搜索任务' }).fill('Interview');
-  await expect(page.getByText('Product Interview 06.mkv', { exact: true })).toBeVisible();
+  await expect(page.getByTitle('Product Interview 06.mkv')).toBeVisible();
   await page.getByRole('button', { name: '清除任务搜索' }).click();
-  await expect(page.getByText('设计评审会议.m4a', { exact: true })).toBeVisible();
+  await expect(page.getByTitle('设计评审会议.m4a')).toBeVisible();
   const longTitleMetrics = await page
     .locator('.task-title-line strong')
     .first()
@@ -1152,6 +1155,11 @@ test('supports workspace navigation, theme and configuration export', async ({
       const basename = title.querySelector('.task-title-basename')! as HTMLElement;
       const extension = title.querySelector('.task-title-extension')! as HTMLElement;
       const basenameStyle = getComputedStyle(basename);
+      const heading = title.closest('.task-card-heading')!;
+      const headingBounds = heading.getBoundingClientRect();
+      const statusBounds = heading.querySelector('.task-status')!.getBoundingClientRect();
+      const identityBounds = title.closest('.task-card-identity')!.getBoundingClientRect();
+      const progressBounds = heading.querySelector('.task-card-progress')!.getBoundingClientRect();
       const titleBounds = title.getBoundingClientRect();
       const extensionBounds = extension.getBoundingClientRect();
       return {
@@ -1159,7 +1167,10 @@ test('supports workspace navigation, theme and configuration export', async ({
         extension: extension.textContent,
         extensionIsVisible:
           extensionBounds.width > 0 && extensionBounds.right <= titleBounds.right + 1,
+        identityIsRightOfIcon: identityBounds.left - statusBounds.right >= 7,
+        identityStaysBeforeProgress: progressBounds.left - identityBounds.right >= 7,
         overflow: basenameStyle.overflow,
+        progressIsRightAligned: Math.abs(progressBounds.right - headingBounds.right) <= 1,
         scrollWidth: basename.scrollWidth,
         textOverflow: basenameStyle.textOverflow,
         whiteSpace: basenameStyle.whiteSpace,
@@ -1170,7 +1181,10 @@ test('supports workspace navigation, theme and configuration export', async ({
     expect.objectContaining({
       extension: '.mkv',
       extensionIsVisible: true,
+      identityIsRightOfIcon: true,
+      identityStaysBeforeProgress: true,
       overflow: 'hidden',
+      progressIsRightAligned: true,
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap',
     }),
@@ -1193,7 +1207,7 @@ test('opens an accessible task detail and output preview', async ({ page }) => {
     'Product Interview 06.mkv',
   );
   await page.getByRole('button', { name: '取消', exact: true }).click();
-  await page.getByText('Product Interview 06.mkv').click();
+  await page.getByTitle('Product Interview 06.mkv').click();
   await expect(page.getByRole('dialog', { name: 'Product Interview 06.mkv' })).toBeVisible();
   await expect(page.getByText('This is a local output preview')).toBeVisible();
   await page.getByRole('button', { name: '载入原配置' }).click();
@@ -1375,22 +1389,22 @@ test('monitors the active task and manages dated history in a responsive grid', 
   await page.waitForTimeout(220);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('task-date-calendar.png') });
   await calendar.getByRole('button', { name: '2026-07-22' }).click();
-  await expect(page.getByText('设计评审会议.m4a')).toBeVisible();
-  await expect(page.getByText('Product Interview 06.mkv')).toHaveCount(0);
+  await expect(page.getByTitle('设计评审会议.m4a')).toBeVisible();
+  await expect(page.getByTitle('Product Interview 06.mkv')).toHaveCount(0);
   await calendar.getByRole('button', { name: '2026-07-21' }).click();
-  await expect(page.getByText('Product Interview 06.mkv')).toBeVisible();
+  await expect(page.getByTitle('Product Interview 06.mkv')).toBeVisible();
 
   const remove = page.getByRole('button', {
     name: '删除 Product Interview 06.mkv 的任务记录',
   });
   await remove.click();
   await expect(remove).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByText('Product Interview 06.mkv', { exact: true })).toBeVisible();
+  await expect(page.getByTitle('Product Interview 06.mkv')).toBeVisible();
   await expect(page.getByRole('dialog', { name: /删除任务记录/ })).toHaveCount(0);
   await page
     .getByRole('button', { name: '再次点击删除 Product Interview 06.mkv 的任务记录' })
     .click();
-  await expect(page.getByText('Product Interview 06.mkv')).toHaveCount(0);
+  await expect(page.getByTitle('Product Interview 06.mkv')).toHaveCount(0);
 
   await expect(page.getByRole('button', { name: '删除 设计评审会议.m4a 的任务记录' })).toHaveCount(
     0,
@@ -1439,14 +1453,14 @@ test('clears completed and abnormal history independently', async ({ page }) => 
   const confirmClearCompleted = page.getByRole('button', { name: /再次点击清除/ });
   await expect(confirmClearCompleted).toHaveAttribute('aria-pressed', 'true');
   await confirmClearCompleted.click();
-  await expect(page.getByText('Product Interview 06.mkv')).toHaveCount(0);
+  await expect(page.getByTitle('Product Interview 06.mkv')).toHaveCount(0);
 
   await page.getByRole('button', { name: /取消 设计评审会议.m4a/ }).click();
   const clearCancelled = page.getByRole('button', { name: /清除异常 · 1/ });
   await expect(clearCancelled).toBeEnabled();
   await clearCancelled.click();
   await page.getByRole('button', { name: /再次点击清除/ }).click();
-  await expect(page.getByText('设计评审会议.m4a')).toHaveCount(0);
+  await expect(page.getByTitle('设计评审会议.m4a')).toHaveCount(0);
 });
 
 test('creates an SRT task from the independent subtitle profile', async ({ page }, testInfo) => {

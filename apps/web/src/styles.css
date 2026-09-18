@@ -8161,43 +8161,6 @@ output,
   box-shadow: 0 12px 30px color-mix(in srgb, var(--text) 5%, transparent);
 }
 
-.task-control-heading {
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.task-control-heading > span {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border-radius: 11px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.task-control-heading > div {
-  display: grid;
-  gap: 2px;
-}
-
-.task-control-heading strong {
-  font-size: var(--font-meta);
-}
-
-.task-control-heading small {
-  color: var(--text-muted);
-}
-
-.task-control-heading em {
-  color: var(--text-faint);
-  font-size: var(--font-caption);
-  font-style: normal;
-  white-space: nowrap;
-}
-
 .task-panel.is-expanded .task-toolbar {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) auto auto auto;
@@ -8720,14 +8683,6 @@ output,
 @media (max-width: 620px) {
   .task-panel.is-expanded .task-list {
     grid-template-columns: 1fr;
-  }
-
-  .task-control-heading {
-    grid-template-columns: 36px minmax(0, 1fr);
-  }
-
-  .task-control-heading em {
-    display: none;
   }
 
   .task-history-facts {
@@ -11305,8 +11260,9 @@ body.topbar-resizing * {
 }
 
 .task-panel.is-expanded .task-card-identity {
-  grid-row: 2;
-  margin-top: 8px;
+  grid-column: 2;
+  grid-row: 1;
+  margin-top: 0;
 }
 
 .task-panel.is-expanded .task-title-line strong.preserve-extension {
@@ -11340,28 +11296,26 @@ body.topbar-resizing * {
   min-width: 0;
   align-items: center;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 2px 7px;
 }
 
 .task-card-format {
-  display: inline-flex;
-  height: 28px;
-  min-height: 28px;
+  display: inline;
+  height: auto;
+  min-height: 0;
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  padding: 0 3px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
   font-family: inherit;
-  font-size: var(--font-caption);
-  font-weight: 700;
-  line-height: 1;
+  font-size: 12px;
+  font-weight: 680;
+  line-height: normal;
 }
 
-.task-panel.is-expanded .task-history-config-cell .task-card-format {
+.task-panel.is-expanded .task-history-config-cell span.task-card-format {
   font-size: 12px !important;
 }
 
@@ -11382,7 +11336,7 @@ body.topbar-resizing * {
 }
 
 .task-history-facts > div:first-child {
-  padding-top: 7px;
+  padding-block: 0;
 }
 
 .task-history-config-line dd {

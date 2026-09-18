@@ -388,12 +388,12 @@ describe('desktop workspace', () => {
     );
     await user.click(within(historyFilters).getByRole('button', { name: /已完成/ }));
     expect(useWorkspace.getState().taskFilter).toBe('completed');
-    expect(screen.getByText('Product Interview 06.mkv', { exact: true })).toBeInTheDocument();
-    expect(screen.queryByText('设计评审会议.m4a', { exact: true })).not.toBeInTheDocument();
+    expect(screen.getByTitle('Product Interview 06.mkv')).toBeInTheDocument();
+    expect(screen.queryByTitle('设计评审会议.m4a')).not.toBeInTheDocument();
     await user.click(within(historyFilters).getByRole('button', { name: /正在运行/ }));
     expect(useWorkspace.getState().taskFilter).toBe('active');
-    expect(screen.getByText('设计评审会议.m4a', { exact: true })).toBeInTheDocument();
-    expect(screen.queryByText('Product Interview 06.mkv', { exact: true })).not.toBeInTheDocument();
+    expect(screen.getByTitle('设计评审会议.m4a')).toBeInTheDocument();
+    expect(screen.queryByTitle('Product Interview 06.mkv')).not.toBeInTheDocument();
     await user.click(within(historyFilters).getByRole('button', { name: /需要处理/ }));
     expect(useWorkspace.getState().taskFilter).toBe('failed');
     expect(screen.getByText('没有符合条件的任务。')).toBeInTheDocument();

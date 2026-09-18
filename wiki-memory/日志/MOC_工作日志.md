@@ -3,7 +3,7 @@ type: moc
 status: active
 kind: process
 importance: high
-updated: 2026-09-18
+updated: 2026-09-19
 topic: work-log-index
 source_logs: []
 supersedes: null
@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-19 | ui | - | archived | refine-history-card-heading-and-rules | [[日志/2026-09-19-收紧历史卡片标题与分隔线.md|收紧历史卡片标题与分隔线]] |
 | 2026-09-18 | ui | - | archived | history-filter-and-stage-redesign | [[日志/2026-09-18-重构历史状态筛选与阶段信息.md|重构历史状态筛选与阶段信息]] |
 | 2026-09-18 | ui | - | archived | task-monitor-and-history-redesign | [[日志/2026-09-18-重构任务监控与历史记录.md|重构任务监控与历史记录]] |
 | 2026-09-18 | ui | - | archived | worker-logs-and-appearance-personalization | [[日志/2026-09-18-重构Worker日志与桌面个性化设置.md|重构 Worker 日志与桌面个性化设置]] |

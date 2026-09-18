@@ -44,7 +44,7 @@ describe('TaskList destructive history controls', () => {
 
     await user.click(remove);
     expect(remove).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('已完成访谈.wav')).toBeInTheDocument();
+    expect(screen.getByTitle('已完成访谈.wav')).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: /删除任务记录/ })).not.toBeInTheDocument();
 
     await user.keyboard('{Escape}');
@@ -54,7 +54,7 @@ describe('TaskList destructive history controls', () => {
     await user.click(
       screen.getByRole('button', { name: '再次点击删除 已完成访谈.wav 的任务记录' }),
     );
-    expect(screen.queryByText('已完成访谈.wav')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('已完成访谈.wav')).not.toBeInTheDocument();
   });
 
   it('expires the inline confirmation after four seconds', () => {
@@ -68,7 +68,7 @@ describe('TaskList destructive history controls', () => {
       fireEvent.click(remove);
       act(() => vi.advanceTimersByTime(4001));
       expect(remove).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.getByText('已完成访谈.wav')).toBeInTheDocument();
+      expect(screen.getByTitle('已完成访谈.wav')).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -81,9 +81,9 @@ describe('TaskList destructive history controls', () => {
 
     await user.click(clear);
     expect(clear).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('已完成访谈.wav')).toBeInTheDocument();
+    expect(screen.getByTitle('已完成访谈.wav')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /再次点击清除/ }));
-    expect(screen.queryByText('已完成访谈.wav')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('已完成访谈.wav')).not.toBeInTheDocument();
   });
 
   it('uses the status icon without repeating a text badge in the card header', () => {
@@ -103,6 +103,16 @@ describe('TaskList destructive history controls', () => {
     expect(container.querySelector('.task-history-progress-info')).toBeNull();
     expect(screen.queryByText('稳定主语言')).not.toBeInTheDocument();
     expect(container.querySelector('.progress-track')).toBeNull();
+  });
+
+  it('removes the redundant filter heading and result counters from expanded history', () => {
+    render(<TaskList expanded />);
+
+    expect(screen.queryByText('查找与筛选')).not.toBeInTheDocument();
+    expect(screen.queryByText('按名称和日期定位本机任务记录')).not.toBeInTheDocument();
+    expect(screen.queryByText(/显示 \d+ \/ \d+/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d+ 条结果/)).not.toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: '搜索任务' })).toBeInTheDocument();
   });
 
   it('places formats in the second configuration column and parameters in the third', () => {
@@ -176,8 +186,8 @@ describe('TaskList destructive history controls', () => {
 
     render(<TaskList expanded />);
 
-    expect(screen.getByText('失败任务.wav')).toBeInTheDocument();
-    expect(screen.queryByText('取消任务.wav')).not.toBeInTheDocument();
-    expect(screen.queryByText('输出缺失.wav')).not.toBeInTheDocument();
+    expect(screen.getByTitle('失败任务.wav')).toBeInTheDocument();
+    expect(screen.queryByTitle('取消任务.wav')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('输出缺失.wav')).not.toBeInTheDocument();
   });
 });
