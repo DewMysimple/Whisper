@@ -1,5 +1,5 @@
 import { FileText, FolderOpen, RotateCcw, X } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { getPreset, transcriptionTaskLabel } from '../data/presets';
 import { getModelLabel } from '../data/models';
@@ -13,6 +13,7 @@ import { formatTaskCreatedAt } from '../state/taskHistory';
 import { formatTaskStage } from '../state/taskStage';
 import { canResumeTask, useWorkspace } from '../state/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useDialogFocus } from './useDialogFocus';
 
 export function TaskDetail() {
   const selectedTaskId = useWorkspace((state) => state.selectedTaskId);
@@ -27,6 +28,9 @@ export function TaskDetail() {
   const revealTaskOutput = useWorkspace((state) => state.revealTaskOutput);
   const startingTask = useWorkspace((state) => state.startingTask);
   const [retryConfirmationOpen, setRetryConfirmationOpen] = useState(false);
+  const detailRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useDialogFocus(task !== undefined, detailRef, closeRef, () => void selectTask(null));
 
   const closeRetryConfirmation = useCallback(() => {
     if (!startingTask) setRetryConfirmationOpen(false);
@@ -79,6 +83,7 @@ export function TaskDetail() {
         aria-labelledby="task-detail-title"
         aria-modal="true"
         className="task-detail"
+        ref={detailRef}
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
       >
@@ -89,7 +94,7 @@ export function TaskDetail() {
           </div>
           <button
             aria-label="关闭任务详情"
-            autoFocus
+            ref={closeRef}
             className="round-button"
             onClick={() => void selectTask(null)}
             type="button"

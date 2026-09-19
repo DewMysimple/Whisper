@@ -4,7 +4,7 @@ import type { InputSource } from '../contracts/desktop';
 import { createInputTaskPreview, INPUT_TASK_PREVIEW_ID } from './inputTaskPreview';
 
 describe('input task preview', () => {
-  it('expands selected directories into individual pending media rows', () => {
+  it('keeps directory summaries without inventing child paths or dividing their durations', () => {
     const inputs: InputSource[] = [
       {
         id: 'file-1',
@@ -38,12 +38,44 @@ describe('input task preview', () => {
     });
     expect(preview?.mediaStates?.map((media) => media.path)).toEqual([
       'C:\\Media\\lesson.wav',
-      'D:\\Recordings\\Sprint\\Sprint-01.mp4',
-      'D:\\Recordings\\Sprint\\Sprint-02.mp4',
-      'D:\\Recordings\\Sprint\\Sprint-03.mp4',
+      'D:\\Recordings\\Sprint',
     ]);
     expect(preview?.mediaStates?.every((media) => media.status === 'pending')).toBe(true);
     expect(preview?.totalMediaDurationSeconds).toBe(690);
+    expect(preview?.mediaStates?.[1]?.durationSeconds).toBe(600);
+  });
+
+  it('preserves unknown durations and empty-directory counts', () => {
+    const preview = createInputTaskPreview(
+      [
+        {
+          id: 'partial',
+          path: 'D:\\partial',
+          kind: 'directory',
+          origin: 'dialog',
+          valid: true,
+          mediaCount: 3,
+          durationSeconds: 90,
+          unknownDurationCount: 2,
+        },
+        {
+          id: 'empty',
+          path: 'D:\\empty',
+          kind: 'directory',
+          origin: 'dialog',
+          valid: false,
+          mediaCount: 0,
+        },
+      ],
+      'cn2',
+      'large-v3-turbo',
+    );
+    expect(preview).toMatchObject({
+      sourceCount: 3,
+      totalMediaDurationSeconds: 90,
+      unknownMediaDurationCount: 2,
+    });
+    expect(preview?.mediaStates).toHaveLength(2);
   });
 
   it('leaves the previous task monitor untouched when no new inputs exist', () => {

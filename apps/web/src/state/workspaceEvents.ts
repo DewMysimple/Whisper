@@ -1,6 +1,8 @@
 import type { DesktopEvent } from '../contracts/desktop';
 import { notifyPowerCountdown, notifyTaskFinished } from '../notifications';
 import { appendPerformanceSample } from './performanceWindow';
+import { elapsedTextSeconds } from './taskTiming';
+import { mergeUniqueInputs } from './workspaceDraft';
 import type { WorkspaceState } from './workspace';
 import {
   isTerminalTaskStatus,
@@ -14,22 +16,6 @@ type WorkspaceSet = (
 type WorkspaceGet = () => WorkspaceState;
 type PersistLater = (get: WorkspaceGet) => void;
 
-function mergeUniqueInputs(
-  existing: WorkspaceState['inputs'],
-  incoming: WorkspaceState['inputs'],
-): WorkspaceState['inputs'] {
-  const keys = new Set(existing.map((item) => item.path.toLocaleLowerCase()));
-  return [
-    ...existing,
-    ...incoming.filter((item) => {
-      const key = item.path.toLocaleLowerCase();
-      if (keys.has(key)) return false;
-      keys.add(key);
-      return true;
-    }),
-  ];
-}
-
 export function handleWorkspaceEvent(
   event: DesktopEvent,
   set: WorkspaceSet,
@@ -42,6 +28,23 @@ export function handleWorkspaceEvent(
   }
   if (event.type === 'host.status') {
     set({ hostStatus: event.status, lastError: event.status.error });
+    if (event.status.state === 'failed' || event.status.state === 'stopped') {
+      // The Host clears its active tasks on disconnect; no terminal Worker events follow.
+      for (const task of get().tasks) {
+        if (isTerminalTaskStatus(task.status)) continue;
+        handleWorkspaceEvent(
+          {
+            type: 'task.failed',
+            taskId: task.id,
+            code: 'host.worker_disconnected',
+            message: '本地推理 Worker 已断开，任务已中断',
+          },
+          set,
+          get,
+          persistLater,
+        );
+      }
+    }
     return;
   }
   if (event.type === 'worker.environment') {
@@ -79,6 +82,7 @@ export function handleWorkspaceEvent(
     return;
   }
   if (event.type === 'task.queued') {
+    if (get().tasks.some((task) => task.id === event.task.id)) return;
     set((state) => ({
       tasks: [event.task, ...state.tasks],
       monitoredTaskId: state.monitoredTaskId ?? event.task.id,
@@ -87,6 +91,8 @@ export function handleWorkspaceEvent(
     return;
   }
   if (event.type === 'task.progress') {
+    const target = get().tasks.find((task) => task.id === event.taskId);
+    if (target === undefined || isTerminalTaskStatus(target.status)) return;
     set((state) => ({
       monitoredTaskId: event.taskId,
       taskWorkspaceMode: state.activeView === 'tasks' ? state.taskWorkspaceMode : 'monitor',
@@ -96,13 +102,14 @@ export function handleWorkspaceEvent(
         return {
           ...task,
           status: 'running',
-          progress: event.progress,
+          progress: Math.max(task.progress, event.progress),
           stage: event.stage,
+          stageCode: event.stageCode,
           elapsed: event.elapsed,
           activeInput: event.inputPath ?? task.activeInput,
           currentMediaIndex: event.mediaIndex ?? task.currentMediaIndex,
           processingCount: event.mediaTotal ?? task.processingCount,
-          taskElapsedSeconds: event.taskElapsedSeconds ?? task.taskElapsedSeconds,
+          taskElapsedSeconds: event.taskElapsedSeconds ?? elapsedTextSeconds(event.elapsed),
           mediaStates: limitTaskQualityDiagnostics(updateTaskMediaStates(task, event)),
           outputs:
             newOutputs.length > 0
@@ -137,6 +144,7 @@ export function handleWorkspaceEvent(
           progress: 100,
           stage: partiallyFailed ? '部分媒体处理失败' : '输出已生成',
           elapsed: event.elapsed,
+          taskElapsedSeconds: elapsedTextSeconds(event.elapsed),
           outputs: event.outputs,
           skippedMedia: event.skippedMedia ?? task.skippedMedia,
           outputAvailability: event.outputs.length > 0 ? 'available' : 'missing',
@@ -144,7 +152,9 @@ export function handleWorkspaceEvent(
           mediaStates: task.mediaStates?.map((media) =>
             media.status === 'skipped' || media.status === 'failed'
               ? media
-              : { ...media, status: 'completed', progress: 100, stage: '已完成' },
+              : partiallyFailed && media.status !== 'completed'
+                ? { ...media, status: 'failed', stage: '处理未确认完成' }
+                : { ...media, status: 'completed', progress: 100, stage: '已完成' },
           ),
           errorCode: partiallyFailed ? 'transcription.partial_failure' : task.errorCode,
         };
@@ -154,6 +164,11 @@ export function handleWorkspaceEvent(
           ...task,
           status: 'failed',
           stage: event.message,
+          elapsed: event.elapsed ?? task.elapsed,
+          taskElapsedSeconds:
+            event.elapsed === undefined
+              ? task.taskElapsedSeconds
+              : elapsedTextSeconds(event.elapsed),
           errorCode: event.code,
           completedAt: new Date().toISOString(),
         };
@@ -162,6 +177,9 @@ export function handleWorkspaceEvent(
         ...task,
         status: 'cancelled',
         stage: '已取消',
+        elapsed: event.elapsed ?? task.elapsed,
+        taskElapsedSeconds:
+          event.elapsed === undefined ? task.taskElapsedSeconds : elapsedTextSeconds(event.elapsed),
         completedAt: new Date().toISOString(),
       };
     }),
@@ -181,7 +199,7 @@ export function handleWorkspaceEvent(
             : event.type === 'task.failed' || partiallyFailed
               ? 'failed'
               : 'cancelled',
-        elapsed: event.type === 'task.completed' ? event.elapsed : finishedTask.elapsed,
+        elapsed: event.elapsed ?? finishedTask.elapsed,
         detail:
           event.type === 'task.completed' && !partiallyFailed
             ? `已生成 ${event.outputs.length} 个输出文件`

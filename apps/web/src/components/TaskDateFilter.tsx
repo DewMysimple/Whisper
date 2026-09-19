@@ -95,6 +95,7 @@ export function TaskDateFilter({ availableDates, range, onChange }: TaskDateFilt
         className={`task-date-trigger ${range ? 'is-active' : ''}`}
         disabled={availableDates.length === 0 && range === null}
         onClick={() => {
+          setAnchor(null);
           setVisibleMonth(monthKey(range?.start ?? availableDates.at(-1) ?? latestMonth));
           setOpen((value) => !value);
         }}

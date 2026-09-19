@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { listen } from '@tauri-apps/api/event';
 
 import type { DesktopEvent, TranscriptionDraft } from '../contracts/desktop';
 import { getPreset } from '../data/presets';
@@ -196,6 +197,67 @@ describe('TauriDesktopBridge', () => {
         return {};
       },
     );
+  });
+
+  it('releases partial registrations and allows setup to retry after a listener failure', async () => {
+    const bridge = new TauriDesktopBridge();
+    const released = vi.fn();
+    vi.mocked(listen)
+      .mockResolvedValueOnce(released)
+      .mockRejectedValueOnce(new Error('listener failed'));
+    await expect(bridge.getHostStatus()).rejects.toThrow('listener failed');
+    expect(released).toHaveBeenCalledOnce();
+    await expect(bridge.getHostStatus()).resolves.toMatchObject({ state: 'ready' });
+    bridge.dispose();
+    expect(native.handlers.size).toBe(0);
+  });
+
+  it('releases a registration that finishes after disposal and never starts polling', async () => {
+    const bridge = new TauriDesktopBridge();
+    const released = vi.fn();
+    let finish!: (unlisten: () => void) => void;
+    vi.mocked(listen).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const setup = bridge.getHostStatus();
+    bridge.dispose();
+    finish(released);
+    await expect(setup).rejects.toThrow('disposed');
+    expect(released).toHaveBeenCalledOnce();
+    expect(native.invoke).not.toHaveBeenCalled();
+  });
+
+  it('does not let a stale health response overwrite a newer model lifecycle event', async () => {
+    const bridge = new TauriDesktopBridge();
+    const events: DesktopEvent[] = [];
+    const baseInvoke = native.invoke.getMockImplementation()!;
+    let finishHealth!: (value: unknown) => void;
+    native.invoke.mockImplementation((command: string, args: Record<string, unknown>) =>
+      command === 'worker_health'
+        ? new Promise((resolve) => {
+            finishHealth = resolve;
+          })
+        : baseInvoke(command, args),
+    );
+    bridge.subscribe((event) => events.push(event));
+    const setup = bridge.getHostStatus();
+    await vi.waitFor(() => expect(finishHealth).toBeDefined());
+    native.handlers.get('desktop://worker-message')?.({
+      payload: {
+        schema_version: 1,
+        type: 'event',
+        event: 'model.loading',
+        data: { model_id: 'large-v3-turbo' },
+      },
+    });
+    finishHealth({ data: { result: { model_loaded: false } } });
+    await setup;
+    expect(events.filter((event) => event.type === 'model.status').at(-1)).toMatchObject({
+      model: { state: 'loading' },
+    });
+    bridge.dispose();
   });
 
   it('copies and exports the same Worker log text', async () => {

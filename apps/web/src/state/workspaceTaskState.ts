@@ -61,7 +61,13 @@ export function updateTaskMediaStates(
       elapsedSeconds: 0,
     }));
   const normalizedPath = path.toLocaleLowerCase();
-  return current.map((media) => {
+  const mediaStates = current.some((media) => media.path.toLocaleLowerCase() === normalizedPath)
+    ? current
+    : [
+        ...current,
+        { path, status: 'pending' as const, progress: 0, stage: '等待处理', elapsedSeconds: 0 },
+      ];
+  return mediaStates.map((media) => {
     if (media.path.toLocaleLowerCase() === normalizedPath) {
       return {
         ...media,
@@ -75,16 +81,6 @@ export function updateTaskMediaStates(
             : media.outputPaths,
         qualityDiagnostics: event.qualityDiagnostics ?? media.qualityDiagnostics,
       };
-    }
-    if (
-      event.mediaIndex !== undefined &&
-      media.status === 'pending' &&
-      (task.mediaPaths ?? []).findIndex(
-        (candidate) => candidate.toLocaleLowerCase() === media.path.toLocaleLowerCase(),
-      ) <
-        event.mediaIndex - 1
-    ) {
-      return { ...media, status: 'completed', progress: 100, stage: '已完成' };
     }
     return media;
   });

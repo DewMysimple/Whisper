@@ -1,6 +1,7 @@
 import type { DesktopEvent, ModelStatus, TaskSnapshot } from '../contracts/desktop';
 import { DEFAULT_MODEL_ID } from '../contracts/desktop';
 import { TaskProgressTracker } from './taskProgress';
+import { formatElapsedSeconds } from '../state/taskTiming';
 import {
   ERROR_LABELS,
   STAGE_LABELS,
@@ -93,7 +94,11 @@ export function handleWorkerMessage(message: WorkerEnvelope, context: WorkerEven
       break;
     case 'task.cancelled':
       if (message.task_id) {
-        context.emit({ type: 'task.cancelled', taskId: message.task_id });
+        context.emit({
+          type: 'task.cancelled',
+          taskId: message.task_id,
+          elapsed: elapsedFor(message.task_id, context),
+        });
         context.taskStartedAt.delete(message.task_id);
         context.taskProgress.finish(message.task_id);
       }
@@ -135,7 +140,8 @@ function handleTaskQueued(message: WorkerEnvelope, context: WorkerEventContext):
           totalMediaDurationSeconds: mediaDurations
             .filter((value): value is number => value !== null)
             .reduce((total, value) => total + value, 0),
-          unknownMediaDurationCount: mediaDurations.filter((value) => value === null).length,
+          unknownMediaDurationCount:
+            mediaDurations.filter((value) => value === null).length + skippedMedia.length,
         }
       : {}),
     mediaStates: [
@@ -160,13 +166,16 @@ function handleTaskQueued(message: WorkerEnvelope, context: WorkerEventContext):
     ],
   };
   if (message.request_id) context.pendingTasks.delete(message.request_id);
-  context.taskStartedAt.set(message.task_id, Date.now());
   context.taskProgress.start(message.task_id, task.processingCount);
   context.emit({ type: 'task.queued', task });
 }
 
 function handleTaskProgress(message: WorkerEnvelope, context: WorkerEventContext): void {
   if (!message.task_id) return;
+  const taskElapsedSeconds = readNumber(message.data.task_elapsed_seconds) ?? undefined;
+  if (taskElapsedSeconds !== undefined || !context.taskStartedAt.has(message.task_id)) {
+    context.taskStartedAt.set(message.task_id, Date.now() - (taskElapsedSeconds ?? 0) * 1000);
+  }
   const stage = readString(message.data.stage) ?? 'transcription.running';
   const current = readNumber(message.data.current) ?? 0;
   const total = readNumber(message.data.total) ?? 0;
@@ -183,13 +192,14 @@ function handleTaskProgress(message: WorkerEnvelope, context: WorkerEventContext
       mediaStatus,
     }),
     stage: STAGE_LABELS[stage] ?? stage,
+    stageCode: stage,
     elapsed: elapsedFor(message.task_id, context),
     inputPath: readString(message.data.input_path) ?? undefined,
     mediaIndex: readNumber(message.data.media_index) ?? undefined,
-    mediaTotal: total > 0 ? total : undefined,
+    mediaTotal: stage !== 'input.validating' && total > 0 ? total : undefined,
     mediaProgress,
     mediaElapsedSeconds: readNumber(message.data.media_elapsed_seconds) ?? undefined,
-    taskElapsedSeconds: readNumber(message.data.task_elapsed_seconds) ?? undefined,
+    taskElapsedSeconds,
     mediaStatus,
     outputPaths: readStringArray(message.data.output_paths),
     qualityDiagnostics: readRecognitionQualityDiagnostics(message.data.quality_diagnostics),
@@ -223,6 +233,7 @@ function handleTaskFailed(message: WorkerEnvelope, context: WorkerEventContext):
     taskId: message.task_id,
     code,
     message: ERROR_LABELS[code] ?? '本地转录任务失败',
+    elapsed: elapsedFor(message.task_id, context),
   });
   context.taskStartedAt.delete(message.task_id);
   context.taskProgress.finish(message.task_id);
@@ -231,6 +242,5 @@ function handleTaskFailed(message: WorkerEnvelope, context: WorkerEventContext):
 function elapsedFor(taskId: string, context: WorkerEventContext): string {
   const startedAt = context.taskStartedAt.get(taskId) ?? Date.now();
   const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes.toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
+  return formatElapsedSeconds(seconds);
 }

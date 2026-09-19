@@ -66,14 +66,31 @@ export function appearanceFromState(
 }
 
 let persistenceTimer: ReturnType<typeof setTimeout> | undefined;
+let pendingState: (() => WorkspaceState) | undefined;
+
+export function flushPersistence(): void {
+  if (persistenceTimer !== undefined) clearTimeout(persistenceTimer);
+  persistenceTimer = undefined;
+  const get = pendingState;
+  pendingState = undefined;
+  if (!get) return;
+  try {
+    const state = get();
+    saveWorkspaceState(preferencesFromState(state), state.tasks);
+  } catch {
+    get().handleEvent({
+      type: 'worker.error',
+      code: 'storage.write_failed',
+      message: '本机配置与任务历史保存失败，请检查存储空间。当前会话仍保留记录。',
+    });
+  }
+}
 
 export function persistLater(get: () => WorkspaceState): void {
   if (desktopBridge.mode !== 'tauri') return;
-  if (persistenceTimer !== undefined) clearTimeout(persistenceTimer);
-  persistenceTimer = setTimeout(() => {
-    const state = get();
-    saveWorkspaceState(preferencesFromState(state), state.tasks);
-  }, 150);
+  pendingState = get;
+  // Throttle rather than debounce: continuous progress must still reach storage.
+  persistenceTimer ??= setTimeout(flushPersistence, 150);
 }
 
 export { applyAppearancePreferences };

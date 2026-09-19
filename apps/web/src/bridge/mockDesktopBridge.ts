@@ -18,6 +18,10 @@ import type {
   Unlisten,
 } from '../contracts/desktop';
 import { PERFORMANCE_POLL_INTERVAL_MS } from '../state/performanceWindow';
+import { formatElapsedSeconds } from '../state/taskTiming';
+import { MODEL_IDS } from '../contracts/desktop';
+import { getModelLabel } from '../data/models';
+import { isCustomTaskDraft } from '../state/workspaceDraft';
 
 const SAMPLE_FILES: InputSource[] = [
   {
@@ -54,6 +58,9 @@ export class MockDesktopBridge implements DesktopBridge {
 
   private readonly listeners = new Set<(event: DesktopEvent) => void>();
   private readonly taskTimers = new Map<string, ReturnType<typeof setInterval>>();
+  private readonly queuedRuns = new Map<string, () => void>();
+  private activeTaskId: string | null = null;
+  private logsInitialized = false;
   private performanceTimer: ReturnType<typeof setInterval> | undefined;
   private taskSequence = 3;
   private powerStatus: PowerActionStatus = {
@@ -139,17 +146,9 @@ export class MockDesktopBridge implements DesktopBridge {
 
   async listLocalModels(): Promise<LocalModelDescriptor[]> {
     const installed = new Set<ModelId>(['medium', 'large-v3-turbo']);
-    const labels: Record<ModelId, string> = {
-      tiny: 'Tiny',
-      base: 'Base',
-      small: 'Small',
-      medium: 'Medium',
-      'large-v3': 'Large V3',
-      'large-v3-turbo': 'Large V3 Turbo',
-    };
-    return (Object.keys(labels) as ModelId[]).map((id) => ({
+    return MODEL_IDS.map((id) => ({
       id,
-      label: labels[id],
+      label: getModelLabel(id),
       installed: installed.has(id),
       path: installed.has(id) ? `D:\\WhisperSubtitle\\models\\${id}` : null,
       sizeBytes: installed.has(id) ? (id === 'medium' ? 1_532_000_000 : 1_620_000_000) : null,
@@ -190,7 +189,6 @@ export class MockDesktopBridge implements DesktopBridge {
     draft: TranscriptionDraft,
     options: StartTranscriptionOptions = {},
   ): Promise<{ taskId: string }> {
-    void options;
     const taskId = `mock-task-${this.taskSequence++}`;
     const mediaPaths = draft.inputs.flatMap((input) =>
       input.kind === 'directory'
@@ -200,6 +198,7 @@ export class MockDesktopBridge implements DesktopBridge {
           )
         : [input.path],
     );
+    if (mediaPaths.length === 0) throw new Error('输入中没有可处理的媒体。');
     const task: TaskSnapshot = {
       id: taskId,
       title: this.createTaskTitle(draft.inputs),
@@ -207,7 +206,7 @@ export class MockDesktopBridge implements DesktopBridge {
       presetId: draft.basePresetId,
       modelId: draft.modelId,
       recognitionStrategy: draft.recognitionStrategy ?? 'stable_primary',
-      isCustom: Object.keys(draft.overrides).length > 0,
+      isCustom: isCustomTaskDraft(draft),
       status: 'queued',
       progress: 0,
       stage: '等待执行',
@@ -232,44 +231,105 @@ export class MockDesktopBridge implements DesktopBridge {
     };
 
     this.emit({ type: 'task.queued', task });
-    let progress = 0;
+    if (options.finishAction === 'shutdown') {
+      this.powerStatus = {
+        state: 'armed',
+        action: 'shutdown',
+        executeAtEpochMs: null,
+        error: null,
+      };
+      this.emit({ type: 'power.action', status: this.powerStatus });
+    }
+    this.queuedRuns.set(taskId, () => this.runTask(task));
+    this.startNextTask();
+    return { taskId };
+  }
+
+  private startNextTask(): void {
+    if (this.activeTaskId !== null) return;
+    const next = this.queuedRuns.entries().next().value;
+    if (!next) return;
+    const [taskId, run] = next;
+    this.queuedRuns.delete(taskId);
+    this.activeTaskId = taskId;
+    run();
+  }
+
+  private runTask(task: TaskSnapshot): void {
+    const taskId = task.id;
+    const draft = task.draft!;
+    const mediaPaths = task.mediaPaths!;
+    const outputs: string[] = [];
+    let tick = 0;
     const startedAt = Date.now();
     const timer = setInterval(() => {
-      progress = Math.min(100, progress + 4 + Math.round(Math.random() * 7));
-      const seconds = Math.floor((Date.now() - startedAt) / 1000);
-      const elapsed = `00:${seconds.toString().padStart(2, '0')}`;
-      if (progress >= 100) {
-        clearInterval(timer);
-        this.taskTimers.delete(taskId);
-        this.emit({
-          type: 'task.completed',
-          taskId,
-          elapsed,
-          outputs: [
-            draft.profileMode === 'subtitle'
-              ? 'D:\\Mock\\subtitle.srt'
-              : 'D:\\Mock\\transcript.txt',
-          ],
-        });
-        return;
-      }
+      const index = Math.floor(tick / 4);
+      const phase = tick % 4;
+      const elapsedSeconds = (Date.now() - startedAt) / 1000;
+      const inputPath = mediaPaths[index]!;
+      const basename = inputPath
+        .split(/[/\\]/)
+        .at(-1)!
+        .replace(/\.[^.]+$/, '');
+      const extensions = [
+        draft.output.txtEnabled ? 'txt' : null,
+        draft.output.markdownEnabled ? 'md' : null,
+        draft.output.srtEnabled ? 'srt' : null,
+      ].filter((value) => value !== null);
+      const outputPaths =
+        phase === 3
+          ? extensions.map(
+              (extension) =>
+                `${draft.output.rootDirectory ?? 'D:\\Mock'}\\${taskId}\\${basename}.${extension}`,
+            )
+          : [];
+      outputs.push(...outputPaths);
       this.emit({
         type: 'task.progress',
         taskId,
-        progress,
-        stage: progress < 18 ? '准备模型' : progress < 88 ? '转录中' : '整理输出',
-        elapsed,
-        inputPath: mediaPaths[0],
-        mediaIndex: 1,
+        progress: Math.round(10 + 87 * ((index + (phase + 1) / 4) / mediaPaths.length)),
+        stage: phase < 2 ? '转录中' : phase === 2 ? '文本后处理' : '写入输出',
+        stageCode:
+          phase < 2
+            ? 'transcription.running'
+            : phase === 2
+              ? 'postprocess.running'
+              : 'output.writing',
+        elapsed: formatElapsedSeconds(elapsedSeconds),
+        inputPath,
+        mediaIndex: index + 1,
         mediaTotal: mediaPaths.length,
-        mediaProgress: Math.min(100, Math.round((progress / 88) * 100)),
-        mediaElapsedSeconds: seconds,
-        taskElapsedSeconds: seconds,
-        mediaStatus: 'running',
+        mediaProgress: (phase + 1) * 25,
+        mediaElapsedSeconds: ((phase + 1) * 650) / 1000,
+        taskElapsedSeconds: elapsedSeconds,
+        mediaStatus: phase === 3 ? 'completed' : 'running',
+        outputPaths,
       });
+      tick += 1;
+      if (tick < mediaPaths.length * 4) return;
+      clearInterval(timer);
+      this.taskTimers.delete(taskId);
+      this.activeTaskId = null;
+      if (this.queuedRuns.size === 0 && this.powerStatus.state === 'armed') {
+        this.powerStatus = {
+          state: 'countdown',
+          action: 'shutdown',
+          executeAtEpochMs: Date.now() + 60_000,
+          error: null,
+        };
+        this.emit({ type: 'power.action', status: this.powerStatus });
+      }
+      this.emit({
+        type: 'task.completed',
+        taskId,
+        elapsed: formatElapsedSeconds(elapsedSeconds),
+        outputs,
+        successCount: mediaPaths.length,
+        failureCount: 0,
+      });
+      this.startNextTask();
     }, 650);
     this.taskTimers.set(taskId, timer);
-    return { taskId };
   }
 
   async cancelTask(taskId: string): Promise<void> {
@@ -278,12 +338,17 @@ export class MockDesktopBridge implements DesktopBridge {
       clearInterval(timer);
       this.taskTimers.delete(taskId);
     }
+    this.queuedRuns.delete(taskId);
+    if (this.activeTaskId === taskId) this.activeTaskId = null;
+    await this.cancelPowerAction();
     this.emit({ type: 'task.cancelled', taskId });
+    this.startNextTask();
   }
 
   subscribe(listener: (event: DesktopEvent) => void): Unlisten {
     this.listeners.add(listener);
     queueMicrotask(() => {
+      if (!this.listeners.has(listener)) return;
       listener({
         type: 'worker.environment',
         environment: {
@@ -293,6 +358,8 @@ export class MockDesktopBridge implements DesktopBridge {
           platform: 'Windows mock',
         },
       });
+      if (this.logsInitialized) return;
+      this.logsInitialized = true;
       for (const line of [
         '[2026-09-18 15:16:52] [WORKER] ready · PID 4242',
         '[2026-09-18 15:17:04] [MODEL] unloaded · 任务开始时按需加载',
@@ -319,6 +386,8 @@ export class MockDesktopBridge implements DesktopBridge {
   dispose(): void {
     this.taskTimers.forEach((timer) => clearInterval(timer));
     this.taskTimers.clear();
+    this.queuedRuns.clear();
+    this.activeTaskId = null;
     if (this.performanceTimer !== undefined) clearInterval(this.performanceTimer);
     this.performanceTimer = undefined;
     this.listeners.clear();

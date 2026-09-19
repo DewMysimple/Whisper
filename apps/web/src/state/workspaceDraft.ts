@@ -1,5 +1,6 @@
 import type {
   EditableParameters,
+  InputSource,
   ModelId,
   OutputConflictGroup,
   OutputPolicy,
@@ -136,4 +137,28 @@ export function normalizedTaskOverrides(
 export function draftHasUnsupportedTranslation(draft: TranscriptionDraft): boolean {
   const task = draft.overrides.task ?? draft.effectiveParameters.task;
   return task === 'translate' && !translationTaskSupported(draft.modelId, draft.basePresetId);
+}
+
+export function isCustomTaskDraft(draft: TranscriptionDraft): boolean {
+  if (Object.keys(draft.overrides).length > 0) return true;
+  if (!draft.output.srtEnabled) return false;
+  const defaults = getSubtitlePreset(draft.basePresetId).subtitleParameters;
+  return (Object.keys(defaults) as Array<keyof SubtitleParameters>).some(
+    (key) =>
+      draft.subtitleParameters?.[key] !== undefined &&
+      draft.subtitleParameters[key] !== defaults[key],
+  );
+}
+
+export function mergeUniqueInputs(existing: InputSource[], incoming: InputSource[]): InputSource[] {
+  const keys = new Set(existing.map((item) => item.path.toLocaleLowerCase()));
+  return [
+    ...existing,
+    ...incoming.filter((item) => {
+      const key = item.path.toLocaleLowerCase();
+      if (keys.has(key)) return false;
+      keys.add(key);
+      return true;
+    }),
+  ];
 }

@@ -9,8 +9,9 @@
   },
   "scripts": {
     "build": "corepack pnpm --filter @whisper-subtitle/web build",
-    "check": "corepack pnpm check:repo && corepack pnpm check:memory && corepack pnpm check:model-catalog && corepack pnpm check:preset-catalog && corepack pnpm format:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test",
+    "check": "corepack pnpm check:repo && corepack pnpm check:memory && corepack pnpm check:model-catalog && corepack pnpm check:preset-catalog && corepack pnpm check:styles && corepack pnpm format:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test",
     "check:repo": "python tools/maintenance/check_repository_hygiene.py",
+    "check:styles": "node tools/maintenance/check_web_styles.mjs",
     "check:memory": "python wiki-memory/工具/memory_lint.py check",
     "generate:model-catalog": "python tools/codegen/generate_model_catalog.py",
     "generate:preset-catalog": "python tools/codegen/generate_preset_catalog.py",

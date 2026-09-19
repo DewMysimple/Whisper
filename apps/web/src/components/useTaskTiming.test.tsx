@@ -32,6 +32,44 @@ describe('useTaskTiming', () => {
     vi.useRealTimers();
   });
 
+  it('excludes queue wait and lets each clock stop or update independently', () => {
+    vi.useFakeTimers();
+    const queued = { ...TASK, status: 'queued' as const, taskElapsedSeconds: 0 };
+    const pending = { ...MEDIA, status: 'pending' as const, elapsedSeconds: 0 };
+    const { result, rerender } = renderHook(
+      ({ task, media }: { task: TaskSnapshot; media: TaskMediaSnapshot }) =>
+        useTaskTiming(task, media),
+      {
+        initialProps: { task: queued, media: pending } as {
+          task: TaskSnapshot;
+          media: TaskMediaSnapshot;
+        },
+      },
+    );
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    rerender({ task: { ...queued, status: 'running' }, media: { ...pending, status: 'running' } });
+    expect(result.current).toEqual({ taskSeconds: 0, mediaSeconds: 0 });
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+    // Updating only the task clock must not reset elapsed media time.
+    rerender({
+      task: { ...queued, status: 'running', taskElapsedSeconds: 2 },
+      media: { ...pending, status: 'running' },
+    });
+    expect(result.current.mediaSeconds).toBe(2);
+    rerender({
+      task: { ...queued, status: 'running', taskElapsedSeconds: 2 },
+      media: { ...pending, status: 'completed' },
+    });
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+    expect(result.current).toEqual({ taskSeconds: 4, mediaSeconds: 2 });
+  });
+
   it('ticks between progress events and freezes the displayed value at terminal state', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-24T10:00:00.000Z'));

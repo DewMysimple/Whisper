@@ -62,13 +62,22 @@ import {
   errorMessage,
   isAllOutputsSkipped,
   normalizeDraft,
+  mergeUniqueInputs,
   normalizedTaskOverrides,
   outputConflictDetails,
   subtitleOverridesFor,
 } from './workspaceDraft';
-import { appearanceFromState, persistLater, preferencesFromState } from './workspacePersistence';
+import {
+  appearanceFromState,
+  flushPersistence,
+  persistLater,
+  preferencesFromState,
+} from './workspacePersistence';
 
 export { canResumeTask, isAbnormalTask } from './workspaceTaskState';
+
+let outputPreviewRequest = 0;
+let hydrated = false;
 
 const INITIAL_PERFORMANCE: PerformanceSample = {
   source: desktopBridge.mode === 'mock' ? 'mock' : 'worker',
@@ -116,6 +125,7 @@ const INITIAL_TASKS: TaskSnapshot[] = [
     status: 'running',
     progress: 63,
     stage: '转录中',
+    stageCode: 'transcription.running',
     elapsed: '03:18',
     createdAt: '2026-07-22T21:42:00+08:00',
     draft: {
@@ -323,19 +333,6 @@ export interface WorkspaceState {
   clearError(): void;
   handleEvent(event: DesktopEvent): void;
   initialize(): () => void;
-}
-
-function mergeUniqueInputs(existing: InputSource[], incoming: InputSource[]): InputSource[] {
-  const keys = new Set(existing.map((item) => item.path.toLocaleLowerCase()));
-  return [
-    ...existing,
-    ...incoming.filter((item) => {
-      const key = item.path.toLocaleLowerCase();
-      if (keys.has(key)) return false;
-      keys.add(key);
-      return true;
-    }),
-  ];
 }
 
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
@@ -688,7 +685,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
   startTask: async () => {
     const state = get();
-    if (state.inputs.length === 0) return;
+    if (
+      state.inputs.length === 0 ||
+      state.startingTask ||
+      state.pendingOverwrite ||
+      state.pendingShutdownStart
+    )
+      return;
     if (
       state.parameters.task === 'translate' &&
       !translationTaskSupported(state.selectedModelId, state.selectedPresetId)
@@ -717,18 +720,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ lastError: '本地推理 Worker 尚未就绪。' });
       return;
     }
-    try {
-      const localModels = await desktopBridge.listLocalModels();
-      if (!localModels.some((item) => item.id === state.selectedModelId && item.installed)) {
-        set({
-          lastError: `模型 ${state.selectedModelId} 已缺失或安装不完整。`,
-        });
-        return;
-      }
-    } catch (error) {
-      set({ lastError: errorMessage(error) });
-      return;
-    }
     const draft: TranscriptionDraft = {
       inputs: state.inputs,
       modelId: state.selectedModelId,
@@ -740,14 +731,22 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       subtitleParameters: state.subtitleParameters,
       output: state.output,
     };
-    if (state.finishAction === 'shutdown') {
-      set({ pendingShutdownStart: { draft }, lastError: null });
-      return;
-    }
     set({ startingTask: true, lastError: null });
     try {
+      const localModels = await desktopBridge.listLocalModels();
+      if (!localModels.some((item) => item.id === draft.modelId && item.installed)) {
+        throw new Error(`模型 ${draft.modelId} 已缺失或安装不完整。`);
+      }
+      if (state.finishAction === 'shutdown') {
+        set({ pendingShutdownStart: { draft }, lastError: null });
+        return;
+      }
       await desktopBridge.startTranscription(draft);
-      set({ inputs: [], finishAction: 'none', activeView: 'performance' });
+      set((current) => ({
+        inputs: current.inputs.filter((input) => !draft.inputs.includes(input)),
+        finishAction: current.finishAction === state.finishAction ? 'none' : current.finishAction,
+        activeView: 'performance',
+      }));
     } catch (error) {
       const conflict = outputConflictDetails(error);
       if (conflict !== null) {
@@ -777,7 +776,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       await desktopBridge.startTranscription(pending.draft, { finishAction: 'shutdown' });
       set({
         pendingShutdownStart: null,
-        inputs: [],
+        inputs: get().inputs.filter((input) => !pending.draft.inputs.includes(input)),
         finishAction: 'none',
         activeView: 'performance',
       });
@@ -826,7 +825,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       });
       set({
         pendingOverwrite: null,
-        inputs: pending.source === 'workspace' ? [] : get().inputs,
+        inputs:
+          pending.source === 'workspace'
+            ? get().inputs.filter((input) => !pending.draft.inputs.includes(input))
+            : get().inputs,
         finishAction: pending.source === 'workspace' ? 'none' : get().finishAction,
         activeView: 'performance',
         selectedTaskId: pending.source === 'resume' ? null : get().selectedTaskId,
@@ -872,13 +874,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     try {
       await desktopBridge.revealOutput(output);
     } catch (error) {
-      set((state) => ({
-        lastError: errorMessage(error),
-        tasks: state.tasks.map((item) =>
-          item.id === taskId ? { ...item, outputAvailability: 'missing' } : item,
-        ),
-      }));
-      persistLater(get);
+      set({ lastError: errorMessage(error) });
+      await get().auditTaskOutputs();
     }
   },
   openTaskOutputDirectory: async (taskId) => {
@@ -921,14 +918,23 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const completedTasks = get().tasks.filter((task) => task.status === 'completed');
     if (completedTasks.length === 0) return;
     set({ outputAuditPending: true });
-    const paths = [...new Set(completedTasks.flatMap((task) => task.outputs ?? []))];
+    const auditedTasks = new Map(completedTasks.map((task) => [task.id, taskOutputPaths(task)]));
+    const paths = [...new Set([...auditedTasks.values()].flat())];
     try {
       const statuses = paths.length === 0 ? [] : await desktopBridge.inspectOutputPaths(paths);
       const availability = new Map(statuses.map((status) => [status.path, status.exists]));
       set((state) => ({
         tasks: state.tasks.map((task) => {
           if (task.status !== 'completed') return task;
-          const outputs = task.outputs ?? [];
+          const outputs = auditedTasks.get(task.id);
+          const currentOutputs = taskOutputPaths(task);
+          if (
+            outputs === undefined ||
+            outputs.length !== currentOutputs.length ||
+            outputs.some((path, index) => path !== currentOutputs[index])
+          )
+            return task;
+          if (outputs.some((output) => !availability.has(output))) return task;
           const outputAvailability =
             outputs.length > 0 && outputs.every((output) => availability.get(output) === true)
               ? 'available'
@@ -944,6 +950,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
   },
   selectTask: async (taskId) => {
+    const request = ++outputPreviewRequest;
     set({ selectedTaskId: taskId, outputPreview: null, previewLoading: false });
     if (taskId === null) return;
     const task = get().tasks.find((item) => item.id === taskId);
@@ -957,20 +964,19 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     set({ previewLoading: true });
     try {
       const outputPreview = await desktopBridge.readOutputPreview(output);
-      if (get().selectedTaskId === taskId) set({ outputPreview });
+      if (get().selectedTaskId === taskId && request === outputPreviewRequest)
+        set({ outputPreview });
     } catch (error) {
-      set((state) => ({
-        lastError: errorMessage(error),
-        tasks: state.tasks.map((item) =>
-          item.id === taskId ? { ...item, outputAvailability: 'missing' } : item,
-        ),
-      }));
-      persistLater(get);
+      if (get().selectedTaskId === taskId && request === outputPreviewRequest)
+        set({ lastError: errorMessage(error) });
+      await get().auditTaskOutputs();
     } finally {
-      if (get().selectedTaskId === taskId) set({ previewLoading: false });
+      if (get().selectedTaskId === taskId && request === outputPreviewRequest)
+        set({ previewLoading: false });
     }
   },
   retryTask: async (taskId) => {
+    if (get().startingTask || get().pendingOverwrite || get().pendingShutdownStart) return;
     const task = get().tasks.find((item) => item.id === taskId);
     if (task?.draft === undefined) {
       set({ lastError: '该历史任务没有可复用的参数快照。' });
@@ -1025,6 +1031,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
   },
   resumeTask: async (taskId) => {
+    if (get().startingTask || get().pendingOverwrite || get().pendingShutdownStart) return;
     const task = get().tasks.find((item) => item.id === taskId);
     if (task?.draft === undefined || !canResumeTask(task)) {
       set({ lastError: '该任务没有可靠的媒体完成清单，无法直接继续。' });
@@ -1177,7 +1184,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   handleEvent: (event) => handleWorkspaceEvent(event, set, get, persistLater),
   initialize: () => {
     if (get().initialized) return () => undefined;
-    if (desktopBridge.mode === 'tauri') {
+    if (desktopBridge.mode === 'tauri' && !hydrated) {
       const persisted = loadWorkspaceState();
       if (persisted !== null) {
         applyAppearancePreferences(persisted.preferences);
@@ -1192,33 +1199,51 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     } else {
       applyAppearancePreferences(appearanceFromState(get()));
     }
+    hydrated = true;
     set({ initialized: true });
+    let subscribed = true;
+    const initialHostStatus = get().hostStatus;
+    const initialPowerStatus = get().powerActionStatus;
     const unlisten = desktopBridge.subscribe((event) => get().handleEvent(event));
     void desktopBridge
       .getHostStatus()
-      .then((hostStatus) => set({ hostStatus }))
-      .catch((error: unknown) => set({ lastError: errorMessage(error) }));
+      .then((hostStatus) => {
+        if (subscribed && get().hostStatus === initialHostStatus)
+          get().handleEvent({ type: 'host.status', status: hostStatus });
+      })
+      .catch((error: unknown) => {
+        if (subscribed) set({ lastError: errorMessage(error) });
+      });
     void desktopBridge
       .getPowerCapabilities()
-      .then((powerCapabilities) => set({ powerCapabilities }))
-      .catch(() => set({ powerCapabilities: { shutdown: false } }));
+      .then((powerCapabilities) => {
+        if (subscribed) set({ powerCapabilities });
+      })
+      .catch(() => {
+        if (subscribed) set({ powerCapabilities: { shutdown: false } });
+      });
     void desktopBridge
       .getPowerActionStatus()
-      .then((powerActionStatus) =>
-        set({
-          powerActionStatus,
-          shutdownArmed:
-            powerActionStatus.state === 'armed' || powerActionStatus.state === 'countdown',
-        }),
-      )
+      .then((powerActionStatus) => {
+        if (subscribed && get().powerActionStatus === initialPowerStatus)
+          set({
+            powerActionStatus,
+            shutdownArmed:
+              powerActionStatus.state === 'armed' || powerActionStatus.state === 'countdown',
+          });
+      })
       .catch(() => undefined);
     const systemTheme = window.matchMedia?.('(prefers-color-scheme: light)');
     const handleSystemThemeChange = () => {
       if (get().theme === 'system') applyAppearancePreferences(appearanceFromState(get()));
     };
     systemTheme?.addEventListener?.('change', handleSystemThemeChange);
+    window.addEventListener('pagehide', flushPersistence);
     return () => {
+      subscribed = false;
+      flushPersistence();
       unlisten();
+      window.removeEventListener('pagehide', flushPersistence);
       systemTheme?.removeEventListener?.('change', handleSystemThemeChange);
       set({ initialized: false });
     };

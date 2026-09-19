@@ -443,10 +443,15 @@ function IntegerInput({
   value: number;
 }) {
   const [draft, setDraft] = useState(String(value));
+  const discardOnBlur = useRef(false);
 
   useEffect(() => setDraft(String(value)), [value]);
 
   const commitDraft = () => {
+    if (discardOnBlur.current) {
+      discardOnBlur.current = false;
+      return;
+    }
     const parsed = Number.parseInt(draft, 10);
     if (!Number.isFinite(parsed)) {
       setDraft(String(value));
@@ -488,6 +493,7 @@ function IntegerInput({
           if (event.key === 'Enter') {
             event.currentTarget.blur();
           } else if (event.key === 'Escape') {
+            discardOnBlur.current = true;
             setDraft(String(value));
             event.currentTarget.blur();
           } else if (event.key === 'ArrowUp') {

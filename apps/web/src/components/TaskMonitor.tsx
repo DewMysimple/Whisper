@@ -25,16 +25,24 @@ import { taskSourceSummary } from '../state/taskSourceSummary';
 import { formatTaskStage } from '../state/taskStage';
 import { createInputTaskPreview, INPUT_TASK_PREVIEW_ID } from '../state/inputTaskPreview';
 import { useWorkspace } from '../state/workspace';
+import {
+  currentTaskMedia,
+  monitorMediaStates,
+  processedMediaCount,
+  resolveTaskMonitorTarget,
+  taskProcessStep,
+} from '../state/taskMonitor';
+import { taskOutputPaths } from '../state/workspaceTaskState';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useAutoFollow } from './useAutoFollow';
 import { formatElapsedSeconds, useTaskTiming } from './useTaskTiming';
 
 const PROCESS_STEPS = [
-  { label: '输入与模型准备', start: 0, end: 18 },
-  { label: '媒体转录', start: 19, end: 78 },
-  { label: '文本后处理', start: 79, end: 88 },
-  { label: '写入输出', start: 89, end: 96 },
-  { label: '任务汇总', start: 97, end: 100 },
+  { label: '输入与模型准备' },
+  { label: '媒体转录' },
+  { label: '文本后处理' },
+  { label: '写入输出' },
+  { label: '任务汇总' },
 ] as const;
 
 function fileName(path: string): string {
@@ -55,30 +63,20 @@ function monitorSourceSummary(task: TaskSnapshot): string | null {
     : `文件夹输入 · ${task.sourceCount} 个媒体文件`;
 }
 
-function mediaStatusLabel(media: TaskMediaSnapshot): string {
+function mediaStatusLabel(media: TaskMediaSnapshot, task: TaskSnapshot): string {
+  if (
+    (task.status === 'cancelled' || task.status === 'failed') &&
+    (media.status === 'running' || media.status === 'pending')
+  )
+    return media.status === 'running' ? '处理已中断' : '未处理';
   if (media.status === 'completed') return '已完成';
   if (media.status === 'running') return formatTaskStage(media.stage);
   if (media.status === 'failed') return '处理失败';
   if (media.status === 'skipped') return '已跳过';
-  return '等待处理';
+  return media.stage;
 }
 
-function activeTaskFrom(tasks: TaskSnapshot[]): TaskSnapshot | undefined {
-  return (
-    tasks.find((task) => task.status === 'running') ??
-    [...tasks].reverse().find((task) => task.status === 'queued')
-  );
-}
-
-export function resolveTaskMonitorTarget(
-  tasks: TaskSnapshot[],
-  monitoredTaskId: string | null,
-  inputTaskPreview: TaskSnapshot | null,
-): TaskSnapshot | undefined {
-  return (
-    inputTaskPreview ?? tasks.find((task) => task.id === monitoredTaskId) ?? activeTaskFrom(tasks)
-  );
-}
+export { resolveTaskMonitorTarget } from '../state/taskMonitor';
 
 export function TaskMonitor() {
   const tasks = useWorkspace((state) => state.tasks);
@@ -89,7 +87,7 @@ export function TaskMonitor() {
   const cancelTask = useWorkspace((state) => state.cancelTask);
   const clearInputs = useWorkspace((state) => state.clearInputs);
   const openTaskOutputDirectory = useWorkspace((state) => state.openTaskOutputDirectory);
-  const [terminationOpen, setTerminationOpen] = useState(false);
+  const [terminationTask, setTerminationTask] = useState<TaskSnapshot | null>(null);
   const mediaRowRef = useRef<HTMLElement>(null);
   const reducedMotion = useReducedMotion();
   const inputTaskPreview = useMemo(
@@ -105,41 +103,8 @@ export function TaskMonitor() {
       !isInputTaskPreview &&
       (activeTask?.status === 'running' || activeTask?.status === 'queued'),
   ).length;
-  const fallbackMediaPaths =
-    activeTask?.mediaPaths && activeTask.mediaPaths.length > 0
-      ? activeTask.mediaPaths
-      : (activeTask?.draft?.inputs.map((input) => input.path) ?? []);
-  const fallbackCurrentIndex =
-    activeTask?.currentMediaIndex ??
-    (activeTask?.status === 'running' && activeTask.progress > 0 && fallbackMediaPaths.length > 0
-      ? 1
-      : 0);
-  const mediaStates: TaskMediaSnapshot[] =
-    activeTask?.mediaStates && activeTask.mediaStates.length > 0
-      ? activeTask.mediaStates
-      : fallbackMediaPaths.map((path, index) => {
-          const position = index + 1;
-          const completed = activeTask?.status === 'completed' || position < fallbackCurrentIndex;
-          const running = activeTask?.status === 'running' && position === fallbackCurrentIndex;
-          return {
-            path,
-            status: completed ? 'completed' : running ? 'running' : 'pending',
-            progress: completed ? 100 : running ? null : 0,
-            stage: completed ? '已完成' : running ? activeTask.stage : '等待处理',
-            elapsedSeconds: 0,
-          };
-        });
-  const runningMediaIndex = mediaStates.findIndex((media) => media.status === 'running');
-  const currentIndex =
-    activeTask?.status === 'running'
-      ? (activeTask.currentMediaIndex ??
-        (runningMediaIndex >= 0 ? runningMediaIndex + 1 : fallbackCurrentIndex))
-      : activeTask?.status === 'completed'
-        ? mediaStates.length
-        : 0;
-  const currentMedia =
-    mediaStates.find((media) => media.status === 'running') ??
-    mediaStates[Math.max(0, Math.min(mediaStates.length - 1, currentIndex - 1))];
+  const mediaStates = monitorMediaStates(activeTask);
+  const currentMedia = currentTaskMedia(activeTask, mediaStates);
   const timing = useTaskTiming(activeTask, currentMedia);
   const followCurrentMedia = useCallback(() => {
     const mediaRow = mediaRowRef.current;
@@ -172,25 +137,15 @@ export function TaskMonitor() {
 
   const processingTotal = activeTask.processingCount ?? activeTask.sourceCount;
   const sourceSummary = isInputTaskPreview
-    ? `已展开 ${mediaStates.length} 个待处理媒体文件`
+    ? `已选择 ${inputs.length} 项输入，共 ${activeTask.sourceCount} 个媒体，提交后展开文件夹`
     : monitorSourceSummary(activeTask);
-  const completedMediaCount = mediaStates.filter(
-    (media) => media.status === 'completed' || media.status === 'skipped',
-  ).length;
-  const processedMediaCount =
-    activeTask.status === 'completed' || activeTask.progress >= 100
-      ? processingTotal
-      : Math.max(completedMediaCount, Math.min(currentIndex, processingTotal));
+  const processedCount = processedMediaCount(mediaStates);
+  const processStep = taskProcessStep(activeTask);
   const durationSummary = formatDurationSummary(taskDurationSummary(activeTask)).replace(
     /^总时长\s*/,
     '',
   );
-  const outputPaths = [
-    ...new Set([
-      ...(activeTask.outputs ?? []),
-      ...mediaStates.flatMap((media) => media.outputPaths ?? []),
-    ]),
-  ];
+  const outputPaths = taskOutputPaths(activeTask);
   const isActive =
     !isInputTaskPreview && (activeTask.status === 'running' || activeTask.status === 'queued');
   const statusLabel = isInputTaskPreview
@@ -236,7 +191,7 @@ export function TaskMonitor() {
                 {isActive && (
                   <button
                     className="task-monitor-stop"
-                    onClick={() => setTerminationOpen(true)}
+                    onClick={() => setTerminationTask(activeTask)}
                     type="button"
                   >
                     <Square fill="currentColor" size={12} /> 终止任务
@@ -275,7 +230,7 @@ export function TaskMonitor() {
                 </div>
                 <div className="task-monitor-progress-copy">
                   <strong>
-                    {processedMediaCount} / {processingTotal}
+                    {processedCount} / {processingTotal}
                   </strong>
                   <span>已处理媒体</span>
                 </div>
@@ -388,9 +343,13 @@ export function TaskMonitor() {
           <header>
             <div>
               <p className="step-label">EXPANDED MEDIA</p>
-              <h3 id="task-media-title">媒体文件进度</h3>
+              <h3 id="task-media-title">
+                {isInputTaskPreview ? '待处理输入清单' : '媒体文件进度'}
+              </h3>
             </div>
-            <span>{mediaStates.length} 个文件</span>
+            <span>
+              {mediaStates.length} {isInputTaskPreview ? '项输入' : '个文件'}
+            </span>
           </header>
           <div {...mediaFollowHandlers} className="task-media-list" tabIndex={0}>
             {mediaStates.map((media, index) => (
@@ -423,7 +382,7 @@ export function TaskMonitor() {
                   <strong>
                     {media.progress === null ? '—' : `${Math.round(media.progress)}%`}
                   </strong>
-                  <span>{mediaStatusLabel(media)}</span>
+                  <span>{mediaStatusLabel(media, activeTask)}</span>
                   <small>
                     {formatElapsedSeconds(
                       media.path === currentMedia?.path
@@ -447,13 +406,10 @@ export function TaskMonitor() {
             <span>{formatTaskStage(activeTask.stage)}</span>
           </header>
           <ol>
-            {PROCESS_STEPS.map((step) => {
+            {PROCESS_STEPS.map((step, index) => {
               const completed =
-                activeTask.status === 'completed' ||
-                activeTask.progress >= 100 ||
-                activeTask.progress >= step.end;
-              const active =
-                !completed && activeTask.progress >= step.start && activeTask.progress < step.end;
+                activeTask.status === 'completed' || (isActive && index < processStep);
+              const active = activeTask.status === 'running' && index === processStep;
               return (
                 <li
                   className={completed ? 'is-complete' : active ? 'is-active' : ''}
@@ -473,22 +429,22 @@ export function TaskMonitor() {
       <ConfirmDialog
         confirmLabel="终止任务"
         description="终止后会保留已经成功写入的输出，未完成媒体可从历史记录继续转录。"
-        onCancel={() => setTerminationOpen(false)}
+        onCancel={() => setTerminationTask(null)}
         onConfirm={() => {
-          setTerminationOpen(false);
-          void cancelTask(activeTask.id);
+          if (terminationTask) void cancelTask(terminationTask.id);
+          setTerminationTask(null);
         }}
-        open={terminationOpen}
+        open={terminationTask !== null}
         title="确认终止当前任务"
       >
         <dl>
           <div>
             <dt>任务</dt>
-            <dd>{activeTask.title}</dd>
+            <dd>{terminationTask?.title}</dd>
           </div>
           <div>
             <dt>当前阶段</dt>
-            <dd>{formatTaskStage(activeTask.stage)}</dd>
+            <dd>{formatTaskStage(terminationTask?.stage ?? '')}</dd>
           </div>
         </dl>
       </ConfirmDialog>

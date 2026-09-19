@@ -191,6 +191,7 @@ export interface TaskSnapshot {
   status: TaskStatus;
   progress: number;
   stage: string;
+  stageCode?: string;
   elapsed: string;
   createdAt: string;
   outputs?: string[];
@@ -337,6 +338,7 @@ export type DesktopEvent =
       taskId: string;
       progress: number;
       stage: string;
+      stageCode?: string;
       elapsed: string;
       inputPath?: string;
       mediaIndex?: number;
@@ -357,8 +359,8 @@ export type DesktopEvent =
       successCount?: number;
       failureCount?: number;
     }
-  | { type: 'task.failed'; taskId: string; code: string; message: string }
-  | { type: 'task.cancelled'; taskId: string }
+  | { type: 'task.failed'; taskId: string; code: string; message: string; elapsed?: string }
+  | { type: 'task.cancelled'; taskId: string; elapsed?: string }
   | { type: 'power.action'; status: PowerActionStatus }
   | { type: 'performance.sample'; sample: PerformanceSample };
 

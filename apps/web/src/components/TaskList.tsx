@@ -25,6 +25,7 @@ import {
   taskMatchesDateRange,
 } from '../state/taskHistory';
 import { formatTaskStage } from '../state/taskStage';
+import { isCustomTaskDraft } from '../state/workspaceDraft';
 import { ConfirmDialog } from './ConfirmDialog';
 import { TaskDateFilter } from './TaskDateFilter';
 
@@ -338,6 +339,7 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
         <div className="task-list">
           {visibleTasks.length === 0 && <div className="empty-tasks">没有符合条件的任务。</div>}
           {visibleTasks.map((task) => {
+            const isCustom = task.draft ? isCustomTaskDraft(task.draft) : task.isCustom;
             const resumable = canResumeTask(task);
             const outputFormats = taskOutputFormats(task);
             const titleParts = taskTitleParts(task.title);
@@ -404,8 +406,8 @@ export function TaskList({ expanded = false }: { expanded?: boolean }) {
                           </span>
                           <span className="task-history-config-cell">
                             <small>参数配置</small>
-                            <strong title={task.isCustom ? '自定义参数' : '默认参数'}>
-                              {task.isCustom ? '自定义参数' : '默认参数'}
+                            <strong title={isCustom ? '自定义参数' : '默认参数'}>
+                              {isCustom ? '自定义参数' : '默认参数'}
                             </strong>
                           </span>
                         </dd>

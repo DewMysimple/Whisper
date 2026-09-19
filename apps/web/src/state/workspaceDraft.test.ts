@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { TranscriptionDraft } from '../contracts/desktop';
 import { getPreset } from '../data/presets';
 import { getSubtitlePreset } from '../data/subtitlePresets';
-import { errorMessage, normalizeDraft } from './workspaceDraft';
+import { errorMessage, isCustomTaskDraft, normalizeDraft } from './workspaceDraft';
 
 describe('errorMessage', () => {
   it('extracts structured Tauri command errors instead of rendering object noise', () => {
@@ -45,5 +45,18 @@ describe('normalizeDraft', () => {
     } as TranscriptionDraft & { hardware: unknown };
 
     expect(normalizeDraft(legacy)).not.toHaveProperty('hardware');
+    expect(isCustomTaskDraft(legacy)).toBe(false);
+    const customSubtitle = {
+      ...legacy,
+      output: { ...legacy.output, srtEnabled: true },
+      subtitleParameters: { ...legacy.subtitleParameters, max_characters_per_line: 20 },
+    };
+    expect(isCustomTaskDraft(customSubtitle)).toBe(true);
+    expect(
+      isCustomTaskDraft({
+        ...customSubtitle,
+        output: { ...customSubtitle.output, srtEnabled: false },
+      }),
+    ).toBe(false);
   });
 });

@@ -346,7 +346,7 @@ test('keeps the selected-media preview synchronized and clearable from both work
   await page.getByRole('button', { name: '选择媒体文件' }).click();
   await page.getByRole('button', { name: '查看 2 个媒体文件进度' }).click();
   await expect(page.getByRole('heading', { name: '任务监控与记录' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '媒体文件进度' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '待处理输入清单' })).toBeVisible();
   await expect(page.getByText('P20-核心语法-整数类型.mp4', { exact: true })).toBeVisible();
   await expect(page.getByText('Product Interview 07.mkv', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '清除清单' })).toBeVisible();
@@ -426,12 +426,12 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   );
   await expect(page.getByText('任务清单已更新，确认无误后开始本地处理。')).toHaveCount(0);
   await page.getByRole('button', { name: '查看 10 个媒体文件进度' }).click();
-  await expect(page.getByRole('heading', { name: '媒体文件进度' })).toBeVisible();
-  await expect(page.locator('.task-media-row')).toHaveCount(10);
+  await expect(page.getByRole('heading', { name: '待处理输入清单' })).toBeVisible();
+  await expect(page.locator('.task-media-row')).toHaveCount(3);
   await expect(page.getByText('P20-核心语法-整数类型.mp4', { exact: true })).toBeVisible();
-  await expect(page.getByText('七月产品会议-01.mp4', { exact: true })).toBeVisible();
-  await expect(page.getByText('七月产品会议-08.mp4', { exact: true })).toBeVisible();
-  await expect(page.getByText('已展开 10 个待处理媒体文件')).toBeVisible();
+  await expect(page.getByText('七月产品会议', { exact: true })).toBeVisible();
+  await expect(page.getByText('七月产品会议-01.mp4', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('已选择 3 项输入，共 10 个媒体，提交后展开文件夹')).toBeVisible();
   await page.screenshot({
     fullPage: true,
     path: testInfo.outputPath('task-input-preview.png'),

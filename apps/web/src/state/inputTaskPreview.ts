@@ -1,35 +1,7 @@
-import type {
-  InputSource,
-  ModelId,
-  PresetId,
-  TaskMediaSnapshot,
-  TaskSnapshot,
-} from '../contracts/desktop';
+import type { InputSource, ModelId, PresetId, TaskSnapshot } from '../contracts/desktop';
+import { summarizeInputDurations } from './mediaDuration';
 
 export const INPUT_TASK_PREVIEW_ID = 'input-task-preview';
-
-function directoryPreviewPaths(source: InputSource): string[] {
-  const count = Math.max(1, source.mediaCount ?? 1);
-  const folderName = source.path.split(/[/\\]/).at(-1) || '媒体';
-  return Array.from(
-    { length: count },
-    (_, index) => `${source.path}\\${folderName}-${String(index + 1).padStart(2, '0')}.mp4`,
-  );
-}
-
-function previewMedia(source: InputSource): TaskMediaSnapshot[] {
-  const paths = source.kind === 'directory' ? directoryPreviewPaths(source) : [source.path];
-  const duration =
-    source.durationSeconds === undefined ? undefined : source.durationSeconds / paths.length;
-  return paths.map((path) => ({
-    path,
-    status: 'pending',
-    progress: 0,
-    stage: '等待开始',
-    elapsedSeconds: 0,
-    durationSeconds: duration,
-  }));
-}
 
 export function createInputTaskPreview(
   inputs: InputSource[],
@@ -38,16 +10,19 @@ export function createInputTaskPreview(
 ): TaskSnapshot | null {
   if (inputs.length === 0) return null;
 
-  const mediaStates = inputs.flatMap(previewMedia);
-  const title =
-    mediaStates.length === 1
-      ? (mediaStates[0]?.path.split(/[/\\]/).at(-1) ?? '待处理媒体')
-      : `${mediaStates.length} 个待处理媒体`;
-
+  // inspect_inputs supplies directory summaries, not child paths or individual durations.
+  const sourceCount = inputs.reduce(
+    (total, input) => total + (input.mediaCount ?? (input.kind === 'file' ? 1 : 0)),
+    0,
+  );
+  const durations = summarizeInputDurations(inputs);
   return {
     id: INPUT_TASK_PREVIEW_ID,
-    title,
-    sourceCount: mediaStates.length,
+    title:
+      inputs.length === 1
+        ? (inputs[0]!.path.split(/[/\\]/).at(-1) ?? '待处理输入')
+        : `${sourceCount} 个待处理媒体`,
+    sourceCount,
     presetId,
     modelId,
     isCustom: false,
@@ -56,16 +31,22 @@ export function createInputTaskPreview(
     stage: '等待开始',
     elapsed: '00:00',
     createdAt: new Date().toISOString(),
-    mediaPaths: mediaStates.map((media) => media.path),
-    processingCount: mediaStates.length,
+    processingCount: sourceCount,
     currentMediaIndex: 0,
     taskElapsedSeconds: 0,
-    totalMediaDurationSeconds: mediaStates.reduce(
-      (total, media) => total + (media.durationSeconds ?? 0),
-      0,
-    ),
-    unknownMediaDurationCount: mediaStates.filter((media) => media.durationSeconds === undefined)
-      .length,
-    mediaStates,
+    totalMediaDurationSeconds: durations.knownSeconds,
+    unknownMediaDurationCount: durations.unknownCount,
+    mediaStates: inputs.map((input) => ({
+      path: input.path,
+      status: 'pending',
+      progress: 0,
+      stage: !input.valid
+        ? '输入无效'
+        : input.kind === 'directory'
+          ? `文件夹 · ${input.mediaCount ?? '未知数量'} 个媒体，提交后展开`
+          : '等待开始',
+      elapsedSeconds: 0,
+      durationSeconds: input.durationSeconds,
+    })),
   };
 }

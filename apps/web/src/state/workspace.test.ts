@@ -133,7 +133,7 @@ describe('workspace terminal event notifications', () => {
       activeInput: 'D:\\Media\\two.mp4',
     });
     expect(task.mediaStates).toEqual([
-      expect.objectContaining({ path: 'D:\\Media\\one.mp4', status: 'completed', progress: 100 }),
+      expect.objectContaining({ path: 'D:\\Media\\one.mp4', status: 'pending', progress: 0 }),
       expect.objectContaining({
         path: 'D:\\Media\\two.mp4',
         status: 'running',

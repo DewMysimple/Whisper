@@ -114,10 +114,10 @@ describe('desktop workspace', () => {
     expect(screen.queryByText('任务清单已更新，确认无误后开始本地处理。')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '查看 10 个媒体文件进度' }));
     expect(screen.getByRole('heading', { name: '任务监控与记录' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '媒体文件进度' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '待处理输入清单' })).toBeInTheDocument();
     expect(screen.getByText('P20-核心语法-整数类型.mp4', { exact: true })).toBeInTheDocument();
-    expect(screen.getByText('七月产品会议-01.mp4', { exact: true })).toBeInTheDocument();
-    expect(screen.getByText('七月产品会议-08.mp4', { exact: true })).toBeInTheDocument();
+    expect(screen.getByText('七月产品会议', { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText('七月产品会议-01.mp4', { exact: true })).not.toBeInTheDocument();
     expect(
       within(screen.getByLabelText('任务监控与历史记录')).getByText('10 个待处理媒体'),
     ).toBeInTheDocument();

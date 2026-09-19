@@ -17,6 +17,8 @@ import {
 } from '../state/mediaDuration';
 import { formatTaskCreatedAt } from '../state/taskHistory';
 import { formatTaskStage } from '../state/taskStage';
+import { activeTaskId } from '../state/workspaceTaskState';
+import { currentTaskMedia, monitorMediaStates } from '../state/taskMonitor';
 import { useWorkspace } from '../state/workspace';
 import {
   capacityDetail,
@@ -153,22 +155,17 @@ export function PerformanceView() {
     { label: '15 秒低点', value: formatMetricPercent(metricSummary.minimum) },
     { label: '窗口变化', value: formatPointChange(metricSummary.change) },
   ];
-  const runningTask = tasks.find((task) => task.status === 'running');
   const queuedTasks = tasks.filter((task) => task.status === 'queued');
-  const activeTask = runningTask ?? queuedTasks[0];
+  const activeTask = tasks.find((task) => task.id === activeTaskId(tasks));
   const waitingCount = queuedTasks.filter((task) => task.id !== activeTask?.id).length;
-  const activeMediaStates = activeTask?.mediaStates ?? [];
+  const activeMediaStates = monitorMediaStates(activeTask);
   const processingTotal = activeTask?.processingCount ?? activeTask?.sourceCount ?? 0;
   const runningMediaIndex = activeMediaStates.findIndex((media) => media.status === 'running');
   const currentMediaNumber =
     activeTask?.status === 'running'
       ? (activeTask.currentMediaIndex ?? (runningMediaIndex >= 0 ? runningMediaIndex + 1 : 0))
       : 0;
-  const currentMedia =
-    activeMediaStates.find((media) => media.status === 'running') ??
-    activeMediaStates[
-      Math.max(0, Math.min(activeMediaStates.length - 1, (activeTask?.currentMediaIndex ?? 1) - 1))
-    ];
+  const currentMedia = currentTaskMedia(activeTask, activeMediaStates);
   const activeInputName = (currentMedia?.path ?? activeTask?.activeInput)?.split(/[/\\]/).at(-1);
   const timing = useTaskTiming(activeTask, currentMedia);
   const mediaProgress = currentMedia?.progress ?? null;

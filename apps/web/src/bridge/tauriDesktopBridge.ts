@@ -92,6 +92,9 @@ export class TauriDesktopBridge implements DesktopBridge {
   private performanceTimer: ReturnType<typeof setInterval> | undefined;
   private modelHealthTimer: ReturnType<typeof setInterval> | undefined;
   private performancePolling = false;
+  private modelHealthPolling = false;
+  private disposed = false;
+  private hostRevision = 0;
   private inputSequence = 1;
   private lastReadyPid: number | null = null;
   private lastModelStatus: ModelStatus = {
@@ -336,6 +339,9 @@ export class TauriDesktopBridge implements DesktopBridge {
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.hostRevision += 1;
+    this.lastReadyPid = null;
     for (const unlisten of this.nativeUnlisteners.splice(0)) unlisten();
     this.listeners.clear();
     this.pendingTasks.clear();
@@ -349,28 +355,48 @@ export class TauriDesktopBridge implements DesktopBridge {
   }
 
   private ensureNativeListeners(): Promise<void> {
-    this.nativeSetup ??= this.setupNativeListeners();
+    if (this.disposed) return Promise.reject(new Error('Desktop bridge has been disposed'));
+    this.nativeSetup ??= this.setupNativeListeners().catch((error: unknown) => {
+      for (const unlisten of this.nativeUnlisteners.splice(0)) unlisten();
+      this.nativeSetup = undefined;
+      throw error;
+    });
     return this.nativeSetup;
   }
 
+  private async registerNativeListener(registration: Promise<UnlistenFn>): Promise<void> {
+    const unlisten = await registration;
+    if (this.disposed) {
+      unlisten();
+      throw new Error('Desktop bridge has been disposed');
+    }
+    this.nativeUnlisteners.push(unlisten);
+  }
+
   private async setupNativeListeners(): Promise<void> {
-    this.nativeUnlisteners.push(
-      await listen<HostStatus>('desktop://host-status', ({ payload }) =>
-        this.handleHostStatus(payload),
-      ),
-      await listen<WorkerEnvelope>('desktop://worker-message', ({ payload }) =>
+    await this.registerNativeListener(
+      listen<HostStatus>('desktop://host-status', ({ payload }) => this.handleHostStatus(payload)),
+    );
+    await this.registerNativeListener(
+      listen<WorkerEnvelope>('desktop://worker-message', ({ payload }) =>
         this.handleWorkerMessage(payload),
       ),
-      await listen<{ line: string }>('desktop://worker-log', ({ payload }) =>
+    );
+    await this.registerNativeListener(
+      listen<{ line: string }>('desktop://worker-log', ({ payload }) =>
         this.emit({ type: 'worker.log', line: payload.line }),
       ),
-      await listen('desktop://worker-logs-cleared', () =>
-        this.emit({ type: 'worker.logs_cleared' }),
-      ),
-      await listen<PowerActionStatus>('desktop://power-action', ({ payload }) =>
+    );
+    await this.registerNativeListener(
+      listen('desktop://worker-logs-cleared', () => this.emit({ type: 'worker.logs_cleared' })),
+    );
+    await this.registerNativeListener(
+      listen<PowerActionStatus>('desktop://power-action', ({ payload }) =>
         this.emit({ type: 'power.action', status: payload }),
       ),
-      await getCurrentWebviewWindow().onDragDropEvent((event) => {
+    );
+    await this.registerNativeListener(
+      getCurrentWebviewWindow().onDragDropEvent((event) => {
         if (event.payload.type === 'drop') {
           void this.inspectPaths(event.payload.paths, 'drop')
             .then((inputs) => this.emit({ type: 'inputs.added', inputs }))
@@ -385,14 +411,18 @@ export class TauriDesktopBridge implements DesktopBridge {
         }
       }),
     );
+    const revision = this.hostRevision;
     const status = await invoke<HostStatus>('get_host_status');
-    this.handleHostStatus(status);
+    if (this.disposed) return;
+    if (revision === this.hostRevision) this.handleHostStatus(status);
     const existingLogs = await invoke<string[]>('get_worker_logs');
+    if (this.disposed) return;
     if (Array.isArray(existingLogs)) {
       existingLogs.forEach((line) => this.emit({ type: 'worker.log', line }));
     }
     await this.refreshPerformance();
     await this.refreshModelHealth();
+    if (this.disposed) return;
     this.performanceTimer = setInterval(
       () => void this.refreshPerformance(),
       PERFORMANCE_POLL_INTERVAL_MS,
@@ -404,12 +434,21 @@ export class TauriDesktopBridge implements DesktopBridge {
   }
 
   private handleHostStatus(status: HostStatus): void {
+    if (this.disposed) return;
+    this.hostRevision += 1;
     this.emit({ type: 'host.status', status });
     if (status.state === 'ready' && status.pid !== this.lastReadyPid) {
       this.lastReadyPid = status.pid;
       void this.refreshEnvironment();
     }
-    if (status.state !== 'ready') this.lastReadyPid = null;
+    if (status.state !== 'ready') {
+      this.lastReadyPid = null;
+      if (status.state === 'failed' || status.state === 'stopped') {
+        this.pendingTasks.clear();
+        this.taskStartedAt.clear();
+        this.taskProgress.clear();
+      }
+    }
     if (status.state !== 'ready' && this.lastModelStatus.state !== 'unloaded') {
       this.emitModelStatus({
         state: 'unloaded',
@@ -423,8 +462,10 @@ export class TauriDesktopBridge implements DesktopBridge {
   }
 
   private async refreshEnvironment(): Promise<void> {
+    const revision = this.hostRevision;
     try {
       const envelope = await invoke<WorkerEnvelope>('worker_environment');
+      if (this.disposed || revision !== this.hostRevision) return;
       const result = envelope.data.result;
       if (isWorkerEnvironment(result)) {
         this.emit({
@@ -433,6 +474,7 @@ export class TauriDesktopBridge implements DesktopBridge {
         });
       }
     } catch (error) {
+      if (this.disposed || revision !== this.hostRevision) return;
       const normalized = normalizeInvokeError(error);
       this.emit({ type: 'worker.error', code: normalized.code, message: normalized.message });
     }
@@ -441,8 +483,10 @@ export class TauriDesktopBridge implements DesktopBridge {
   private async refreshPerformance(): Promise<void> {
     if (this.lastReadyPid === null || this.performancePolling) return;
     this.performancePolling = true;
+    const revision = this.hostRevision;
     try {
       const envelope = await invoke<WorkerEnvelope>('worker_metrics');
+      if (this.disposed || revision !== this.hostRevision) return;
       const result = envelope.data.result;
       if (isPerformanceResult(result)) {
         this.emit({
@@ -492,9 +536,14 @@ export class TauriDesktopBridge implements DesktopBridge {
   }
 
   private async refreshModelHealth(): Promise<void> {
-    if (this.lastReadyPid === null) return;
+    if (this.lastReadyPid === null || this.modelHealthPolling) return;
+    this.modelHealthPolling = true;
+    const revision = this.hostRevision;
+    const previousModel = this.lastModelStatus;
     try {
       const envelope = await invoke<WorkerEnvelope>('worker_health');
+      if (this.disposed || revision !== this.hostRevision || previousModel !== this.lastModelStatus)
+        return;
       const result = envelope.data.result;
       if (!isRecord(result)) return;
       if (result.model_loaded === false) {
@@ -535,6 +584,8 @@ export class TauriDesktopBridge implements DesktopBridge {
       }
     } catch {
       // Health correction is best-effort; lifecycle events remain authoritative.
+    } finally {
+      this.modelHealthPolling = false;
     }
   }
 
@@ -549,6 +600,7 @@ export class TauriDesktopBridge implements DesktopBridge {
   }
 
   private emit(event: DesktopEvent): void {
+    if (this.disposed) return;
     this.listeners.forEach((listener) => listener(event));
   }
 

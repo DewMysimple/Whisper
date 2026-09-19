@@ -13,16 +13,13 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from ..application.transcribe import TranscriptionCancelled, TranscriptionService
 from ..bootstrap import configure_runtime
-from ..domain.contracts import Preset, ProgressEvent, TranscriptionRequest
+from ..domain.contracts import ProgressEvent
 from ..domain.presets import derive_preset
 from ..infrastructure.environment_check import check_worker_environment
-from ..infrastructure.hardware import HardwareDetector, HardwareInfo
+from ..infrastructure.hardware import HardwareDetector
 from ..infrastructure.output_store import (
-    OutputConflict,
     OutputConflictError,
-    OutputPlan,
     select_configurable_outputs,
 )
 from ..infrastructure.performance import collect_performance_sample
@@ -55,6 +52,9 @@ from .media import (
     normalize_input_path,
     path_key,
 )
+from .model_cache import ModelCache
+from .task import WorkerTask
+from .task_execution import execute_task
 
 
 _PROGRESS_STAGE_MAP = {
@@ -76,11 +76,6 @@ _PROGRESS_STAGE_MAP = {
     "output_written": TaskStage.OUTPUT_WRITING,
     "desktop_output_written": TaskStage.OUTPUT_WRITING,
 }
-
-
-from .model_cache import ModelCache
-from .task import WorkerTask
-from .task_execution import execute_task
 
 
 class WorkerRuntime:
@@ -600,8 +595,6 @@ class WorkerRuntime:
                 message=str(error) or type(error).__name__,
             )
         )
-
-
     def _execute_task(self, task: WorkerTask) -> None:
         execute_task(self, task)
 

@@ -6,6 +6,7 @@ import type {
   WorkerEnvironment,
 } from '../contracts/desktop';
 import { MODEL_IDS } from '../contracts/desktop';
+import { isCustomTaskDraft } from '../state/workspaceDraft';
 
 export interface PendingTaskMetadata {
   title: string;
@@ -68,7 +69,7 @@ export function createTaskMetadata(draft: TranscriptionDraft): PendingTaskMetada
     title,
     sourceCount: draft.inputs.length,
     presetId: draft.basePresetId,
-    isCustom: Object.keys(draft.overrides).length > 0,
+    isCustom: isCustomTaskDraft(draft),
     createdAt: currentTimestamp(),
     draft: structuredClone(draft),
   };
