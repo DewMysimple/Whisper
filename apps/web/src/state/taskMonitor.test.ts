@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskMediaSnapshot, TaskSnapshot } from '../contracts/desktop';
-import { currentTaskMedia, processedMediaCount, taskProcessStep } from './taskMonitor';
+import {
+  currentTaskMedia,
+  processedMediaCount,
+  taskProcessStep,
+  taskProcessStates,
+} from './taskMonitor';
 
 const TASK: TaskSnapshot = {
   id: 'monitor',
@@ -17,6 +22,52 @@ const TASK: TaskSnapshot = {
   createdAt: '2026-09-19T00:00:00Z',
 };
 describe('monitor facts', () => {
+  it('matches Windows media paths across case and slash differences', () => {
+    const media: TaskMediaSnapshot[] = [
+      {
+        path: 'D:\\Media\\Lesson.wav',
+        status: 'completed',
+        progress: 100,
+        stage: '已完成',
+        elapsedSeconds: 4,
+      },
+    ];
+    expect(
+      currentTaskMedia({ ...TASK, status: 'failed', activeInput: 'd:/media/lesson.wav' }, media),
+    ).toBe(media[0]);
+  });
+
+  it('keeps interrupted stages terminal and does not invent unknown stage history', () => {
+    const interrupted = taskProcessStates({
+      ...TASK,
+      status: 'cancelled',
+      stageCode: 'output.writing',
+    });
+    expect(interrupted.map((step) => step.state)).toEqual([
+      'complete',
+      'complete',
+      'complete',
+      'interrupted',
+      'pending',
+    ]);
+    expect(interrupted.map((step) => step.detail)).toEqual([
+      '完成',
+      '完成',
+      '完成',
+      '已中断',
+      '未执行',
+    ]);
+    expect(
+      taskProcessStates({ ...TASK, status: 'failed', stageCode: undefined }).every(
+        (step) => step.detail === '阶段未记录',
+      ),
+    ).toBe(true);
+    expect(
+      taskProcessStates({ ...TASK, status: 'queued', stageCode: undefined }).every(
+        (step) => step.detail === '待执行',
+      ),
+    ).toBe(true);
+  });
   it('derives the processing stage from the event even on the last file of a batch', () => {
     expect(taskProcessStep(TASK)).toBe(1);
     expect(

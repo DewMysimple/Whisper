@@ -1,8 +1,9 @@
 import { FileText, FolderOpen, RotateCcw, X } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
-import { getPreset, transcriptionTaskLabel } from '../data/presets';
+import type { TaskSnapshot } from '../contracts/desktop';
 import { getModelLabel } from '../data/models';
+import { getPreset, transcriptionTaskLabel } from '../data/presets';
 import { formatResolvedHardware } from '../state/hardware';
 import {
   formatDurationSummary,
@@ -12,37 +13,28 @@ import {
 import { formatTaskCreatedAt } from '../state/taskHistory';
 import { formatTaskStage } from '../state/taskStage';
 import { canResumeTask, useWorkspace } from '../state/workspace';
-import { ConfirmDialog } from './ConfirmDialog';
+import { taskOutputPaths } from '../state/workspaceTaskState';
+import { TaskRestoreDialog } from './tasks/TaskRestoreDialog';
 import { useDialogFocus } from './useDialogFocus';
 
 export function TaskDetail() {
-  const selectedTaskId = useWorkspace((state) => state.selectedTaskId);
   const task = useWorkspace((state) =>
     state.tasks.find((item) => item.id === state.selectedTaskId),
   );
+  return task ? <TaskDetailContent key={task.id} task={task} /> : null;
+}
+
+function TaskDetailContent({ task }: { task: TaskSnapshot }) {
   const preview = useWorkspace((state) => state.outputPreview);
   const previewLoading = useWorkspace((state) => state.previewLoading);
   const selectTask = useWorkspace((state) => state.selectTask);
-  const retryTask = useWorkspace((state) => state.retryTask);
   const resumeTask = useWorkspace((state) => state.resumeTask);
   const revealTaskOutput = useWorkspace((state) => state.revealTaskOutput);
-  const startingTask = useWorkspace((state) => state.startingTask);
-  const [retryConfirmationOpen, setRetryConfirmationOpen] = useState(false);
+  const [restoreTask, setRestoreTask] = useState<TaskSnapshot | null>(null);
   const detailRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  useDialogFocus(task !== undefined, detailRef, closeRef, () => void selectTask(null));
-
-  const closeRetryConfirmation = useCallback(() => {
-    if (!startingTask) setRetryConfirmationOpen(false);
-  }, [startingTask]);
-
-  const confirmRetry = useCallback(async () => {
-    if (selectedTaskId === null) return;
-    await retryTask(selectedTaskId);
-    setRetryConfirmationOpen(false);
-  }, [retryTask, selectedTaskId]);
-
-  if (selectedTaskId === null || task === undefined) return null;
+  useDialogFocus(true, detailRef, closeRef, () => void selectTask(null));
+  const outputs = taskOutputPaths(task);
   const parameters = task.draft?.effectiveParameters;
   const resumable = canResumeTask(task);
   const qualityMedia = (task.mediaStates ?? []).filter(
@@ -337,10 +329,10 @@ export function TaskDetail() {
           )}
         </section>
 
-        {task.outputs && task.outputs.length > 0 && (
+        {outputs.length > 0 && (
           <section className="detail-section">
             <h3>输出文件</h3>
-            {task.outputs.map((output) => (
+            {outputs.map((output) => (
               <code key={output}>{output}</code>
             ))}
           </section>
@@ -370,7 +362,7 @@ export function TaskDetail() {
                 if (resumable) {
                   void resumeTask(task.id);
                 } else {
-                  setRetryConfirmationOpen(true);
+                  setRestoreTask(task);
                 }
               }}
               type="button"
@@ -378,7 +370,7 @@ export function TaskDetail() {
               <RotateCcw size={16} /> {resumable ? '继续转录' : '载入原配置'}
             </button>
           )}
-          {task.outputAvailability !== 'missing' && (task.outputs?.length ?? 0) > 0 && (
+          {task.outputAvailability !== 'missing' && outputs.length > 0 && (
             <button
               className="secondary-button"
               onClick={() => void revealTaskOutput(task.id)}
@@ -389,42 +381,7 @@ export function TaskDetail() {
           )}
         </footer>
       </aside>
-      <ConfirmDialog
-        confirmLabel="载入原配置"
-        description="软件只会把历史输入、参数、模型和输出策略载入转录工作台，不会立即创建或执行任务。"
-        onCancel={closeRetryConfirmation}
-        onConfirm={() => void confirmRetry()}
-        open={retryConfirmationOpen}
-        pending={startingTask}
-        title="载入历史转录配置"
-      >
-        <dl>
-          <div>
-            <dt>任务</dt>
-            <dd>{task.title}</dd>
-          </div>
-          <div>
-            <dt>转录版本</dt>
-            <dd>{getPreset(task.presetId).label}</dd>
-          </div>
-          <div>
-            <dt>任务类型</dt>
-            <dd>{transcriptionTaskLabel(task.draft?.effectiveParameters.task)}</dd>
-          </div>
-          <div>
-            <dt>推理模型</dt>
-            <dd>{getModelLabel(task.modelId)}</dd>
-          </div>
-          <div>
-            <dt>媒体数量</dt>
-            <dd>{task.sourceCount} 个</dd>
-          </div>
-          <div>
-            <dt>输出策略</dt>
-            <dd>{task.draft?.output.mode === 'custom' ? '自定义目录' : '跟随媒体'}</dd>
-          </div>
-        </dl>
-      </ConfirmDialog>
+      <TaskRestoreDialog task={restoreTask} onClose={() => setRestoreTask(null)} />
     </div>
   );
 }

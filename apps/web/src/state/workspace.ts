@@ -54,7 +54,7 @@ import {
   type RecognitionStrategyProfiles,
 } from './parameterProfiles';
 import { parseWindowsClipboardPaths } from './clipboardPaths';
-import type { TaskDateRange } from './taskHistory';
+import type { TaskDateRange, TaskFilter } from './taskHistory';
 import { handleWorkspaceEvent } from './workspaceEvents';
 import { activeTaskId, canResumeTask, isAbnormalTask, taskOutputPaths } from './workspaceTaskState';
 import {
@@ -209,7 +209,7 @@ const INITIAL_TASKS: TaskSnapshot[] = [
   },
 ];
 
-export type TaskFilter = 'all' | 'active' | 'completed' | 'failed';
+export type { TaskFilter } from './taskHistory';
 export type TaskWorkspaceMode = 'monitor' | 'history';
 export type WorkspaceViewId = 'workspace' | 'performance' | 'tasks' | 'logs' | 'settings';
 

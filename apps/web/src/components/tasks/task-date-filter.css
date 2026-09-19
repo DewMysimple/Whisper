@@ -1,0 +1,170 @@
+/* History date picker. The calendar must remain outside decorative clipping. */
+.task-date-filter {
+  position: relative;
+  flex: 0 0 auto;
+}
+.task-date-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 250px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 650;
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  min-height: 44px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.task-date-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-date-trigger.is-active {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.task-calendar-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 356px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--text) 11%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+  box-shadow: 0 22px 60px rgba(29, 29, 31, 0.18);
+  backdrop-filter: blur(20px) saturate(150%);
+  transform-origin: top right;
+  animation: task-calendar-arrive 160ms ease-out;
+}
+.task-calendar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.task-calendar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.task-calendar-heading > button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: 11px;
+  background: var(--surface-soft);
+  color: var(--text-muted);
+}
+.task-calendar-heading strong {
+  font-size: var(--font-meta);
+  font-weight: 720;
+}
+.task-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+  margin: 14px 0 7px;
+}
+.task-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+.task-calendar-weekdays span {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+}
+.task-calendar-grid > button {
+  min-width: 0;
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 650;
+}
+.task-calendar-grid > span {
+  min-width: 0;
+  aspect-ratio: 1;
+}
+.task-calendar-grid > button:not(:disabled):hover {
+  background: var(--surface-soft);
+}
+.task-calendar-grid > button.is-selected {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.task-calendar-grid > button:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+.task-calendar-footer > span {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.task-calendar-footer > button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+@keyframes task-calendar-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@media (max-width: 820px) {
+  .task-date-trigger {
+    width: 100%;
+    max-width: none;
+    justify-content: center;
+  }
+}
+@media (max-width: 780px) {
+  .task-calendar-popover {
+    right: auto;
+    left: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-calendar-popover {
+    animation: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .task-calendar-popover {
+    background: var(--surface-raised);
+    backdrop-filter: none;
+  }
+}

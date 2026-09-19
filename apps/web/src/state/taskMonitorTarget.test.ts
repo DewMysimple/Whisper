@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TaskSnapshot } from '../contracts/desktop';
-import { resolveTaskMonitorTarget } from './TaskMonitor';
+import { resolveTaskMonitorTarget } from './taskMonitor';
 
 const COMPLETED_TASK: TaskSnapshot = {
   id: 'completed-task',

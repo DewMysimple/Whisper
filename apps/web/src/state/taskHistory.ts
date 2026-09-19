@@ -1,4 +1,8 @@
 import type { TaskSnapshot } from '../contracts/desktop';
+import { formatMediaDuration, taskDurationSummary } from './mediaDuration';
+import { taskOutputPaths } from './workspaceTaskState';
+
+export type TaskFilter = 'all' | 'active' | 'completed' | 'failed';
 
 export interface TaskDateRange {
   start: string;
@@ -43,4 +47,72 @@ export function taskMatchesDateRange(task: TaskSnapshot, range: TaskDateRange | 
   if (range === null) return true;
   const date = taskDateKey(task.createdAt);
   return date !== null && date >= range.start && date <= range.end;
+}
+
+export function taskStatusLabel(task: TaskSnapshot): string {
+  if (task.outputAvailability === 'missing') return '输出缺失';
+  if (task.status === 'running') return '运行中';
+  if (task.status === 'completed') return '已完成';
+  if (task.status === 'cancelled') return '已取消';
+  if (task.status === 'failed') return '失败';
+  return '等待中';
+}
+export function taskStatusTone(task: TaskSnapshot): string {
+  return task.outputAvailability === 'missing' ? 'failed' : task.status;
+}
+export function taskMatchesFilter(task: TaskSnapshot, filter: TaskFilter): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'active') return task.status === 'queued' || task.status === 'running';
+  if (filter === 'completed') {
+    return task.status === 'completed' && task.outputAvailability !== 'missing';
+  }
+  return task.status === 'failed';
+}
+
+/** Filters and counts share predicates so the cards cannot disagree with the list. */
+export function taskHistoryCounts(tasks: TaskSnapshot[]): Record<TaskFilter, number> {
+  return {
+    all: tasks.length,
+    active: tasks.filter((task) => taskMatchesFilter(task, 'active')).length,
+    completed: tasks.filter((task) => taskMatchesFilter(task, 'completed')).length,
+    failed: tasks.filter((task) => taskMatchesFilter(task, 'failed')).length,
+  };
+}
+export function taskOutputFormats(task: TaskSnapshot): string[] {
+  const formats: string[] = [];
+  const output = task.draft?.output;
+  if (output?.txtEnabled) formats.push('TXT');
+  if (output?.markdownEnabled) formats.push('MD');
+  if (output?.srtEnabled) formats.push('SRT');
+  if (formats.length === 0) {
+    for (const path of taskOutputPaths(task)) {
+      const extension = path.split('.').at(-1)?.toLocaleLowerCase();
+      const label = extension === 'markdown' ? 'MD' : extension?.toLocaleUpperCase();
+      if (label && ['TXT', 'MD', 'SRT'].includes(label) && !formats.includes(label)) {
+        formats.push(label);
+      }
+    }
+  }
+  return formats.length > 0 ? formats : ['格式未记录'];
+}
+export function taskTitleParts(title: string): {
+  basename: string;
+  extension: string;
+} | null {
+  const extensionStart = title.lastIndexOf('.');
+  if (extensionStart <= 0 || extensionStart === title.length - 1) return null;
+  return {
+    basename: title.slice(0, extensionStart),
+    extension: title.slice(extensionStart),
+  };
+}
+export function taskDurationValue(task: TaskSnapshot): string {
+  const summary = taskDurationSummary(task);
+  if (summary.unknownCount > 0) {
+    if (summary.knownSeconds > 0) {
+      return `${formatMediaDuration(summary.knownSeconds)} + ${summary.unknownCount} 未知`;
+    }
+    return summary.unknownCount >= task.sourceCount ? '未知' : `${summary.unknownCount} 个未知`;
+  }
+  return formatMediaDuration(summary.knownSeconds);
 }

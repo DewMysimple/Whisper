@@ -1,8 +1,8 @@
 import { CalendarRange, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { TaskDateRange } from '../state/taskHistory';
-import { normalizeTaskDateRange } from '../state/taskHistory';
+import type { TaskDateRange } from '../../state/taskHistory';
+import { normalizeTaskDateRange } from '../../state/taskHistory';
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'] as const;
 
@@ -53,6 +53,7 @@ export function TaskDateFilter({ availableDates, range, onChange }: TaskDateFilt
   const [visibleMonth, setVisibleMonth] = useState(() => monthKey(range?.start ?? latestMonth));
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
   const available = useMemo(() => new Set(availableDates), [availableDates]);
   const cells = useMemo(() => calendarCells(visibleMonth), [visibleMonth]);
   const minimumMonth = monthKey(availableDates[0] ?? latestMonth);
@@ -60,6 +61,13 @@ export function TaskDateFilter({ availableDates, range, onChange }: TaskDateFilt
 
   useEffect(() => {
     if (!open) return;
+    const selected = calendarRef.current?.querySelector<HTMLButtonElement>(
+      '[aria-pressed="true"]:not(:disabled)',
+    );
+    const first = calendarRef.current?.querySelector<HTMLButtonElement>(
+      '.task-calendar-grid button:not(:disabled)',
+    );
+    (selected ?? first ?? calendarRef.current)?.focus();
     const closeOnOutsidePointer = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -106,7 +114,13 @@ export function TaskDateFilter({ availableDates, range, onChange }: TaskDateFilt
         <span>{rangeLabel(range)}</span>
       </button>
       {open && (
-        <div aria-label="按任务日期筛选" className="task-calendar-popover" role="dialog">
+        <div
+          aria-label="按任务日期筛选"
+          className="task-calendar-popover"
+          ref={calendarRef}
+          tabIndex={-1}
+          role="dialog"
+        >
           <div className="task-calendar-heading">
             <button
               aria-label="上一个月"

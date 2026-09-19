@@ -1,0 +1,73 @@
+/* Task workspace switcher and page layout. */
+.task-workspace-switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--border);
+  gap: 0;
+  padding: 5px;
+  overflow: hidden;
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--surface-soft) 82%, var(--surface-raised));
+}
+.task-workspace-switcher > button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 15px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease,
+    transform 90ms ease-out;
+  min-height: 68px;
+  border-radius: 12px;
+}
+.task-workspace-switcher > button > span {
+  display: grid;
+  gap: 2px;
+}
+.task-workspace-switcher strong {
+  display: block;
+  font-size: var(--font-body);
+  line-height: 1.35;
+}
+.task-workspace-switcher small {
+  display: block;
+  color: var(--text-faint);
+  font-size: var(--font-caption);
+  line-height: 1.5;
+}
+.task-workspace-switcher > button.is-active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 34%, var(--surface-raised));
+  box-shadow: 0 7px 20px color-mix(in srgb, var(--text) 6%, transparent);
+}
+.task-workspace-switcher > button:active {
+  transform: scale(0.985);
+}
+.tasks-view {
+  display: grid;
+  min-width: 0;
+  max-width: 100%;
+  gap: var(--space-5);
+}
+@media (max-width: 700px) {
+  .task-workspace-switcher {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-workspace-switcher > button {
+    transition: none;
+  }
+  .task-workspace-switcher > button:active {
+    transform: none;
+  }
+}

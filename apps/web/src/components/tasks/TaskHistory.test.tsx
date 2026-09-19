@@ -2,9 +2,9 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TaskSnapshot } from '../contracts/desktop';
-import { useWorkspace } from '../state/workspace';
-import { TaskList } from './TaskList';
+import type { TaskSnapshot } from '../../contracts/desktop';
+import { useWorkspace } from '../../state/workspace';
+import { TaskHistory } from './TaskHistory';
 
 const FINISHED_TASK: TaskSnapshot = {
   id: 'finished-history',
@@ -22,7 +22,7 @@ const FINISHED_TASK: TaskSnapshot = {
   outputAvailability: 'available',
 };
 
-describe('TaskList destructive history controls', () => {
+describe('TaskHistory destructive history controls', () => {
   beforeEach(() => {
     useWorkspace.setState({
       tasks: [structuredClone(FINISHED_TASK)],
@@ -37,7 +37,7 @@ describe('TaskList destructive history controls', () => {
 
   it('requires two in-place activations and Escape cancels the armed state', async () => {
     const user = userEvent.setup();
-    render(<TaskList expanded />);
+    render(<TaskHistory />);
     const remove = screen.getByRole('button', {
       name: '删除 已完成访谈.wav 的任务记录',
     });
@@ -60,7 +60,7 @@ describe('TaskList destructive history controls', () => {
   it('expires the inline confirmation after four seconds', () => {
     vi.useFakeTimers();
     try {
-      render(<TaskList expanded />);
+      render(<TaskHistory />);
       const remove = screen.getByRole('button', {
         name: '删除 已完成访谈.wav 的任务记录',
       });
@@ -76,7 +76,7 @@ describe('TaskList destructive history controls', () => {
 
   it('uses the same two-stage interaction for bulk history clearing', async () => {
     const user = userEvent.setup();
-    render(<TaskList expanded />);
+    render(<TaskHistory />);
     const clear = screen.getByRole('button', { name: /清除历史/ });
 
     await user.click(clear);
@@ -87,7 +87,7 @@ describe('TaskList destructive history controls', () => {
   });
 
   it('uses the status icon without repeating a text badge in the card header', () => {
-    const { container } = render(<TaskList expanded />);
+    const { container } = render(<TaskHistory />);
 
     expect(screen.queryByText('进度')).not.toBeInTheDocument();
     expect(screen.getByText('100%')).toBeInTheDocument();
@@ -106,7 +106,7 @@ describe('TaskList destructive history controls', () => {
   });
 
   it('removes the redundant filter heading and result counters from expanded history', () => {
-    render(<TaskList expanded />);
+    render(<TaskHistory />);
 
     expect(screen.queryByText('查找与筛选')).not.toBeInTheDocument();
     expect(screen.queryByText('按名称和日期定位本机任务记录')).not.toBeInTheDocument();
@@ -125,7 +125,7 @@ describe('TaskList destructive history controls', () => {
       ],
     });
 
-    const { container } = render(<TaskList expanded />);
+    const { container } = render(<TaskHistory />);
 
     expect(screen.getByRole('region', { name: '任务归档区' })).toContainElement(
       container.querySelector('.task-list'),
@@ -145,7 +145,7 @@ describe('TaskList destructive history controls', () => {
     const title = '当你拥有一棵赛博粒子交互的圣诞树并继续附加很长的任务说明.mkv';
     useWorkspace.setState({ tasks: [{ ...FINISHED_TASK, title }] });
 
-    const { container } = render(<TaskList expanded />);
+    const { container } = render(<TaskHistory />);
 
     const taskTitle = container.querySelector(`strong[title="${title}"]`);
     expect(taskTitle).toHaveAttribute('title', title);
@@ -159,7 +159,7 @@ describe('TaskList destructive history controls', () => {
   it('labels customized task metadata as custom parameters in the third column', () => {
     useWorkspace.setState({ tasks: [{ ...FINISHED_TASK, isCustom: true }] });
 
-    const { container } = render(<TaskList expanded />);
+    const { container } = render(<TaskHistory />);
 
     expect(screen.getByText('自定义参数')).toBeInTheDocument();
     expect(container.querySelector('.task-history-config-cell:nth-child(3)')).toHaveTextContent(
@@ -182,7 +182,7 @@ describe('TaskList destructive history controls', () => {
       taskFilter: 'failed',
     });
 
-    render(<TaskList expanded />);
+    render(<TaskHistory />);
 
     expect(screen.getByTitle('失败任务.wav')).toBeInTheDocument();
     expect(screen.queryByTitle('取消任务.wav')).not.toBeInTheDocument();

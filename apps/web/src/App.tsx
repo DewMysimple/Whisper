@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, History, Moon, Search, Sun, X } from 'lucide-react';
+import { AlertTriangle, Moon, Search, Sun, X } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -8,16 +8,15 @@ import { LaunchCard } from './components/LaunchCard';
 import { OutputPanel } from './components/OutputPanel';
 import { OverwriteConfirmDialog } from './components/OverwriteConfirmDialog';
 import { PerformanceView } from './components/PerformanceStrip';
-import { PresetPanel } from './components/PresetPanel';
 import { PowerCountdownBanner } from './components/PowerCountdownBanner';
-import { SubtitleProfilePanel } from './components/SubtitleProfilePanel';
-import { Sidebar } from './components/Sidebar';
-import { SourcePanel } from './components/SourcePanel';
+import { PresetPanel } from './components/PresetPanel';
 import { SettingsView } from './components/SettingsView';
 import { ShutdownConfirmDialog } from './components/ShutdownConfirmDialog';
+import { Sidebar } from './components/Sidebar';
+import { SourcePanel } from './components/SourcePanel';
+import { SubtitleProfilePanel } from './components/SubtitleProfilePanel';
 import { TaskDetail } from './components/TaskDetail';
-import { TaskList } from './components/TaskList';
-import { TaskMonitor } from './components/TaskMonitor';
+import { TasksView } from './components/tasks/TasksView';
 import { WorkerLogsView } from './components/WorkerLogsView';
 import { DEFAULT_APPEARANCE, TOPBAR_HEIGHT_RANGE } from './state/persistence';
 import { useWorkspace, type WorkspaceViewId } from './state/workspace';
@@ -211,64 +210,6 @@ function WorkspaceView() {
         <OutputPanel />
         <LaunchCard />
       </div>
-    </div>
-  );
-}
-
-function TasksView() {
-  const tasks = useWorkspace((state) => state.tasks);
-  const inputs = useWorkspace((state) => state.inputs);
-  const mode = useWorkspace((state) => state.taskWorkspaceMode);
-  const setMode = useWorkspace((state) => state.setTaskWorkspaceMode);
-  const active = tasks.filter(
-    (task) => task.status === 'queued' || task.status === 'running',
-  ).length;
-  const developmentPreviewCount =
-    desktopBridge.mode === 'mock'
-      ? inputs.reduce((total, input) => total + (input.mediaCount ?? 1), 0)
-      : 0;
-
-  return (
-    <div className="tasks-view">
-      <div className="task-workspace-switcher" aria-label="任务监控与历史记录">
-        <button
-          aria-pressed={mode === 'monitor'}
-          className={mode === 'monitor' ? 'is-active' : ''}
-          onClick={() => setMode('monitor')}
-          type="button"
-        >
-          <Activity size={17} />
-          <span>
-            <strong>任务监控</strong>
-            <small>
-              {developmentPreviewCount > 0
-                ? `${developmentPreviewCount} 个待处理媒体`
-                : active > 0
-                  ? `${active} 项活动任务`
-                  : '当前空闲'}
-            </small>
-          </span>
-        </button>
-        <button
-          aria-pressed={mode === 'history'}
-          className={mode === 'history' ? 'is-active' : ''}
-          onClick={() => setMode('history')}
-          type="button"
-        >
-          <History size={17} />
-          <span>
-            <strong>历史记录</strong>
-            <small>{tasks.length} 条本机快照</small>
-          </span>
-        </button>
-      </div>
-      {mode === 'monitor' ? (
-        <TaskMonitor />
-      ) : (
-        <div className="task-history-shell">
-          <TaskList expanded />
-        </div>
-      )}
     </div>
   );
 }

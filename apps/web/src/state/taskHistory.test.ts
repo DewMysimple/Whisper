@@ -7,6 +7,9 @@ import {
   normalizeTaskDateRange,
   taskDateKey,
   taskMatchesDateRange,
+  taskOutputFormats,
+  taskHistoryCounts,
+  taskMatchesFilter,
 } from './taskHistory';
 
 function task(id: string, createdAt: string): TaskSnapshot {
@@ -26,6 +29,37 @@ function task(id: string, createdAt: string): TaskSnapshot {
 }
 
 describe('task history dates', () => {
+  it('reads output formats from per-media results in legacy history', () => {
+    const snapshot = task('media-only', '2026-09-19T00:00:00Z');
+    snapshot.mediaStates = [
+      {
+        path: 'D:\\lesson.wav',
+        status: 'completed',
+        progress: 100,
+        stage: '完成',
+        elapsedSeconds: 1,
+        outputPaths: ['D:\\lesson.txt', 'D:\\lesson.markdown', 'D:\\lesson.txt'],
+      },
+    ];
+    expect(taskOutputFormats(snapshot)).toEqual(['TXT', 'MD']);
+  });
+
+  it('uses the same semantics for counts and filtered records including missing outputs', () => {
+    const base = task('base', '2026-09-19T00:00:00Z');
+    const records: TaskSnapshot[] = [
+      { ...base, status: 'running' },
+      { ...base, status: 'queued' },
+      { ...base, status: 'completed' },
+      { ...base, status: 'completed', outputAvailability: 'missing' },
+      { ...base, status: 'failed' },
+      { ...base, status: 'cancelled' },
+    ];
+    expect(taskHistoryCounts(records)).toEqual({ all: 6, active: 2, completed: 1, failed: 1 });
+    for (const filter of ['all', 'active', 'completed', 'failed'] as const)
+      expect(records.filter((t) => taskMatchesFilter(t, filter))).toHaveLength(
+        taskHistoryCounts(records)[filter],
+      );
+  });
   it('formats ISO timestamps in local time and preserves legacy clock records as unknown', () => {
     const timestamp = '2026-07-22T21:30:00+08:00';
     expect(taskDateKey(timestamp)).toBe('2026-07-22');

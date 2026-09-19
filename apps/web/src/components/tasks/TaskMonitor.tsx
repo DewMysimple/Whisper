@@ -1,7 +1,5 @@
 import {
-  Check,
   CircleDashed,
-  FileAudio,
   FolderOpen,
   FolderTree,
   LoaderCircle,
@@ -9,50 +7,35 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
-import { useReducedMotion } from 'motion/react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { TaskMediaList } from './TaskMediaList';
+import { TaskProcessChain } from './TaskProcessChain';
 
-import type { TaskMediaSnapshot, TaskSnapshot } from '../contracts/desktop';
-import { getModelLabel } from '../data/models';
-import { getPreset } from '../data/presets';
+import type { TaskSnapshot } from '../../contracts/desktop';
+import { getModelLabel } from '../../data/models';
+import { getPreset } from '../../data/presets';
+import { createInputTaskPreview, INPUT_TASK_PREVIEW_ID } from '../../state/inputTaskPreview';
 import {
   formatDurationSummary,
   formatMediaDuration,
   taskDurationSummary,
-} from '../state/mediaDuration';
-import { formatTaskCreatedAt } from '../state/taskHistory';
-import { taskSourceSummary } from '../state/taskSourceSummary';
-import { formatTaskStage } from '../state/taskStage';
-import { createInputTaskPreview, INPUT_TASK_PREVIEW_ID } from '../state/inputTaskPreview';
-import { useWorkspace } from '../state/workspace';
+} from '../../state/mediaDuration';
+import { formatTaskCreatedAt } from '../../state/taskHistory';
 import {
   currentTaskMedia,
   monitorMediaStates,
   processedMediaCount,
   resolveTaskMonitorTarget,
-  taskProcessStep,
-} from '../state/taskMonitor';
-import { taskOutputPaths } from '../state/workspaceTaskState';
-import { ConfirmDialog } from './ConfirmDialog';
-import { useAutoFollow } from './useAutoFollow';
-import { formatElapsedSeconds, useTaskTiming } from './useTaskTiming';
-
-const PROCESS_STEPS = [
-  { label: '输入与模型准备' },
-  { label: '媒体转录' },
-  { label: '文本后处理' },
-  { label: '写入输出' },
-  { label: '任务汇总' },
-] as const;
+} from '../../state/taskMonitor';
+import { taskSourceSummary } from '../../state/taskSourceSummary';
+import { formatTaskStage } from '../../state/taskStage';
+import { useWorkspace } from '../../state/workspace';
+import { taskOutputPaths } from '../../state/workspaceTaskState';
+import { ConfirmDialog } from '../ConfirmDialog';
+import { formatElapsedSeconds, useTaskTiming } from '../useTaskTiming';
 
 function fileName(path: string): string {
   return path.split(/[/\\]/).at(-1) ?? path;
-}
-
-function parentDirectory(path: string): string {
-  const parts = path.split(/[/\\]/);
-  parts.pop();
-  return parts.join('\\') || '本机媒体';
 }
 
 function monitorSourceSummary(task: TaskSnapshot): string | null {
@@ -62,21 +45,6 @@ function monitorSourceSummary(task: TaskSnapshot): string | null {
     ? `单个文件 · ${task.sourceCount} 个媒体文件`
     : `文件夹输入 · ${task.sourceCount} 个媒体文件`;
 }
-
-function mediaStatusLabel(media: TaskMediaSnapshot, task: TaskSnapshot): string {
-  if (
-    (task.status === 'cancelled' || task.status === 'failed') &&
-    (media.status === 'running' || media.status === 'pending')
-  )
-    return media.status === 'running' ? '处理已中断' : '未处理';
-  if (media.status === 'completed') return '已完成';
-  if (media.status === 'running') return formatTaskStage(media.stage);
-  if (media.status === 'failed') return '处理失败';
-  if (media.status === 'skipped') return '已跳过';
-  return media.stage;
-}
-
-export { resolveTaskMonitorTarget } from '../state/taskMonitor';
 
 export function TaskMonitor() {
   const tasks = useWorkspace((state) => state.tasks);
@@ -88,8 +56,6 @@ export function TaskMonitor() {
   const clearInputs = useWorkspace((state) => state.clearInputs);
   const openTaskOutputDirectory = useWorkspace((state) => state.openTaskOutputDirectory);
   const [terminationTask, setTerminationTask] = useState<TaskSnapshot | null>(null);
-  const mediaRowRef = useRef<HTMLElement>(null);
-  const reducedMotion = useReducedMotion();
   const inputTaskPreview = useMemo(
     () => createInputTaskPreview(inputs, selectedPresetId, selectedModelId),
     [inputs, selectedModelId, selectedPresetId],
@@ -103,22 +69,9 @@ export function TaskMonitor() {
       !isInputTaskPreview &&
       (activeTask?.status === 'running' || activeTask?.status === 'queued'),
   ).length;
-  const mediaStates = monitorMediaStates(activeTask);
+  const mediaStates = useMemo(() => monitorMediaStates(activeTask), [activeTask]);
   const currentMedia = currentTaskMedia(activeTask, mediaStates);
   const timing = useTaskTiming(activeTask, currentMedia);
-  const followCurrentMedia = useCallback(() => {
-    const mediaRow = mediaRowRef.current;
-    if (mediaRow === null || typeof mediaRow.scrollIntoView !== 'function') return;
-    mediaRow.scrollIntoView({
-      behavior: reducedMotion ? 'auto' : 'smooth',
-      block: 'center',
-    });
-  }, [reducedMotion]);
-  const mediaFollowHandlers = useAutoFollow({
-    enabled: activeTask?.status === 'running' && currentMedia !== undefined,
-    follow: followCurrentMedia,
-    targetKey: currentMedia?.path ?? null,
-  });
 
   if (activeTask === undefined) {
     return (
@@ -140,7 +93,6 @@ export function TaskMonitor() {
     ? `已选择 ${inputs.length} 项输入，共 ${activeTask.sourceCount} 个媒体，提交后展开文件夹`
     : monitorSourceSummary(activeTask);
   const processedCount = processedMediaCount(mediaStates);
-  const processStep = taskProcessStep(activeTask);
   const durationSummary = formatDurationSummary(taskDurationSummary(activeTask)).replace(
     /^总时长\s*/,
     '',
@@ -339,92 +291,14 @@ export function TaskMonitor() {
           </div>
         </section>
 
-        <section className="task-media-monitor" aria-labelledby="task-media-title">
-          <header>
-            <div>
-              <p className="step-label">EXPANDED MEDIA</p>
-              <h3 id="task-media-title">
-                {isInputTaskPreview ? '待处理输入清单' : '媒体文件进度'}
-              </h3>
-            </div>
-            <span>
-              {mediaStates.length} {isInputTaskPreview ? '项输入' : '个文件'}
-            </span>
-          </header>
-          <div {...mediaFollowHandlers} className="task-media-list" tabIndex={0}>
-            {mediaStates.map((media, index) => (
-              <article
-                className={`task-media-row is-${media.status}`}
-                key={media.path}
-                ref={media.path === currentMedia?.path ? mediaRowRef : undefined}
-              >
-                <span className="task-media-index">{String(index + 1).padStart(2, '0')}</span>
-                <span className="task-media-icon" aria-hidden="true">
-                  {media.status === 'completed' ? <Check size={16} /> : <FileAudio size={16} />}
-                </span>
-                <div className="task-media-copy">
-                  <strong>{fileName(media.path)}</strong>
-                  <span title={media.path}>{parentDirectory(media.path)}</span>
-                  <div
-                    aria-label={
-                      media.progress === null
-                        ? `${fileName(media.path)} 进度未知`
-                        : `${fileName(media.path)} 进度 ${Math.round(media.progress)}%`
-                    }
-                    className={`task-media-track ${media.progress === null ? 'is-indeterminate' : ''}`}
-                  >
-                    {media.progress !== null && (
-                      <span style={{ width: `${Math.max(0, Math.min(100, media.progress))}%` }} />
-                    )}
-                  </div>
-                </div>
-                <div className="task-media-state">
-                  <strong>
-                    {media.progress === null ? '—' : `${Math.round(media.progress)}%`}
-                  </strong>
-                  <span>{mediaStatusLabel(media, activeTask)}</span>
-                  <small>
-                    {formatElapsedSeconds(
-                      media.path === currentMedia?.path
-                        ? timing.mediaSeconds
-                        : media.elapsedSeconds,
-                    )}{' '}
-                    / {formatMediaDuration(media.durationSeconds)}
-                  </small>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="task-process-monitor" aria-labelledby="task-process-title">
-          <header>
-            <div>
-              <p className="step-label">PROCESS</p>
-              <h3 id="task-process-title">当前任务处理链路</h3>
-            </div>
-            <span>{formatTaskStage(activeTask.stage)}</span>
-          </header>
-          <ol>
-            {PROCESS_STEPS.map((step, index) => {
-              const completed =
-                activeTask.status === 'completed' || (isActive && index < processStep);
-              const active = activeTask.status === 'running' && index === processStep;
-              return (
-                <li
-                  className={completed ? 'is-complete' : active ? 'is-active' : ''}
-                  key={step.label}
-                >
-                  <span>{completed ? <Check size={14} /> : <i />}</span>
-                  <strong>{step.label}</strong>
-                  <small>
-                    {completed ? '完成' : active ? formatTaskStage(activeTask.stage) : '待执行'}
-                  </small>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
+        <TaskMediaList
+          task={activeTask}
+          mediaStates={mediaStates}
+          currentMedia={currentMedia}
+          mediaSeconds={timing.mediaSeconds}
+          isInputTaskPreview={isInputTaskPreview}
+        />
+        <TaskProcessChain task={activeTask} />
       </div>
       <ConfirmDialog
         confirmLabel="终止任务"

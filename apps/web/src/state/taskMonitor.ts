@@ -1,5 +1,13 @@
 import type { TaskMediaSnapshot, TaskSnapshot } from '../contracts/desktop';
 import { activeTaskId } from './workspaceTaskState';
+import { formatTaskStage } from './taskStage';
+
+function sameMediaPath(left: string, right: string | undefined): boolean {
+  return (
+    right !== undefined &&
+    left.replaceAll('/', '\\').toLowerCase() === right.replaceAll('/', '\\').toLowerCase()
+  );
+}
 
 export function resolveTaskMonitorTarget(
   tasks: TaskSnapshot[],
@@ -23,7 +31,7 @@ export function monitorMediaStates(task: TaskSnapshot | undefined): TaskMediaSna
       []);
   return paths.map((path) => {
     const completed = task.status === 'completed';
-    const running = task.status === 'running' && path === task.activeInput;
+    const running = task.status === 'running' && sameMediaPath(path, task.activeInput);
     return {
       path,
       status: completed ? 'completed' : running ? 'running' : 'pending',
@@ -40,10 +48,12 @@ export function currentTaskMedia(
 ): TaskMediaSnapshot | undefined {
   if (!task || task.status === 'queued') return undefined;
   return (
-    media.find((item) => item.path === task.activeInput) ??
+    media.find((item) => sameMediaPath(item.path, task.activeInput)) ??
     media.find((item) => item.status === 'running') ??
     (task.currentMediaIndex
-      ? media.find((item) => item.path === task.mediaPaths?.[task.currentMediaIndex! - 1])
+      ? media.find((item) =>
+          sameMediaPath(item.path, task.mediaPaths?.[task.currentMediaIndex! - 1]),
+        )
       : undefined) ??
     (task.status === 'completed'
       ? media.filter((item) => item.status !== 'skipped').at(-1)
@@ -64,4 +74,31 @@ export function taskProcessStep(task: TaskSnapshot): number {
   if (stage === 'output.writing') return 3;
   if (stage === 'task.finalizing') return 4;
   return -1;
+}
+
+const PROCESS_STEPS = ['输入与模型准备', '媒体转录', '文本后处理', '写入输出', '任务汇总'] as const;
+
+export function taskProcessStates(task: TaskSnapshot) {
+  const current = taskProcessStep(task);
+  const interrupted = task.status === 'failed' || task.status === 'cancelled';
+  return PROCESS_STEPS.map((label, index) => {
+    const completed = task.status === 'completed' || (current >= 0 && index < current);
+    const active = task.status === 'running' && index === current;
+    const stopped = interrupted && index === current;
+    return {
+      label,
+      state: completed ? 'complete' : active ? 'active' : stopped ? 'interrupted' : 'pending',
+      detail: completed
+        ? '完成'
+        : active
+          ? formatTaskStage(task.stage)
+          : stopped
+            ? '已中断'
+            : interrupted
+              ? current < 0
+                ? '阶段未记录'
+                : '未执行'
+              : '待执行',
+    };
+  });
 }

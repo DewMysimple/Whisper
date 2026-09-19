@@ -1071,7 +1071,7 @@ test('supports workspace navigation, theme and configuration export', async ({
   ).resolves.toBeLessThan(1);
   await expect(
     page.locator('.task-history-shell').evaluate((shell) => {
-      const heading = shell.querySelector('.panel-heading')!.getBoundingClientRect();
+      const heading = shell.querySelector('.task-history-heading')!.getBoundingClientRect();
       const controls = shell.querySelector('.task-control-deck')!.getBoundingClientRect();
       const summary = shell.querySelector('.task-summary-band')!.getBoundingClientRect();
       const manager = shell.querySelector('.task-history-manager')!.getBoundingClientRect();
@@ -1095,7 +1095,7 @@ test('supports workspace navigation, theme and configuration export', async ({
     controlBackground: 'rgba(0, 0, 0, 0)',
     controlBorder: 'none',
     controlPadding: '0px',
-    overflow: 'hidden',
+    overflow: 'visible',
     radius: 20,
   });
   await expect(
@@ -1107,7 +1107,7 @@ test('supports workspace navigation, theme and configuration export', async ({
         card.getBoundingClientRect(),
       );
       const style = getComputedStyle(shell.querySelector('.task-history-archive')!);
-      const panelStyle = getComputedStyle(shell.querySelector('.task-panel.is-expanded')!);
+      const panelStyle = getComputedStyle(shell.querySelector('.task-panel')!);
       return {
         blocksAreSeparated: archive.top - manager.bottom,
         cardLeftInset: firstCard.left - archive.left,
@@ -1210,7 +1210,7 @@ test('supports workspace navigation, theme and configuration export', async ({
       whiteSpace: 'nowrap',
     }),
   );
-  await expect(page.locator('.task-panel.is-expanded .progress-track')).toHaveCount(0);
+  await expect(page.locator('.task-panel .progress-track')).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
   await page.screenshot({ fullPage: true, path: testInfo.outputPath('tasks-light.png') });
@@ -1380,20 +1380,20 @@ test('monitors the active task and manages dated history in a responsive grid', 
     .click();
   await expect(
     page
-      .locator('.task-panel.is-expanded .task-list')
+      .locator('.task-panel .task-list')
       .evaluate(
         (element) =>
           getComputedStyle(element).gridTemplateColumns.split(' ').filter(Boolean).length,
       ),
   ).resolves.toBe(4);
-  await expect(page.locator('.task-panel.is-expanded .task-row')).toHaveCount(2);
+  await expect(page.locator('.task-panel .task-row')).toHaveCount(2);
   await expect(
     page
-      .locator('.task-panel.is-expanded .task-row')
+      .locator('.task-panel .task-row')
       .first()
       .evaluate((element) => getComputedStyle(element).borderRadius),
   ).resolves.toBe('18px');
-  await expect(page.locator('.task-panel.is-expanded .progress-track')).toHaveCount(0);
+  await expect(page.locator('.task-panel .progress-track')).toHaveCount(0);
 
   await page.getByRole('button', { name: '全部日期' }).click();
   const calendar = page.getByRole('dialog', { name: '按任务日期筛选' });
@@ -1451,7 +1451,7 @@ test('monitors the active task and manages dated history in a responsive grid', 
     .click();
   await expect(
     page
-      .locator('.task-panel.is-expanded .task-list')
+      .locator('.task-panel .task-list')
       .evaluate(
         (element) =>
           getComputedStyle(element).gridTemplateColumns.split(' ').filter(Boolean).length,
