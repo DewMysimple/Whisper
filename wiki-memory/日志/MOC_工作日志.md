@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-19 | operations | 从当前已同步的 `master` 源码重新构建完整便携版，并整体替换 `dist/WhisperSubtitle/`、`dist/WhisperSubtitle.zip` 与外层校验文件，确保用户拿到最新桌面、冻结 Worker、模型布局和发布元数据。 | archived | rebuild-latest-portable-release | [[日志/2026-09-19-重建并同步最新便携版.md|重建并同步最新便携版]] |
 | 2026-09-19 | ui | - | archived | unify-history-config-field-structure | [[日志/2026-09-19-统一历史配置字段结构.md|统一历史配置字段结构]] |
 | 2026-09-19 | ui | - | archived | refine-history-card-heading-and-rules | [[日志/2026-09-19-收紧历史卡片标题与分隔线.md|收紧历史卡片标题与分隔线]] |
 | 2026-09-19 | maintenance | - | archived | development-task-ui-maintainability | [[日志/2026-09-19-开发态功能与UI可维护性整改.md|开发态功能与 UI 可维护性整改]] |
