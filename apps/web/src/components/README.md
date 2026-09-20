@@ -10,7 +10,7 @@
 | `SegmentedCard` | 连续分段的导航／筛选，显式传入选择状态               | `segmented-card.css` |
 
 - `Button`、`IconButton` 保留原生 `disabled`、`ref`、事件和表单属性，默认 `type="button"`。目前启动、确认弹窗、任务详情、历史操作和日志工具栏共用这些入口；已有原生 `.primary-button` / `.secondary-button` 也使用同一份样式。
-- 动作按钮和公共卡片在 hover / active 时只改变颜色、阴影和焦点，不平移或缩放命中区域。连续卡片的边框和底线必须保持相接。不得重新添加全局 `button:active` 变换或用 `!important` 覆盖组件交互。
+- 动作按钮和公共卡片在 hover / active 时不平移或缩放命中区域。`Button` 可通过 `motion` 启用内部内容的轻抬／按压过渡和表面渐亮，目前用于桌面外观预览入口；系统减弱动画时关闭内容位移和过渡，保留颜色／阴影反馈。连续卡片的边框和底线必须保持相接。不得重新添加全局 `button:active` 变换或用 `!important` 覆盖组件交互。
 - 图标动作默认无独立边框和外阴影，悬停／聚焦才强调。危险按钮的 `tone="danger"` 与 `aria-pressed` 显示已进入二次确认；确认对象与四秒有效期仍由业务组件及 `useTimedConfirmation` 管理。
 - `selection-card` 是已有的独立选择控件样式，保留选中语义与其自身缩放反馈；不要用它实现只导航或触发动作的卡片。
 - 页面只管理布局、间距和容器响应式规则。共享颜色使用主题变量；尺寸可读取继承的内容字号变量，不依赖 `.view-content` 祖先覆盖。

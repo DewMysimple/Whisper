@@ -81,6 +81,8 @@
 }
 .task-title-line strong {
   font-size: var(--font-body);
+  font-weight: 650;
+  line-height: 1.5;
   display: block;
   min-width: 0;
   max-width: 100%;
@@ -257,30 +259,27 @@
   min-width: 0;
   align-items: center;
   grid-template-columns: 34px minmax(0, 1fr);
-  gap: 10px;
+  gap: 8px 10px;
 }
 .task-card-identity {
-  display: grid;
   min-width: 0;
-  gap: 3px;
   grid-column: 2;
   grid-row: 1;
-  margin-top: 0;
 }
-.task-card-subline {
+.task-card-created {
   display: flex;
   min-width: 0;
+  grid-column: 1 / -1;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-.task-card-subline > time {
-  min-width: 0;
-  overflow: hidden;
+  gap: 7px;
   color: var(--text-faint);
   font-size: var(--font-caption);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.task-card-created > svg {
+  flex: 0 0 auto;
 }
 .task-card-progress {
   color: var(--text-muted);
@@ -389,7 +388,7 @@
 .task-title-line .task-title-basename {
   color: inherit;
   font-family: inherit;
-  font-size: var(--font-caption);
+  font-size: inherit;
   font-weight: inherit;
   line-height: inherit;
   min-width: 0;
@@ -400,7 +399,7 @@
 .task-title-line .task-title-extension {
   color: inherit;
   font-family: inherit;
-  font-size: var(--font-caption);
+  font-size: inherit;
   font-weight: inherit;
   line-height: inherit;
   flex: 0 0 auto;
@@ -551,11 +550,6 @@
 .task-card-model {
   display: grid;
   min-width: 0;
-  gap: 3px;
-}
-.task-card-model small {
-  color: var(--text-faint);
-  font-size: var(--font-caption);
 }
 .task-card-model strong {
   overflow: hidden;
@@ -568,17 +562,6 @@
   .task-card-footer {
     grid-template-columns: minmax(0, 1fr);
     gap: 6px;
-  }
-  .task-card-model {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-  .task-card-model small {
-    flex: 0 0 auto;
-  }
-  .task-card-model strong {
-    min-width: 0;
   }
   .task-card-footer-actions {
     justify-content: space-between;

@@ -14,6 +14,8 @@ const sharedOwners = new Map([
   ['primary-button', 'components/button.css'],
   ['secondary-button', 'components/button.css'],
   ['icon-action', 'components/button.css'],
+  ['button-motion', 'components/button.css'],
+  ['button-motion-content', 'components/button.css'],
 ]);
 
 export function taskStyleOwner(name) {

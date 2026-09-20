@@ -85,10 +85,11 @@ export const TaskHistoryCard = memo(function TaskHistoryCard({
                 )}
               </strong>
             </span>
-            <span className="task-card-subline">
-              <time dateTime={task.createdAt}>{formatTaskCreatedAt(task.createdAt)}</time>
-            </span>
           </span>
+          <time className="task-card-created" dateTime={task.createdAt}>
+            <Clock3 aria-hidden="true" size={13} />
+            {formatTaskCreatedAt(task.createdAt)}
+          </time>
         </div>
         <div className="task-card-progress-line">
           <span>{taskStatusLabel(task)}</span>
@@ -142,7 +143,6 @@ export const TaskHistoryCard = memo(function TaskHistoryCard({
       </CardButton>
       <div className="task-card-footer">
         <div className="task-card-model">
-          <small>模型</small>
           <strong title={getModelLabel(task.modelId)}>{getModelLabel(task.modelId)}</strong>
         </div>
         <div className="task-card-footer-actions" role="group" aria-label={`${task.title} 的操作`}>

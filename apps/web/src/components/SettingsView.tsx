@@ -1,4 +1,5 @@
 import {
+  ArrowRight,
   Check,
   ChevronDown,
   Download,
@@ -8,6 +9,7 @@ import {
   PanelLeft,
   PanelTop,
   Plus,
+  Play,
   RotateCcw,
   Type,
   Upload,
@@ -28,6 +30,7 @@ import {
   type UiFontFamily,
 } from '../state/persistence';
 import { useWorkspace } from '../state/workspace';
+import { Button } from './Button';
 
 const ACCENT_PALETTE: Array<{
   id: string;
@@ -658,12 +661,16 @@ export function SettingsView() {
               框架 {uiFontSize}px · 内容 {workspaceFontSize}px · 日志 {logFontSize}px
             </span>
             <div>
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                motion
+                className="appearance-preview-start"
                 onClick={() => useWorkspace.getState().setActiveView('workspace')}
               >
+                <Play aria-hidden="true" fill="currentColor" size={13} />
                 开始本地转录
-              </button>
+                <ArrowRight aria-hidden="true" size={15} />
+              </Button>
               <code>[WORKER] ready · LOCAL IPC</code>
             </div>
           </div>

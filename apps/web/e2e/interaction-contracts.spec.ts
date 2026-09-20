@@ -27,6 +27,78 @@ async function holdWithoutMoving(page: Page, target: Locator) {
 }
 
 for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+  test(`appearance preview animates hover and press without moving its hit area (${reducedMotion})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion });
+    await page.goto('/');
+    const openSettings = () =>
+      page
+        .getByRole('navigation', { name: '主导航' })
+        .getByRole('button', { name: '偏好设置', exact: true })
+        .click();
+    await openSettings();
+    const button = page.getByRole('button', { name: '开始本地转录', exact: true });
+    const sampleFeedback = () =>
+      button.evaluate(async (element) => {
+        const frames = [];
+        for (let index = 0; index < 16; index++) {
+          await new Promise(requestAnimationFrame);
+          const rect = element.getBoundingClientRect();
+          frames.push({
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            transform: getComputedStyle(element.firstElementChild!).transform,
+            shadow: getComputedStyle(element).boxShadow,
+          });
+        }
+        return frames;
+      });
+    for (const theme of ['light', 'dark']) {
+      const toggle = page.getByRole('button', {
+        name: `切换为${theme === 'dark' ? '深色' : '浅色'}主题`,
+      });
+      if (await toggle.count()) await toggle.click();
+      await button.scrollIntoViewIfNeeded();
+      await page.mouse.move(0, 0);
+      const idle = (await sampleFeedback()).at(-1)!;
+      // Hover the bottom edge: inner motion must never displace the native button.
+      await page.mouse.move(idle.x + idle.width / 2, idle.y + idle.height - 0.25);
+      const hover = await sampleFeedback();
+      await page.mouse.down();
+      const pressed = await sampleFeedback();
+      expect(hover.at(-1)!.shadow).not.toBe(idle.shadow);
+      expect(pressed.at(-1)!.shadow).not.toBe(hover.at(-1)!.shadow);
+      for (const frame of [...hover, ...pressed]) {
+        for (const key of ['x', 'y', 'width', 'height'] as const)
+          expect(frame[key]).toBeCloseTo(idle[key], 1);
+      }
+      if (reducedMotion === 'reduce') {
+        expect([...hover, ...pressed].every((frame) => frame.transform === 'none')).toBe(true);
+      } else {
+        expect(new Set(hover.map((frame) => frame.transform)).size).toBeGreaterThan(1);
+        expect(new Set(pressed.map((frame) => frame.transform)).size).toBeGreaterThan(1);
+        expect(pressed.at(-1)!.transform).not.toBe(hover.at(-1)!.transform);
+      }
+      await page.mouse.up();
+      await expect(page.getByLabel('执行前清单')).toBeVisible();
+      await openSettings();
+    }
+    await page.mouse.move(0, 0);
+    await page.getByRole('button', { name: '恢复外观默认值', exact: true }).focus();
+    await page.keyboard.press('Tab');
+    await expect(button).toBeFocused();
+    await expect(button).toHaveCSS('outline-style', 'solid');
+    await page.keyboard.down('Space');
+    const keyboardPress = (await sampleFeedback()).at(-1)!;
+    if (reducedMotion === 'reduce') expect(keyboardPress.transform).toBe('none');
+    else expect(keyboardPress.transform).not.toBe('none');
+    await page.keyboard.up('Space');
+    await expect(page.getByLabel('执行前清单')).toBeVisible();
+  });
+
   test(`launch hover retains its edge hit area and gradient (${reducedMotion})`, async ({
     page,
   }) => {
@@ -113,6 +185,32 @@ test('history actions align and remain accessible across card widths and font si
     );
     for (const width of [1920, 1440, 1180, 900, 620]) {
       await page.setViewportSize({ width, height: 1080 });
+      const headings = await page.locator('.task-card-heading').evaluateAll((elements) =>
+        elements.map((heading) => {
+          const title = heading.querySelector('.task-title-line strong')!;
+          const time = heading.querySelector('time')!;
+          const icon = heading.querySelector('.task-status')!;
+          const extension = heading.querySelector('.task-title-extension')!;
+          const titleRect = title.getBoundingClientRect();
+          const timeRect = time.getBoundingClientRect();
+          const iconRect = icon.getBoundingClientRect();
+          return {
+            titleLarger:
+              parseFloat(getComputedStyle(title).fontSize) >
+              parseFloat(getComputedStyle(time).fontSize),
+            titleAligned:
+              Math.abs(titleRect.y + titleRect.height / 2 - iconRect.y - iconRect.height / 2) < 1,
+            timeBelow: timeRect.top >= Math.max(titleRect.bottom, iconRect.bottom) + 6,
+            timeAligned: Math.abs(timeRect.left - iconRect.left) < 1,
+            timeFits: time.scrollWidth <= time.clientWidth + 1,
+            extensionFits: extension.getBoundingClientRect().right <= titleRect.right + 1,
+          };
+        }),
+      );
+      for (const heading of headings) expect(Object.values(heading).every(Boolean)).toBe(true);
+      await expect(
+        page.locator('.task-card-footer').getByText('模型', { exact: true }),
+      ).toHaveCount(0);
       const geometry = await page.locator('.task-card-footer').evaluateAll((footers) =>
         footers.map((footer) => {
           const rect = footer.getBoundingClientRect();

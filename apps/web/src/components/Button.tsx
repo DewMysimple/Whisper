@@ -7,18 +7,24 @@ type NativeButtonProps = ComponentPropsWithRef<'button'>;
 export function Button({
   variant = 'secondary',
   tone = 'default',
+  motion = false,
   className = '',
+  children,
   ...props
 }: NativeButtonProps & {
   variant?: 'primary' | 'secondary';
   tone?: 'default' | 'danger';
+  /** Animate the inner content and surface while keeping the hit area fixed. */
+  motion?: boolean;
 }) {
   return (
     <button
       type="button"
-      className={`${variant}-button ${tone === 'danger' ? 'is-danger' : ''} ${className}`}
+      className={`${variant}-button ${tone === 'danger' ? 'is-danger' : ''} ${motion ? 'button-motion' : ''} ${className}`}
       {...props}
-    />
+    >
+      {motion ? <span className="button-motion-content">{children}</span> : children}
+    </button>
   );
 }
 

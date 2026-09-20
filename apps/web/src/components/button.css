@@ -57,6 +57,50 @@
 .secondary-button.is-danger {
   color: var(--danger);
 }
+.button-motion {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition-duration: 220ms;
+}
+.button-motion::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, #ffffff30, #ffffff08 65%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  content: '';
+  transition: opacity 220ms ease;
+}
+.button-motion-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: inherit;
+  transform: translateY(0) scale(1);
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.button-motion:not(:disabled):is(:hover, :focus-visible)::before {
+  opacity: 1;
+}
+.button-motion:not(:disabled):is(:hover, :focus-visible) > .button-motion-content {
+  transform: translateY(-1px) scale(1);
+}
+.primary-button.button-motion:not(:disabled):is(:hover, :focus-visible) {
+  box-shadow:
+    0 5px 18px color-mix(in srgb, var(--button-accent) 34%, transparent),
+    inset 0 1px #ffffff70;
+}
+.button-motion:not(:disabled):active > .button-motion-content {
+  transform: translateY(1px) scale(0.97);
+  transition-duration: 90ms;
+}
+.primary-button.button-motion:not(:disabled):active {
+  box-shadow: inset 0 2px 5px #00000029;
+  transition-duration: 90ms;
+}
 .icon-action {
   display: inline-grid;
   flex: 0 0 auto;
@@ -105,5 +149,12 @@
   .secondary-button,
   .icon-action {
     transition: none;
+  }
+  .button-motion::before,
+  .button-motion > .button-motion-content {
+    transition: none;
+  }
+  .button-motion:not(:disabled):is(:hover, :focus-visible, :active) > .button-motion-content {
+    transform: none;
   }
 }
