@@ -671,7 +671,7 @@ export function SettingsView() {
                 开始本地转录
                 <ArrowRight aria-hidden="true" size={15} />
               </Button>
-              <code>[WORKER] ready · LOCAL IPC</code>
+              <code className="diagnostic-text">[WORKER] ready · LOCAL IPC</code>
             </div>
           </div>
           <div className="appearance-preview-facts" aria-hidden="true">
@@ -873,7 +873,7 @@ export function SettingsView() {
             <div className="font-family-control">
               <span>
                 <strong>等宽字体</strong>
-                <small>用于 Worker 日志、路径与诊断数据</small>
+                <small>用于数值、路径与日志时间和来源标识</small>
               </span>
               <RoundedSelect
                 label="等宽字体"

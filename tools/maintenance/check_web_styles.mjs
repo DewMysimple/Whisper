@@ -16,6 +16,11 @@ const sharedOwners = new Map([
   ['icon-action', 'components/button.css'],
   ['button-motion', 'components/button.css'],
   ['button-motion-content', 'components/button.css'],
+  ['summary-text', 'components/summary-text.css'],
+  ['summary-label', 'components/summary-text.css'],
+  ['summary-value', 'components/summary-text.css'],
+  ['summary-description', 'components/summary-text.css'],
+  ['diagnostic-text', 'components/diagnostic-text.css'],
 ]);
 
 export function taskStyleOwner(name) {
@@ -45,19 +50,24 @@ export function inspectStyles(files) {
     const root = postcss.parse(css, { from: filename });
     roots.set(filename, root);
     const taskFile = filename.startsWith(taskDirectory);
-    const ownedFile = taskFile || [...sharedOwners.values()].includes(filename);
+    const ownedFile =
+      taskFile ||
+      filename === 'components/worker-logs.css' ||
+      [...sharedOwners.values()].includes(filename);
     const report = (node, message) =>
       problems.push(`${filename}:${node.source.start.line}: ${message}`);
     root.walkRules((rule) => {
       const conditions = conditionsOf(rule);
       if (conditions === null) return;
       for (const selector of rule.selectors) {
-        // The legacy small-text rule explicitly excludes the task workspace.
-        const ownedSelector = selector.replace(':where(:not(.tasks-view *))', '');
+        // Exclusions in the legacy small-text rule do not style the owned components.
+        const ownedSelector = selector.replace(/:where\(:not\([^)]*\)\)/g, '');
         for (const [, name] of ownedSelector.matchAll(/\.([\w-]+)/g)) {
           const owner = taskStyleOwner(name);
           if (owner && filename !== `${taskDirectory}${owner}`)
             report(rule, `.${name} belongs in ${taskDirectory}${owner}`);
+          if (/^worker-logs?-/.test(name) && filename !== 'components/worker-logs.css')
+            report(rule, `.${name} belongs in components/worker-logs.css`);
           const sharedOwner = sharedOwners.get(name);
           // Page-specific sizing remains with the page, baseline interactions with the primitive.
           if (sharedOwner && selector.startsWith(`.${name}`) && filename !== sharedOwner)

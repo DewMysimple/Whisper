@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-20 | maintenance | - | archived | readable-diagnostics-shared-presentation-2026-09-20 | [[日志/2026-09-20-统一监控诊断字体与公共展示组件.md|统一监控诊断字体与公共展示组件]] |
 | 2026-09-20 | ui | - | archived | history-type-and-preview-motion-2026-09-20 | [[日志/2026-09-20-精简历史标题时间与外观按钮动效.md|精简历史标题时间与外观按钮动效]] |
 | 2026-09-20 | ui | - | archived | development-checklist-ui-2026-09-20 | [[日志/2026-09-20-新清单开发态交互与布局整改.md|新清单开发态交互与布局整改]] |
 | 2026-09-20 | ui | - | archived | stable-action-cards-2026-09-20 | [[日志/2026-09-20-修复按钮闪跳与统一卡片操作.md|修复按钮闪跳与统一卡片操作]] |

@@ -127,26 +127,18 @@
   background: transparent;
 }
 .task-monitor-source {
-  font-size: max(9px, calc(var(--log-font-size) - 1px));
   display: grid;
   min-width: 0;
   grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   margin: 0;
-  color: var(--text-muted);
-  font-family: inherit;
   min-height: 86px;
   padding: 15px 16px;
   border: 0;
   border-radius: 0;
   background: transparent;
   padding-left: 40px;
-}
-.task-monitor-source span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .task-overall-track {
   overflow: hidden;
@@ -380,14 +372,11 @@
 }
 .task-monitor-output {
   justify-content: space-between;
-  font-size: max(9px, calc(var(--ui-font-size) - 4px));
   display: grid;
   min-width: 0;
   align-items: center;
   gap: 12px;
   margin: 0;
-  color: var(--text-muted);
-  font-family: inherit;
   grid-template-columns: 36px minmax(0, 1fr) auto;
   min-height: 86px;
   padding: 15px 16px;
@@ -398,69 +387,16 @@
   border-left: 1px solid var(--border);
 }
 .task-monitor-stop {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
   padding: 0 12px;
-  border: 1px solid var(--border);
   border-radius: 9px;
-  background: var(--surface-raised);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    background-color 140ms ease,
-    color 140ms ease,
-    transform 90ms ease-out;
-  border-color: color-mix(in srgb, #c9362b 28%, var(--border));
-  color: #b72f26;
   min-height: 32px;
   font-size: var(--font-caption);
 }
 .task-monitor-output button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
   padding: 0 12px;
-  border: 1px solid var(--border);
-  background: var(--surface-raised);
-  color: var(--text-muted);
-  font: inherit;
   font-size: var(--font-meta);
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    background-color 140ms ease,
-    color 140ms ease,
-    transform 90ms ease-out;
   min-height: 36px;
   border-radius: 10px;
-}
-.task-monitor-stop:hover,
-.task-monitor-stop:focus-visible {
-  border-color: color-mix(in srgb, #c9362b 55%, var(--border));
-  background: color-mix(in srgb, #c9362b 8%, var(--surface-raised));
-}
-.task-monitor-output strong {
-  color: var(--text);
-  font-family: var(--mono);
-}
-.task-monitor-output button:not(:disabled):hover,
-.task-monitor-output button:not(:disabled):focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-  color: var(--accent);
-}
-.task-monitor-output button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.task-monitor-stop:active,
-.task-monitor-output button:not(:disabled):active {
-  transform: scale(0.97);
 }
 .task-monitor-live.completed {
   background: var(--green-soft);
@@ -557,55 +493,11 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
-.task-monitor-source > div,
-.task-monitor-output > div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-.task-monitor-support-grid small {
-  color: var(--text-faint);
-  font-size: var(--font-caption);
-  line-height: 1.35;
-}
-.task-monitor-support-grid strong {
-  overflow: hidden;
-  color: var(--text);
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-meta);
-}
 .task-monitor-clear {
-  display: inline-flex;
   min-height: 32px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
   padding: 0 10px;
-  border: 1px solid var(--border);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-raised) 84%, transparent);
-  color: var(--text-muted);
-  font: inherit;
   font-size: var(--font-caption);
-  font-weight: 680;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    border-color 150ms ease,
-    background-color 150ms ease,
-    color 150ms ease,
-    transform 90ms ease-out;
-}
-.task-monitor-clear:hover,
-.task-monitor-clear:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.task-monitor-clear:active {
-  transform: scale(0.97);
 }
 .task-monitor-overline {
   min-width: 0;
@@ -746,13 +638,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .task-overall-track > span,
-  .task-media-track > span,
-  .task-monitor-stop,
-  .task-monitor-output button {
+  .task-media-track > span {
     transition: none;
-  }
-  .task-monitor-stop:active,
-  .task-monitor-output button:not(:disabled):active {
-    transform: none;
   }
 }

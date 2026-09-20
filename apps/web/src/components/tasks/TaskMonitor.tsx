@@ -32,6 +32,8 @@ import { formatTaskStage } from '../../state/taskStage';
 import { useWorkspace } from '../../state/workspace';
 import { taskOutputPaths } from '../../state/workspaceTaskState';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { Button } from '../Button';
+import { SummaryText } from '../SummaryText';
 import { formatElapsedSeconds, useTaskTiming } from '../useTaskTiming';
 
 function fileName(path: string): string {
@@ -135,23 +137,24 @@ export function TaskMonitor({ navigation }: { navigation?: ReactNode }) {
                   {statusLabel}
                 </span>
                 {isInputTaskPreview && (
-                  <button
+                  <Button
                     className="task-monitor-clear"
                     onClick={clearInputs}
                     title="只清空当前输入清单，不删除本机媒体文件"
                     type="button"
                   >
                     <Trash2 size={14} /> 清除清单
-                  </button>
+                  </Button>
                 )}
                 {isActive && (
-                  <button
+                  <Button
+                    tone="danger"
                     className="task-monitor-stop"
                     onClick={() => setTerminationTask(activeTask)}
                     type="button"
                   >
                     <Square fill="currentColor" size={12} /> 终止任务
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -269,27 +272,21 @@ export function TaskMonitor({ navigation }: { navigation?: ReactNode }) {
                   <span aria-hidden="true">
                     <FolderTree size={16} />
                   </span>
-                  <div>
-                    <small>输入来源</small>
-                    <strong>{sourceSummary}</strong>
-                  </div>
+                  <SummaryText label="输入来源" value={sourceSummary} />
                 </div>
               )}
               <div className="task-monitor-output">
                 <span aria-hidden="true">
                   <FolderOpen size={16} />
                 </span>
-                <div>
-                  <small>输出结果</small>
-                  <strong>已生成 {outputPaths.length} 个文件</strong>
-                </div>
-                <button
+                <SummaryText label="输出结果" value={`已生成 ${outputPaths.length} 个文件`} />
+                <Button
                   disabled={outputPaths.length === 0}
                   onClick={() => void openTaskOutputDirectory(activeTask.id)}
                   type="button"
                 >
                   打开目录
-                </button>
+                </Button>
               </div>
             </div>
           </div>

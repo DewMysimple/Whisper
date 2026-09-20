@@ -64,9 +64,9 @@ const UI_FONT_STACKS: Record<UiFontFamily, string> = {
 };
 
 const MONO_FONT_STACKS: Record<MonoFontFamily, string> = {
-  'cascadia-mono': "'Cascadia Mono', 'Cascadia Code', Consolas, monospace",
-  'cascadia-code': "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
-  consolas: "Consolas, 'Cascadia Mono', monospace",
+  'cascadia-mono': "'Cascadia Mono', 'Cascadia Code', Consolas, var(--ui-font-family), monospace",
+  'cascadia-code': "'Cascadia Code', 'Cascadia Mono', Consolas, var(--ui-font-family), monospace",
+  consolas: "Consolas, 'Cascadia Mono', var(--ui-font-family), monospace",
 };
 
 export function normalizeHexColor(value: string): string | null {

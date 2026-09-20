@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import App from './App';
 import './styles.css';
+import './components/diagnostic-text.css';
 import './components/tasks/task-workspace.css';
 import './components/tasks/task-monitor.css';
 import './components/tasks/task-history.css';

@@ -1,11 +1,13 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useWorkspace } from '../state/workspace';
+import { desktopBridge } from '../bridge';
 import { parseWorkerLogLine, WorkerLogsView } from './WorkerLogsView';
 
 describe('WorkerLogsView', () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(() => {
     useWorkspace.setState({
       hostStatus: { state: 'ready', pid: 4242, launchKind: 'mock', error: null },
@@ -66,5 +68,24 @@ describe('WorkerLogsView', () => {
     expect(screen.getByText('当前会话暂无对应日志，后续事件会自动显示。')).toBeInTheDocument();
     for (const card of cards) expect(card).not.toHaveAttribute('aria-pressed');
     expect(useWorkspace.getState().logs).toEqual(logs);
+  });
+
+  it('copies and exports original mixed-language lines including whitespace and unstructured errors', async () => {
+    const user = userEvent.setup();
+    const logs = [
+      '[2026-09-20 15:16:52] [MODEL] 模型已就绪 · Large V3 Turbo',
+      '  File "D:\\媒体\\会议 记录.wav", line 42\n\t设备错误 <unknown>',
+    ];
+    useWorkspace.setState({ logs });
+    const copy = vi.spyOn(desktopBridge, 'copyWorkerLogs').mockResolvedValue();
+    const exportFile = vi.spyOn(desktopBridge, 'exportWorkerLogs').mockResolvedValue(null);
+    render(<WorkerLogsView />);
+    await user.click(screen.getByRole('button', { name: '复制全部' }));
+    await user.click(screen.getByRole('button', { name: '导出 TXT' }));
+    const raw = `${logs.join('\r\n')}\r\n`;
+    expect(copy).toHaveBeenCalledExactlyOnceWith(raw);
+    expect(exportFile).toHaveBeenCalledExactlyOnceWith(raw);
+    expect(useWorkspace.getState().logs).toEqual(logs);
+    expect(screen.getByText(/设备错误/).textContent).toBe(logs[1]);
   });
 });

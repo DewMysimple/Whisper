@@ -17,6 +17,8 @@ import { useWorkspace } from '../state/workspace';
 import { useTimedConfirmation } from './useTimedConfirmation';
 import { CardButton } from './CardButton';
 import { Button } from './Button';
+import { SummaryText } from './SummaryText';
+import './worker-logs.css';
 import { useAutoFollow } from './useAutoFollow';
 
 interface ParsedWorkerLogLine {
@@ -149,45 +151,45 @@ export function WorkerLogsView() {
           <span className="worker-log-status-icon">
             <span className={`worker-log-pulse ${isReady ? 'is-ready' : ''}`} />
           </span>
-          <div>
-            <small>WORKER</small>
-            <strong>{isReady ? '运行就绪' : hostStatus.state.toUpperCase()}</strong>
-            <span>{isReady ? '诊断通道连接正常' : '正在等待本地服务'}</span>
-          </div>
+          <SummaryText
+            label="WORKER"
+            value={isReady ? '运行就绪' : hostStatus.state.toUpperCase()}
+            description={isReady ? '诊断通道连接正常' : '正在等待本地服务'}
+          />
         </CardButton>
         <CardButton onClick={() => locateLog('process')} title="定位进程日志">
           <span className="worker-log-status-icon">
             <Activity size={18} />
           </span>
-          <div>
-            <small>PROCESS</small>
-            <strong>{hostStatus.pid === null ? '等待启动' : `PID ${hostStatus.pid}`}</strong>
-            <span>{hostStatus.pid === null ? '进程尚未分配' : '受桌面 Host 监管'}</span>
-          </div>
+          <SummaryText
+            label="PROCESS"
+            value={hostStatus.pid === null ? '等待启动' : `PID ${hostStatus.pid}`}
+            description={hostStatus.pid === null ? '进程尚未分配' : '受桌面 Host 监管'}
+          />
         </CardButton>
         <CardButton onClick={() => locateLog('model')} title="定位模型日志">
           <span className="worker-log-status-icon">
             <Braces size={18} />
           </span>
-          <div>
-            <small>MODEL</small>
-            <strong>{model.state === 'unloaded' ? '按需加载' : model.state.toUpperCase()}</strong>
-            <span>{model.modelId ?? '任务开始时自动选择'}</span>
-          </div>
+          <SummaryText
+            label="MODEL"
+            value={model.state === 'unloaded' ? '按需加载' : model.state.toUpperCase()}
+            description={model.modelId ?? '任务开始时自动选择'}
+          />
         </CardButton>
         <CardButton onClick={() => locateLog('buffer')} title="定位最新日志">
           <span className="worker-log-status-icon">
             <CircleDot size={18} />
           </span>
-          <div>
-            <small>BUFFER</small>
-            <strong>{logs.length} 行日志</strong>
-            <span>仅保留当前桌面会话</span>
-          </div>
+          <SummaryText
+            label="BUFFER"
+            value={`${logs.length} 行日志`}
+            description="仅保留当前桌面会话"
+          />
         </CardButton>
       </section>
 
-      <section className="worker-log-console panel" aria-labelledby="worker-log-title">
+      <section className="worker-log-console" aria-labelledby="worker-log-title">
         <div className="worker-log-console-heading">
           <div className="worker-log-title-group">
             <span className="worker-log-title-icon">
@@ -224,7 +226,7 @@ export function WorkerLogsView() {
           </div>
         </div>
         <div
-          className="log-view worker-log-stream"
+          className="worker-log-stream"
           aria-label="Worker 日志"
           {...logFollowHandlers}
           ref={streamRef}
@@ -267,7 +269,7 @@ export function WorkerLogsView() {
                   <span className="worker-log-source" data-tone={parsed.tone}>
                     {parsed.scope}
                   </span>
-                  <span className="worker-log-message">{parsed.message}</span>
+                  <span className="worker-log-message diagnostic-text">{parsed.message}</span>
                 </code>
               );
             })

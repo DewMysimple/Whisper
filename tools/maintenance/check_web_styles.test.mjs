@@ -82,3 +82,14 @@ test('global button transforms cannot override fixed card hit areas', () => {
     [],
   );
 });
+
+test('diagnostics and summary typography cannot leak back into global styles', () => {
+  const result = inspectStyles([
+    ['styles.css', '.worker-log-message { font-size: 9px } .summary-value { font-family: monospace } .diagnostic-text { font-size: 9px }'],
+    ['components/worker-logs.css', '.worker-log-message { color: red } .worker-log-message { color: blue !important }'],
+  ]);
+  assert.equal(result.problems.length, 5);
+  assert.match(result.problems.join('\n'), /components\/worker-logs.css/);
+  assert.match(result.problems.join('\n'), /components\/summary-text.css/);
+  assert.match(result.problems.join('\n'), /components\/diagnostic-text.css/);
+});

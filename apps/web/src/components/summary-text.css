@@ -1,0 +1,29 @@
+/* Shared readable summaries, independent of log typography and page ancestors. */
+.summary-text {
+  --summary-caption-size: max(12px, calc(var(--workspace-font-size) - 2px));
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  font-family: var(--ui-font-family);
+  text-align: left;
+}
+.summary-label {
+  color: var(--text-muted);
+  font-size: var(--summary-caption-size);
+  font-weight: 400;
+  line-height: 1.5;
+}
+.summary-value {
+  color: var(--text);
+  font-size: var(--summary-value-size, max(14px, var(--workspace-font-size)));
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.summary-description {
+  color: var(--text-muted);
+  font-size: var(--summary-caption-size);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
