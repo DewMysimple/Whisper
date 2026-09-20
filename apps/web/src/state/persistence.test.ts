@@ -12,6 +12,7 @@ import {
 } from './persistence';
 
 const preferences: WorkspacePreferences = {
+  executionOptions: {},
   theme: 'dark',
   accentPreset: 'blue',
   customAccentColor: '#1A73E8',

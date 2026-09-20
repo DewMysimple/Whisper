@@ -28,16 +28,28 @@ test('configures models and parameters through the shared entry, persists them a
   await page.getByLabel('束搜索宽度', { exact: true }).fill('7');
   await page.getByLabel('束搜索宽度', { exact: true }).press('Tab');
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await page.getByRole('button', { name: '模型切换', exact: true }).click();
+  await page
+    .getByLabel('模型与参数功能')
+    .getByRole('button', { name: /模型切换/ })
+    .click();
   await expect(
     page.locator('.config-model').filter({ hasText: 'Large V3' }).filter({ hasText: '精度优先' }),
   ).toBeDisabled();
   await page.locator('.config-model').filter({ hasText: 'Medium' }).click();
-  await page.getByRole('button', { name: '参数调节', exact: true }).click();
+  await page
+    .getByLabel('模型与参数功能')
+    .getByRole('button', { name: /参数调节/ })
+    .click();
   await expect(page.getByLabel('束搜索宽度', { exact: true })).toHaveValue('5');
-  await page.getByRole('button', { name: '模型切换', exact: true }).click();
+  await page
+    .getByLabel('模型与参数功能')
+    .getByRole('button', { name: /模型切换/ })
+    .click();
   await page.locator('.config-model').filter({ hasText: 'Large V3 Turbo' }).click();
-  await page.getByRole('button', { name: '参数调节', exact: true }).click();
+  await page
+    .getByLabel('模型与参数功能')
+    .getByRole('button', { name: /参数调节/ })
+    .click();
   await expect(page.getByLabel('束搜索宽度', { exact: true })).toHaveValue('7');
   await page.reload();
   await page.getByRole('button', { name: '前往参数调节' }).click();
@@ -88,7 +100,70 @@ test('configuration renders in both themes and preserves accessible editable fie
       ).toBeLessThanOrEqual(1);
       await page.getByLabel('束搜索宽度', { exact: true }).focus();
       await expect(page.getByLabel('束搜索宽度', { exact: true })).toBeFocused();
+      await page
+        .getByLabel('模型与参数功能')
+        .getByRole('button', { name: /模型切换/ })
+        .click();
+      const cards = page.locator('.config-model');
+      await expect(cards).toHaveCount(6);
+      const geometry = await cards.evaluateAll((elements) =>
+        elements.map((element) => {
+          const bounds = element.getBoundingClientRect();
+          return {
+            width: bounds.width,
+            height: bounds.height,
+            top: Math.round(bounds.top),
+            overflow: element.scrollWidth - element.clientWidth,
+          };
+        }),
+      );
+      expect(
+        Math.max(...geometry.map((item) => item.width)) -
+          Math.min(...geometry.map((item) => item.width)),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.max(...geometry.map((item) => item.height)) -
+          Math.min(...geometry.map((item) => item.height)),
+      ).toBeLessThanOrEqual(1);
+      expect(geometry.every((item) => item.overflow <= 1)).toBe(true);
+      // The desktop shell keeps its 1080px minimum width even in a narrower viewport.
+      expect(new Set(geometry.map((item) => item.top)).size).toBe(width === 1728 ? 2 : 3);
+      expect(
+        await page.locator('.configuration-view').evaluate((el) => el.scrollWidth - el.clientWidth),
+      ).toBeLessThanOrEqual(1);
+      await page
+        .getByLabel('模型与参数功能')
+        .getByRole('button', { name: /参数调节/ })
+        .click();
     }
+    // Exercise the container breakpoint independently of the desktop shell's minimum width.
+    await page.locator('.configuration-view').evaluate((element) => {
+      (element as HTMLElement).style.width = '540px';
+    });
+    await page
+      .getByLabel('模型与参数功能')
+      .getByRole('button', { name: /模型切换/ })
+      .click();
+    const narrowGeometry = await page.locator('.config-model').evaluateAll((elements) =>
+      elements.map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return { width: bounds.width, height: bounds.height, left: bounds.left, top: bounds.top };
+      }),
+    );
+    expect(new Set(narrowGeometry.map((item) => item.top)).size).toBe(6);
+    expect(new Set(narrowGeometry.map((item) => item.left)).size).toBe(1);
+    expect(new Set(narrowGeometry.map((item) => item.width)).size).toBe(1);
+    expect(new Set(narrowGeometry.map((item) => item.height)).size).toBe(1);
+    await page
+      .getByLabel('模型与参数功能')
+      .getByRole('button', { name: /参数调节/ })
+      .click();
+    expect(
+      await page.locator('.configuration-view').evaluate((el) => el.scrollWidth - el.clientWidth),
+    ).toBeLessThanOrEqual(1);
+    await page.locator('.configuration-view').evaluate((element) => {
+      (element as HTMLElement).style.removeProperty('width');
+    });
   }
   await page.getByRole('button', { name: '返回转录工作台' }).click();
   await page.getByRole('button', { name: /任务监控与记录/ }).click();
@@ -97,4 +172,51 @@ test('configuration renders in both themes and preserves accessible editable fie
     .getByRole('button', { name: /历史记录/ })
     .click();
   await expect(page.locator('.task-card-created svg')).toHaveCount(0);
+});
+
+test('configuration shares the monitor navigation and performance panel presentation', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /任务监控与记录/ }).click();
+  const monitorNavigation = await page.locator('.task-workspace-switcher').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, border: style.borderBottom, gap: style.gap };
+  });
+  await page.getByRole('button', { name: /性能监控/ }).click();
+  const performancePanel = await page.locator('.performance-trend').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      background: style.backgroundColor,
+      border: style.border,
+      radius: style.borderRadius,
+      shadow: style.boxShadow,
+    };
+  });
+  await page.getByRole('button', { name: /模型与参数/ }).click();
+  const navigation = page.getByLabel('模型与参数功能');
+  await expect(navigation.locator('.segmented-card')).toHaveCount(2);
+  expect(
+    await navigation.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { background: style.backgroundColor, border: style.borderBottom, gap: style.gap };
+    }),
+  ).toEqual(monitorNavigation);
+  expect(
+    await page.locator('.config-workbench').evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        background: style.backgroundColor,
+        border: style.border,
+        radius: style.borderRadius,
+        shadow: style.boxShadow,
+      };
+    }),
+  ).toEqual(performancePanel);
+  await navigation.getByRole('button', { name: /参数调节/ }).click();
+  await expect(navigation.getByRole('button', { name: /参数调节/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.locator('.config-field')).toHaveCount(36);
 });

@@ -22,6 +22,7 @@ import { formatElapsedSeconds } from '../state/taskTiming';
 import { MODEL_IDS } from '../contracts/desktop';
 import { getModelLabel } from '../data/models';
 import { isCustomTaskDraft } from '../state/workspaceDraft';
+import { executionDevice, executionProblem } from '../state/executionOptions';
 
 const SAMPLE_FILES: InputSource[] = [
   {
@@ -160,6 +161,34 @@ export class MockDesktopBridge implements DesktopBridge {
     return { shutdown: true };
   }
 
+  async getHardwareCapabilities() {
+    return {
+      cpuThreads: 28,
+      devices: [
+        {
+          device: 'cpu' as const,
+          deviceIndex: 0,
+          name: 'Intel Core i7 · 演示',
+          computeTypes: ['int8', 'int8_float32', 'float32'],
+        },
+        {
+          device: 'cuda' as const,
+          deviceIndex: 0,
+          name: 'RTX 5070 Ti · 演示',
+          computeTypes: [
+            'float16',
+            'float32',
+            'int8',
+            'int8_float16',
+            'int8_float32',
+            'bfloat16',
+            'int8_bfloat16',
+          ],
+        },
+      ],
+    };
+  }
+
   async getPowerActionStatus(): Promise<PowerActionStatus> {
     return this.powerStatus;
   }
@@ -189,6 +218,11 @@ export class MockDesktopBridge implements DesktopBridge {
     draft: TranscriptionDraft,
     options: StartTranscriptionOptions = {},
   ): Promise<{ taskId: string }> {
+    const execution = { ...draft.execution };
+    const capabilities = await this.getHardwareCapabilities();
+    const problem = executionProblem(execution, capabilities);
+    if (problem) throw new Error(problem);
+    const device = executionDevice(execution, capabilities)!;
     const taskId = `mock-task-${this.taskSequence++}`;
     const mediaPaths = draft.inputs.flatMap((input) =>
       input.kind === 'directory'
@@ -214,10 +248,15 @@ export class MockDesktopBridge implements DesktopBridge {
       createdAt: new Date().toISOString(),
       draft: structuredClone(draft),
       hardware: {
-        device: 'cuda',
-        deviceIndex: 0,
-        computeType: 'float16',
-        cpuThreads: 0,
+        device: device.device,
+        deviceIndex: device.deviceIndex,
+        computeType:
+          execution.compute_type && execution.compute_type !== 'auto'
+            ? execution.compute_type
+            : device.device === 'cuda'
+              ? 'float16'
+              : 'int8',
+        cpuThreads: execution.cpu_threads ?? (device.device === 'cuda' ? 0 : 4),
       },
       mediaPaths,
       processingCount: mediaPaths.length,

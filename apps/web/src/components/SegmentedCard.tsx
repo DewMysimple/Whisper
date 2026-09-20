@@ -10,6 +10,7 @@ export function SegmentedCard({
   onClick,
   className = '',
   filter,
+  disabled,
 }: {
   label: string;
   value: ReactNode;
@@ -18,6 +19,7 @@ export function SegmentedCard({
   onClick(): void;
   className?: string;
   filter?: string;
+  disabled?: boolean;
 }) {
   return (
     <CardButton
@@ -25,6 +27,7 @@ export function SegmentedCard({
       selected={selected}
       onClick={onClick}
       data-filter={filter}
+      disabled={disabled}
     >
       <small>{label}</small>
       <strong>{value}</strong>

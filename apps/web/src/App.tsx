@@ -1,4 +1,5 @@
 import { ConfigurationView } from './components/ConfigurationView';
+import { HardwareView } from './components/HardwareView';
 import { AlertTriangle, ChevronDown, ChevronUp, Moon, Search, Sun, X } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
@@ -23,6 +24,7 @@ import { DEFAULT_APPEARANCE, TOPBAR_HEIGHT_RANGE } from './state/persistence';
 import { useWorkspace, type WorkspaceViewId } from './state/workspace';
 
 const PAGE_COPY: Record<WorkspaceViewId, { eyebrow: string; title: string }> = {
+  hardware: { eyebrow: 'COMPUTE SETTINGS', title: '硬件优化' },
   configuration: { eyebrow: 'INFERENCE WORKBENCH', title: '模型与参数' },
   workspace: {
     eyebrow: 'LOCAL TRANSCRIPTION',
@@ -296,6 +298,7 @@ export default function App() {
         >
           {activeView === 'workspace' && <WorkspaceView />}
           {activeView === 'configuration' && <ConfigurationView />}
+          {activeView === 'hardware' && <HardwareView />}
           {activeView === 'performance' && <PerformanceView />}
           {activeView === 'tasks' && <TasksView />}
           {activeView === 'logs' && <WorkerLogsView />}

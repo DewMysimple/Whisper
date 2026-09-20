@@ -17,6 +17,7 @@ supersedes: null
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-20 | maintenance | - | archived | readable-diagnostics-shared-presentation-2026-09-20 | [[日志/2026-09-20-统一监控诊断字体与公共展示组件.md|统一监控诊断字体与公共展示组件]] |
 | 2026-09-20 | ui | - | archived | history-type-and-preview-motion-2026-09-20 | [[日志/2026-09-20-精简历史标题时间与外观按钮动效.md|精简历史标题时间与外观按钮动效]] |
+| 2026-09-20 | feature | - | archived | hardware-workbench-release-2026-09-20 | [[日志/2026-09-20-硬件优化与工作台统一及便携版更新.md|硬件优化与工作台统一及便携版更新]] |
 | 2026-09-20 | feature | - | archived | public-inference-workbench-2026-09-20 | [[日志/2026-09-20-模型与参数工作台及参数公开.md|模型与参数工作台及参数公开]] |
 | 2026-09-20 | ui | - | archived | development-checklist-ui-2026-09-20 | [[日志/2026-09-20-新清单开发态交互与布局整改.md|新清单开发态交互与布局整改]] |
 | 2026-09-20 | ui | - | archived | stable-action-cards-2026-09-20 | [[日志/2026-09-20-修复按钮闪跳与统一卡片操作.md|修复按钮闪跳与统一卡片操作]] |

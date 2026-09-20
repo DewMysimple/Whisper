@@ -24,12 +24,13 @@ describe('desktop workspace', () => {
     ).toEqual([
       '转录工作台',
       '模型与参数',
+      '硬件优化',
       '性能监控',
       '任务监控与记录2',
       'Worker 日志',
       '偏好设置',
     ]);
-    expect(screen.queryByRole('button', { name: '硬件优化' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '硬件优化' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '模型切换' })).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /查看并修改当前模型与模式/ }),

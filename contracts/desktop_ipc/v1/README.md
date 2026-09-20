@@ -90,10 +90,11 @@ Boost clock shown by vendor utilities.
 
 `transcription.start` carries an `InputSource[]`, a base preset plus validated overrides, an explicit compatibility/custom output policy, and may include a local `model_id`. Supported task model IDs are `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-turbo`. The Worker freezes the model with the task and echoes it in `task.queued.data.model_id`; omitting it preserves the original `large-v3-turbo` behavior. The existing CLI continues to accept one physical input argument.
 
-The Worker selects inference hardware automatically: CUDA device 0 with FP16
-when available (or FP32 compatibility fallback), otherwise CPU with INT8. It
-freezes the resolved device for each task and reports it in
-`task.queued.data.hardware`; callers do not submit hardware preferences.
+When `execution` is omitted, the Worker preserves automatic hardware selection:
+CUDA device 0 with FP16 (or FP32 compatibility fallback), otherwise CPU INT8.
+Optional `execution` supplies device, precision, device index and CPU threads;
+the actual resolved configuration is frozen at submission and reported in
+`task.queued.data.hardware`. Retired hardware preference fields remain rejected.
 
 For output confirmation, the desktop first submits the existing Worker
 `fail` conflict policy. An `output.failed` error whose data contains
@@ -183,4 +184,35 @@ remain unchanged.
 
 `ParameterOverrides` is generated from `domain/parameters.py` by `tools/codegen/generate_preset_catalog.py`. The 36 options include language detection, decoding and temperature fallback, guidance, VAD, window size and word alignment. Omission inherits the preset/engine value; nullable fields explicitly disable a check or select automatic behavior. Temperatures accept a scalar or 1–10 strictly increasing values in 0–1. VAD fields are flattened in IPC and nested under `vad_parameters` before inference. SRT output always enables word timestamps.
 
-Python validates using the domain normalizer. Rust validates the embedded schema plus ordered temperatures and model/preset translation capabilities. Canonical CLI presets and message lifecycle are unchanged. The new fields require the matching source Host and Worker: the previous frozen release cannot accept these added options. This revision does not rebuild release artifacts.
+Python validates using the domain normalizer. Rust validates the embedded schema plus ordered temperatures and model/preset translation capabilities. Canonical CLI presets and message lifecycle are unchanged. The new fields require the matching source Host and Worker: the previous frozen release cannot accept these added options. The subsequent hardware-workbench task explicitly authorizes a matching release rebuild; packaged acceptance must verify the new Host and frozen Worker together.
+
+## Hardware execution settings (2026-09-20 revision)
+
+`transcription.start.params.execution` optionally references `ExecutionSettings`.
+It is a partial object with no required keys; explicit `null` and unknown fields
+are invalid. `model.load` does not accept this object.
+
+| Field | Accepted values | Omitted behavior |
+| --- | --- | --- |
+| `device` | `auto`, `cuda`, `cpu` | automatic |
+| `compute_type` | `auto`, `float16`, `float32`, `int8`, `int8_float16`, `int8_float32`, `bfloat16`, `int8_bfloat16` | existing automatic precision |
+| `device_index` | integer 0–31 | 0 |
+| `cpu_threads` | integer 0–256 | CPU 4, CUDA 0 |
+
+Explicit zero threads delegates thread selection to the inference runtime;
+omission retains the historical defaults. CPU requires index 0. Explicit CUDA,
+device indices and precisions are checked against CTranslate2 and fail clearly
+when unsupported, without silent fallback. The model cache compares the model
+and resolved `HardwareInfo`, and each queued task retains its own configuration.
+
+`system.environment` still accepts empty parameters and preserves its existing
+result. Optional `hardware_capabilities` contains `cpu_threads` (logical CPU
+count) and `devices`, whose entries contain `device`, `device_index`, `name`, and
+`compute_types`. These are actual CTranslate2 capabilities; NVML only supplies
+metadata. Probe failure returns optional `hardware_error` instead and does not
+alter the original environment availability result. Older Workers may omit both
+new fields; the UI then reports that capabilities are unavailable.
+
+Web and Rust validate the shared schema; Python uses `domain/execution.py`.
+The new fields are an authorized v1 expansion requiring a matching Host/Worker,
+without new commands or changes to task events and lifecycle.

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { readHardwareCapabilities } from '../state/executionOptions';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { desktopDir, join } from '@tauri-apps/api/path';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -218,6 +219,12 @@ export class TauriDesktopBridge implements DesktopBridge {
     return invoke<LocalModelDescriptor[]>('list_local_models');
   }
 
+  async getHardwareCapabilities() {
+    await this.ensureNativeListeners();
+    const envelope = await invoke<WorkerEnvelope>('worker_environment');
+    return readHardwareCapabilities(envelope.data.result);
+  }
+
   async getPowerCapabilities(): Promise<PowerCapabilities> {
     await this.ensureNativeListeners();
     return invoke<PowerCapabilities>('get_power_capabilities');
@@ -292,6 +299,7 @@ export class TauriDesktopBridge implements DesktopBridge {
           inputs: draft.inputs.map(({ path, kind, origin }) => ({ path, kind, origin })),
           basePresetId: draft.basePresetId,
           overrides: draft.overrides,
+          execution: draft.execution,
           output: toHostOutput(
             draft.output,
             draft.subtitleParameters,

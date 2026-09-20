@@ -48,6 +48,7 @@ def start_command(
     policy=None,
     model_id=None,
     preset_id="en_v1",
+    execution=None,
 ):
     params = {
         "inputs": [
@@ -62,6 +63,8 @@ def start_command(
     }
     if model_id is not None:
         params["model_id"] = model_id
+    if execution is not None:
+        params["execution"] = execution
     return CommandMessage(
         request_id,
         CommandMethod.TRANSCRIPTION_START,
@@ -416,6 +419,129 @@ def test_system_metrics_returns_read_only_machine_snapshot():
     assert completed.data["method"] == "system.metrics"
     assert completed.data["result"]["gpu_percent"] == 70.0
     assert completed.data["result"]["memory_available_gib"] == 20.0
+
+
+def test_explicit_execution_freezes_queue_and_reuses_only_identical_constructor_settings(tmp_path):
+    from whisper_subtitle.infrastructure.hardware import HardwareDetector
+    from whisper_subtitle.infrastructure.whisper_engine import FasterWhisperEngine
+
+    started = threading.Event()
+    release = threading.Event()
+    events = []
+    resolved = []
+    constructed = []
+    fake_model = FakeEngine(started=started, release=release)
+    detector = HardwareDetector(
+        lambda: SimpleNamespace(
+            get_cuda_device_count=lambda: 1,
+            get_supported_compute_types=lambda device, index: (
+                {"float16", "int8_float16"} if device == "cuda" else {"int8"}
+            ),
+        ),
+        lambda: (_ for _ in ()).throw(RuntimeError("no metadata")),
+    )
+
+    def resolve(settings):
+        resolved.append(dict(settings))
+        return detector.resolve(settings)
+
+    def factory(_model, **settings):
+        constructed.append(settings)
+        return fake_model
+
+    def load(selected, location, model_id):
+        return FasterWhisperEngine.load(selected, location, model_name=model_id, model_factory=factory)
+
+    runtime = WorkerRuntime(
+        events.append,
+        environment_checker=lambda: [],
+        runtime_configurer=lambda: SimpleNamespace(require_model=lambda _model: tmp_path),
+        hardware_resolver=resolve,
+        engine_loader=load,
+        media_duration_probe=lambda _path: (True, 12.5, None),
+        task_id_factory=iter(["task-gpu", "task-reuse", "task-quantized", "task-cpu"]).__next__,
+    )
+    settings_list = [
+        {"device": "cuda", "compute_type": "float16", "cpu_threads": 2},
+        {"device": "cuda", "compute_type": "float16", "cpu_threads": 2},
+        {"device": "cuda", "compute_type": "int8_float16", "cpu_threads": 2},
+        {"device": "cpu", "compute_type": "int8", "cpu_threads": 0},
+    ]
+    originals = [dict(settings) for settings in settings_list]
+    try:
+        for index, settings in enumerate(settings_list):
+            runtime.handle_command(start_command(
+                f"req-{index}", make_media(tmp_path, f"hardware-{index}.wav"), execution=settings,
+            ))
+            if index == 0:
+                assert started.wait(3)
+            settings["cpu_threads"] = 128
+        assert len(resolved) == 4
+        release.set()
+        assert runtime.wait_until_idle()
+    finally:
+        release.set()
+        assert runtime.close(timeout=3)
+
+    assert resolved == originals
+    assert constructed == [
+        {"device": "cuda", "device_index": 0, "compute_type": "float16", "cpu_threads": 2, "num_workers": 1},
+        {"device": "cuda", "device_index": 0, "compute_type": "int8_float16", "cpu_threads": 2, "num_workers": 1},
+        {"device": "cpu", "device_index": 0, "compute_type": "int8", "cpu_threads": 0, "num_workers": 1},
+    ]
+    queued_events = [event for event in events if isinstance(event, EventMessage) and event.event is EventCode.TASK_QUEUED]
+    assert [dict(event.data["hardware"]) for event in queued_events] == [
+        {**settings, "device_index": 0} for settings in originals
+    ]
+    assert all((tmp_path / "Text" / f"hardware-{index}.txt").is_file() for index in range(4))
+
+
+def test_unsupported_execution_fails_before_queue_or_model_loading(tmp_path):
+    from whisper_subtitle.infrastructure.hardware import HardwareDetector
+
+    events = []
+    detector = HardwareDetector(lambda: SimpleNamespace(get_cuda_device_count=lambda: 0))
+    runtime = WorkerRuntime(
+        events.append,
+        environment_checker=lambda: [],
+        hardware_resolver=detector.resolve,
+        media_duration_probe=lambda _path: (True, 12.5, None),
+    )
+    try:
+        with pytest.raises(WorkerCommandError, match="CUDA device 0 is unavailable") as failure:
+            runtime.handle_command(start_command(
+                "req-cuda", make_media(tmp_path, "unavailable.wav"), execution={"device": "cuda"},
+            ))
+        assert failure.value.code is ErrorCode.MODEL_LOAD_FAILED
+        assert events == []
+    finally:
+        assert runtime.close(timeout=3)
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_environment_capabilities_are_optional_and_failure_preserves_environment_result(fails):
+    events = []
+    capabilities = {"cpu_threads": 16, "devices": [{"device": "cpu", "device_index": 0, "name": "CPU", "compute_types": ["int8"]}]}
+
+    def probe():
+        if fails:
+            raise RuntimeError("CTranslate2 capability probe failed")
+        return capabilities
+
+    runtime = WorkerRuntime(events.append, environment_checker=lambda: [], hardware_capabilities_probe=probe)
+    try:
+        runtime.handle_command(CommandMessage("req-environment", CommandMethod.SYSTEM_ENVIRONMENT, {}))
+    finally:
+        assert runtime.close(timeout=3)
+    result = events[0].data["result"]
+    assert result["available"] is True
+    assert result["errors"] == ()
+    if fails:
+        assert "hardware_capabilities" not in result
+        assert result["hardware_error"] == "CTranslate2 capability probe failed"
+    else:
+        assert result["hardware_capabilities"]["cpu_threads"] == 16
+        assert result["hardware_capabilities"]["devices"][0]["compute_types"] == ("int8",)
 
 
 def test_media_inspect_uses_metadata_cache_and_returns_unknown_duration(tmp_path):

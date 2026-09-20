@@ -61,6 +61,16 @@ pub(super) fn validate_start_draft(draft: &StartDraft) -> Result<(), HostError> 
         return Err(HostError::new("request.invalid", "base preset is invalid"));
     }
     validate_overrides(&draft.overrides, &draft.base_preset_id, &draft.model_id)?;
+    if draft
+        .execution
+        .as_ref()
+        .is_some_and(|execution| !super::option_validation::valid_execution(execution))
+    {
+        return Err(HostError::new(
+            "request.invalid",
+            "execution settings are invalid",
+        ));
+    }
     let output = &draft.output;
     if !matches!(output.mode.as_str(), "compatibility" | "custom")
         || !matches!(
@@ -116,7 +126,7 @@ fn validate_overrides(
                         && TRANSLATION_MODEL_IDS.contains(&model_id)
                         && matches!(base_preset_id, "en_v1" | "en_v2"))
             }),
-            _ => super::parameter_validation::valid_parameter(name, value),
+            _ => super::option_validation::valid_parameter(name, value),
         };
         if !valid {
             return Err(HostError::new(

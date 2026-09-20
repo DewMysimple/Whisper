@@ -9,6 +9,7 @@ import { DEFAULT_RECOGNITION_STRATEGY } from './parameterProfiles';
 
 export function preferencesFromState(state: WorkspaceState): WorkspacePreferences {
   return {
+    executionOptions: { ...state.executionOptions },
     theme: state.theme,
     accentPreset: state.accentPreset,
     customAccentColor: state.customAccentColor,

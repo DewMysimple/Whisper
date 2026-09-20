@@ -593,6 +593,52 @@
         }
       ]
     },
+    "ExecutionSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "device": { "enum": ["auto", "cuda", "cpu"] },
+        "compute_type": {
+          "enum": ["auto", "float16", "float32", "int8", "int8_float16", "int8_float32", "bfloat16", "int8_bfloat16"]
+        },
+        "device_index": { "type": "integer", "minimum": 0, "maximum": 31 },
+        "cpu_threads": { "type": "integer", "minimum": 0, "maximum": 256 }
+      }
+    },
+    "HardwareCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu_threads", "devices"],
+      "properties": {
+        "cpu_threads": { "type": "integer", "minimum": 1 },
+        "devices": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["device", "device_index", "name", "compute_types"],
+            "properties": {
+              "device": { "enum": ["cpu", "cuda"] },
+              "device_index": { "type": "integer", "minimum": 0 },
+              "name": { "type": "string", "minLength": 1 },
+              "compute_types": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "EnvironmentResult": {
+      "type": "object",
+      "properties": {
+        "hardware_capabilities": { "$ref": "#/$defs/HardwareCapabilities" },
+        "hardware_error": { "type": "string", "minLength": 1 }
+      }
+    },
     "ResolvedHardware": {
       "type": "object",
       "additionalProperties": false,
@@ -610,6 +656,7 @@
       "required": ["inputs", "profile", "output"],
       "properties": {
         "model_id": { "enum": ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"] },
+        "execution": { "$ref": "#/$defs/ExecutionSettings" },
         "recognition_strategy": {
           "enum": ["stable_primary", "mixed_zh_en", "zh_detail_review"]
         },
@@ -756,7 +803,13 @@
       "properties": {
         "method": { "$ref": "#/$defs/CommandMethod" },
         "result": { "type": "object" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "method": { "const": "system.environment" } } },
+          "then": { "properties": { "result": { "$ref": "#/$defs/EnvironmentResult" } } }
+        }
+      ]
     },
     "ModelLoadingData": {
       "type": "object",

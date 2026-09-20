@@ -28,6 +28,33 @@ export type InputOrigin = 'dialog' | 'drop' | 'paste' | 'manual';
 export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type FinishAction = 'none' | 'shutdown';
 
+export interface ExecutionOptions {
+  device?: 'auto' | 'cuda' | 'cpu';
+  compute_type?:
+    | 'auto'
+    | 'float16'
+    | 'float32'
+    | 'int8'
+    | 'int8_float16'
+    | 'int8_float32'
+    | 'bfloat16'
+    | 'int8_bfloat16';
+  device_index?: number;
+  cpu_threads?: number;
+}
+
+export interface HardwareDevice {
+  device: 'cpu' | 'cuda';
+  deviceIndex: number;
+  name: string;
+  computeTypes: string[];
+}
+
+export interface HardwareCapabilities {
+  cpuThreads: number;
+  devices: HardwareDevice[];
+}
+
 export interface ResolvedHardware {
   device: 'cuda' | 'cpu';
   deviceIndex: number;
@@ -273,6 +300,7 @@ export interface LocalModelDescriptor {
 }
 
 export interface TranscriptionDraft {
+  execution?: ExecutionOptions;
   inputs: InputSource[];
   modelId: ModelId;
   recognitionStrategy?: RecognitionStrategy;
@@ -366,6 +394,7 @@ export interface DesktopBridge {
   getHostStatus(): Promise<HostStatus>;
   restartWorker(): Promise<HostStatus>;
   listLocalModels(): Promise<LocalModelDescriptor[]>;
+  getHardwareCapabilities(): Promise<HardwareCapabilities>;
   getPowerCapabilities(): Promise<PowerCapabilities>;
   getPowerActionStatus(): Promise<PowerActionStatus>;
   cancelPowerAction(): Promise<PowerActionStatus>;

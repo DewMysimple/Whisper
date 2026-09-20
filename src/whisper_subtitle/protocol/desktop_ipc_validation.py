@@ -230,7 +230,7 @@ def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
     _require_fields(
         params,
         required={"inputs", "profile", "output"},
-        optional={"model_id", "recognition_strategy"},
+        optional={"model_id", "recognition_strategy", "execution"},
         field_name="params",
         code=ErrorCode.REQUEST_INVALID,
     )
@@ -238,6 +238,13 @@ def _validate_transcription_start_params(params: Mapping[str, Any]) -> None:
         raise ProtocolValidationError(
             ErrorCode.REQUEST_INVALID, "params.model_id is unsupported"
         )
+    if "execution" in params:
+        from ..domain.execution import normalize_execution_settings
+
+        try:
+            normalize_execution_settings(params["execution"])
+        except ValueError as exc:
+            raise ProtocolValidationError(ErrorCode.REQUEST_INVALID, str(exc)) from exc
     inputs = params["inputs"]
     if not isinstance(inputs, Sequence) or isinstance(inputs, (str, bytes)) or not inputs:
         raise ProtocolValidationError(

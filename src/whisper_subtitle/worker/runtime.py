@@ -38,6 +38,8 @@ from .runtime_types import (
     EngineLoader,
     EnvironmentChecker,
     HardwareProbe,
+    HardwareResolver,
+    HardwareCapabilitiesProbe,
     MediaDurationProbe,
     MessageEmitter,
     PerformanceSampler,
@@ -92,6 +94,8 @@ class WorkerRuntime:
         logger: logging.Logger | None = None,
         runtime_configurer: RuntimeConfigurer = configure_runtime,
         hardware_detector: HardwareProbe | None = None,
+        hardware_resolver: HardwareResolver | None = None,
+        hardware_capabilities_probe: HardwareCapabilitiesProbe | None = None,
         engine_loader: EngineLoader = _default_engine_loader,
         performance_sampler: PerformanceSampler = collect_performance_sample,
         media_duration_probe: MediaDurationProbe = default_media_duration_probe,
@@ -108,6 +112,7 @@ class WorkerRuntime:
             str, tuple[int, int, tuple[bool, float | None, str | None]]
         ] = {}
         hardware_detector = hardware_detector or HardwareDetector().detect
+        self._hardware_capabilities = hardware_capabilities_probe or HardwareDetector().capabilities
         self._condition = threading.Condition()
         self._queue: deque[WorkerTask] = deque()
         self._tasks: dict[str, WorkerTask] = {}
@@ -119,6 +124,7 @@ class WorkerRuntime:
             emit,
             runtime_configurer=runtime_configurer,
             hardware_detector=hardware_detector,
+            hardware_resolver=hardware_resolver,
             engine_loader=engine_loader,
             idle_timeout_seconds=idle_timeout_seconds,
             logger=self._logger,
@@ -191,15 +197,17 @@ class WorkerRuntime:
             return False
         if command.method is CommandMethod.SYSTEM_ENVIRONMENT:
             errors = self._check_environment()
-            self._complete_command(
-                command,
-                {
-                    "available": not errors,
-                    "errors": errors,
-                    "python": platform.python_version(),
-                    "platform": platform.platform(),
-                },
-            )
+            result = {
+                "available": not errors,
+                "errors": errors,
+                "python": platform.python_version(),
+                "platform": platform.platform(),
+            }
+            try:
+                result["hardware_capabilities"] = self._hardware_capabilities()
+            except Exception as exc:
+                result["hardware_error"] = str(exc) or type(exc).__name__
+            self._complete_command(command, result)
             return False
         if command.method is CommandMethod.SYSTEM_METRICS:
             self._complete_command(command, self._performance_sampler())
@@ -384,6 +392,7 @@ class WorkerRuntime:
         if can_preload:
             self._model_cache.load(
                 model_id,
+                execution=command.params.get("execution"),
                 request_id=command.request_id,
             )
             hardware = self._model_cache.hardware
@@ -393,7 +402,7 @@ class WorkerRuntime:
                     "model loaded without a resolved hardware configuration",
                 )
         else:
-            hardware = self._model_cache.validate(model_id)
+            hardware = self._model_cache.validate(model_id, execution=command.params.get("execution"))
         task = WorkerTask(
             task_id=self._task_id_factory(),
             request_id=command.request_id,

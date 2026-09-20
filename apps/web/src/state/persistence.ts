@@ -1,6 +1,8 @@
 import { isParameters, isParameterOverrides as isOverrides } from './parameterValidation';
+import { isExecutionOptions } from './executionOptions';
 import type {
   EditableParameters,
+  ExecutionOptions,
   ModelId,
   OutputPolicy,
   ProfileMode,
@@ -62,6 +64,7 @@ export type {
 } from './appearancePreferences';
 
 export interface WorkspacePreferences extends AppearancePreferences {
+  executionOptions?: ExecutionOptions;
   selectedModelId: ModelId;
   selectedPresetId: PresetId;
   profileMode: ProfileMode;
@@ -143,6 +146,8 @@ function markInterruptedTask(task: TaskSnapshot): TaskSnapshot {
 
 function parsePreferences(value: unknown): WorkspacePreferences | null {
   if (!isRecord(value)) return null;
+  const executionOptions = value.executionOptions ?? {};
+  if (!isExecutionOptions(executionOptions)) return null;
   if (!isTheme(value.theme) || !isPreset(value.selectedPresetId)) return null;
   const legacyContentFontSize = value.contentFontSize;
   const uiFontSize = value.uiFontSize ?? DEFAULT_APPEARANCE.uiFontSize;
@@ -273,6 +278,7 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   if (!isOutputPolicy(output)) return null;
   return {
     theme: value.theme,
+    executionOptions: { ...executionOptions },
     accentPreset,
     customAccentColor: normalizeHexColor(customAccentColor)!,
     uiFontSize,
@@ -340,6 +346,9 @@ function normalizeTaskSnapshot(task: TaskSnapshot): TaskSnapshot {
         ? undefined
         : {
             ...normalizedDraft,
+            execution: isExecutionOptions(normalizedDraft.execution)
+              ? { ...normalizedDraft.execution }
+              : undefined,
             modelId: isModelId(normalizedDraft.modelId)
               ? normalizedDraft.modelId
               : DEFAULT_MODEL_ID,

@@ -103,3 +103,12 @@ test('configuration and shared entry surfaces retain their own style definitions
   assert.match(result.problems.join('\n'), /components\/configuration.css/);
   assert.match(result.problems.join('\n'), /components\/workspace-entry-card.css/);
 });
+
+test('hardware optimization styles retain an independent owner', () => {
+  const result = inspectStyles([
+    ['styles.css', '.optimization-field { padding: 0 }'],
+    ['components/hardware-optimization.css', '.optimization-field { padding: 1px } .optimization-field { padding: 2px !important }'],
+  ]);
+  assert.equal(result.problems.length, 3);
+  assert.match(result.problems.join('\n'), /components\/hardware-optimization.css/);
+});

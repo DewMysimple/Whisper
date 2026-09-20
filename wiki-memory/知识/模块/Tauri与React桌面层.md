@@ -6,6 +6,7 @@ importance: high
 updated: 2026-09-20
 topic: tauri-react-desktop
 source_logs:
+  - "[[日志/2026-09-20-硬件优化与工作台统一及便携版更新]]"
   - "[[日志/2026-09-20-模型与参数工作台及参数公开]]"
   - "[[日志/2026-09-20-统一监控诊断字体与公共展示组件]]"
   - "[[日志/2026-09-20-精简历史标题时间与外观按钮动效]]"
@@ -40,7 +41,7 @@ supersedes: null
 
 # Tauri 与 React 桌面层
 
-- `apps/web/src/` 提供页面组件、任务工作区、历史、设置、性能和 bridge；模型与参数由 `ConfigurationView` 提供独立页面，硬件优化仍不开放。
+- `apps/web/src/` 提供页面组件、任务工作区、历史、设置、性能和 bridge；模型与参数由 `ConfigurationView` 提供独立页面，`HardwareView` 提供独立硬件执行设置与实际能力查询，规则见 [[决策/ADR-005-硬件执行设置与工作台]]。
 - `apps/web/src/bridge/mockDesktopBridge.ts` 只用于浏览器测试；`tauriDesktopBridge.ts` 是正式本地 bridge。
 - `apps/desktop/src-tauri/` 负责窗口、原生对话框、拖放、系统通知、Worker Host、权限和受限输出预览。
 - UI 状态通过版本化 localStorage 保存设置和最多 100 条任务，不依赖服务端数据库。
@@ -76,3 +77,5 @@ supersedes: null
 - `check:styles` 检查任务、Worker 日志和公共按钮／文字样式归属、同条件重复选择器／属性、旧祖先变体和 `!important`，并禁止全局 `button` 变换覆盖局部命中区域；新增样式直接修改原责任规则。检查器与视觉验证说明见 [[知识/流程/开发与验证]]。
 
 模型与参数控制、生成目录和新旧 Worker 配套关系见 [[决策/ADR-004-模型与参数工作台]]。`ParameterField` 使用生成规则校验，页面不复制数值范围；`WorkspaceEntryCard` 集中路径输入与参数跳转的相同表面。预览使用独立 `preview-state.v1` 存储，正式 `desktop-state.v1` 保持原 key；两者不能互读模拟任务。
+
+硬件设置持久化为新 `executionOptions`，提交复制到 draft.execution；旧硬件字段继续丢弃。`state/executionOptions.ts` 读取 IPC schema 校验字段、解码 system.environment 的设备能力。模型／参数与硬件页复用连续分段卡、统一面板和紧凑标题，模型卡使用等宽网格／等高行；各页样式只维护在 configuration.css／hardware-optimization.css。

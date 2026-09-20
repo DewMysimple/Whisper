@@ -1,4 +1,5 @@
 import { isParameterValue, sameParameter } from './parameterValidation';
+import { isExecutionOptions } from './executionOptions';
 import { create } from 'zustand';
 
 import { desktopBridge } from '../bridge';
@@ -6,6 +7,7 @@ import { DEFAULT_MODEL_ID } from '../contracts/desktop';
 import type {
   DesktopEvent,
   EditableParameters,
+  ExecutionOptions,
   FinishAction,
   HostStatus,
   InputSource,
@@ -214,7 +216,7 @@ const INITIAL_TASKS: TaskSnapshot[] = [
 export type { TaskFilter } from './taskHistory';
 export type TaskWorkspaceMode = 'monitor' | 'history';
 export type WorkspaceViewId =
-  'workspace' | 'configuration' | 'performance' | 'tasks' | 'logs' | 'settings';
+  'workspace' | 'configuration' | 'hardware' | 'performance' | 'tasks' | 'logs' | 'settings';
 
 export interface PendingOverwrite {
   draft: TranscriptionDraft;
@@ -231,6 +233,8 @@ export interface PendingShutdownStart {
 }
 
 export interface WorkspaceState {
+  executionOptions: ExecutionOptions;
+  setExecutionOptions(options: ExecutionOptions): void;
   inputs: InputSource[];
   selectedModelId: ModelId;
   selectedPresetId: PresetId;
@@ -347,6 +351,15 @@ export interface WorkspaceState {
 }
 
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
+  executionOptions: {},
+  setExecutionOptions: (executionOptions) => {
+    if (!isExecutionOptions(executionOptions)) {
+      set({ lastError: '硬件设置字段或范围无效。' });
+      return;
+    }
+    set({ executionOptions: { ...executionOptions }, lastError: null });
+    persistLater(get);
+  },
   inputs: [],
   selectedModelId: DEFAULT_MODEL_ID,
   selectedPresetId: 'en_v1',
@@ -806,6 +819,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       return;
     }
     const draft: TranscriptionDraft = {
+      execution: { ...state.executionOptions },
       inputs: state.inputs,
       modelId: state.selectedModelId,
       recognitionStrategy: DEFAULT_RECOGNITION_STRATEGY,
@@ -1094,6 +1108,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({
         inputs,
         selectedModelId: retryDraftSnapshot.modelId,
+        executionOptions: { ...retryDraftSnapshot.execution },
         selectedPresetId: retryDraftSnapshot.basePresetId,
         profileMode: retryDraftSnapshot.profileMode,
         parameters: { ...retryDraftSnapshot.effectiveParameters },

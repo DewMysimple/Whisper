@@ -57,6 +57,7 @@ export function inspectStyles(files) {
       taskFile ||
       filename === 'components/worker-logs.css' ||
       filename === 'components/configuration.css' ||
+      filename === 'components/hardware-optimization.css' ||
       [...sharedOwners.values()].includes(filename);
     const report = (node, message) =>
       problems.push(`${filename}:${node.source.start.line}: ${message}`);
@@ -73,6 +74,8 @@ export function inspectStyles(files) {
           if (/^worker-logs?-/.test(name) && filename !== 'components/worker-logs.css')
             report(rule, `.${name} belongs in components/worker-logs.css`);
           // config-card is the existing settings import/export panel, not this workbench.
+          if (/^optimization-/.test(name) && filename !== 'components/hardware-optimization.css')
+            report(rule, `.${name} belongs in components/hardware-optimization.css`);
           if (
             /^(config-|configuration-view$)/.test(name) &&
             name !== 'config-card' &&

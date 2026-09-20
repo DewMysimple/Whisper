@@ -29,3 +29,5 @@
 `WorkspaceEntryCard` 共用路径读取与参数跳转的标签／主文案／说明结构，底层使用 `CardButton`，外观只在 `workspace-entry-card.css` 维护。
 
 `ConfigurationView` 负责本地模型清单和参数分组，`ParameterField` 负责编辑缓冲、校验反馈与逐项复位；配置事实由 workspace 保存。`data/parameterPresentation.ts` 只保存文案与分组，字段类型／范围／默认值从 Python 生成，校验入口为 `state/parameterValidation.ts`。样式只放在 `configuration.css`，禁止追加到全局。
+
+`ConfigurationView` 的模型／参数导航复用 `SegmentedCard`，主容器与参数分组沿用任务／性能工作台的面板及紧凑标题层级。模型网格用等宽列和等高行，卡片内容允许长路径换行。`HardwareView` 使用相同公共组件展示快捷方案、真实能力摘要和四项执行设置；样式只放在 `hardware-optimization.css`。能力通过 typed bridge 的 `getHardwareCapabilities` 获取，设置规则来自 IPC schema，页面不能自行假定 GPU 或某精度可用。

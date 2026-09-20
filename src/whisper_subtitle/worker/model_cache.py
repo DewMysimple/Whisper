@@ -5,6 +5,7 @@ from __future__ import annotations
 import gc
 import logging
 import threading
+from collections.abc import Mapping
 from contextlib import contextmanager
 from typing import Any
 
@@ -15,6 +16,7 @@ from .runtime_types import (
     DEFAULT_MODEL_IDLE_TIMEOUT_SECONDS,
     EngineLoader,
     HardwareProbe,
+    HardwareResolver,
     MessageEmitter,
     RuntimeConfigurer,
     WorkerCommandError,
@@ -31,6 +33,7 @@ class ModelCache:
         *,
         runtime_configurer: RuntimeConfigurer = configure_runtime,
         hardware_detector: HardwareProbe | None = None,
+        hardware_resolver: HardwareResolver | None = None,
         engine_loader: EngineLoader = _default_engine_loader,
         idle_timeout_seconds: float = DEFAULT_MODEL_IDLE_TIMEOUT_SECONDS,
         logger: logging.Logger | None = None,
@@ -40,6 +43,7 @@ class ModelCache:
         self._emit = emit
         self._configure_runtime = runtime_configurer
         self._detect_hardware = hardware_detector or HardwareDetector().detect
+        self._resolve_hardware = hardware_resolver or HardwareDetector().resolve
         self._load_engine = engine_loader
         self._idle_timeout = float(idle_timeout_seconds)
         self._logger = logger or logging.getLogger(__name__)
@@ -108,10 +112,13 @@ class ModelCache:
         model_id: str,
         *,
         hardware: HardwareInfo | None = None,
+        execution: Mapping[str, Any] | None = None,
         request_id: str | None = None,
     ) -> tuple[Any, HardwareInfo, bool]:
         try:
-            resolved_hardware = hardware or self._detect_hardware()
+            resolved_hardware = hardware or (
+                self._resolve_hardware(execution) if execution else self._detect_hardware()
+            )
         except Exception as exc:
             raise WorkerCommandError(
                 ErrorCode.MODEL_LOAD_FAILED,
@@ -172,11 +179,13 @@ class ModelCache:
         self,
         model_id: str,
         *,
+        execution: Mapping[str, Any] | None = None,
         request_id: str | None = None,
     ) -> bool:
         with self._lock:
             _engine, _hardware, loaded_new = self._ensure_loaded_locked(
                 model_id,
+                execution=execution,
                 request_id=request_id,
             )
             self._schedule_idle_release_locked()
@@ -185,10 +194,14 @@ class ModelCache:
     def validate(
         self,
         model_id: str,
+        *,
+        execution: Mapping[str, Any] | None = None,
     ) -> HardwareInfo:
-        """Verify a local model exists without importing CTranslate2."""
+        """Resolve task hardware and verify a local model without loading it."""
         try:
-            resolved_hardware = self._detect_hardware()
+            resolved_hardware = (
+                self._resolve_hardware(execution) if execution else self._detect_hardware()
+            )
             if self.loaded and self.model_id == model_id and self.hardware == resolved_hardware:
                 return resolved_hardware
             location = self._configure_runtime()

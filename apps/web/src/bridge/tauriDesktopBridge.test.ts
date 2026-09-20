@@ -118,7 +118,23 @@ describe('TauriDesktopBridge', () => {
             event: 'command.completed',
             data: {
               method: 'system.environment',
-              result: { available: true, errors: [], python: '3.14.2', platform: 'Windows' },
+              result: {
+                available: true,
+                errors: [],
+                python: '3.14.2',
+                platform: 'Windows',
+                hardware_capabilities: {
+                  cpu_threads: 8,
+                  devices: [
+                    {
+                      device: 'cpu',
+                      device_index: 0,
+                      name: 'CPU',
+                      compute_types: ['int8', 'float32'],
+                    },
+                  ],
+                },
+              },
             },
           };
         }
@@ -315,6 +331,25 @@ describe('TauriDesktopBridge', () => {
     expect(native.invoke).toHaveBeenCalledWith('write_worker_log_export', {
       path: 'C:\\Users\\Test\\Desktop\\worker.txt',
       content,
+    });
+    bridge.dispose();
+  });
+
+  it('reads runtime capabilities and forwards explicit hardware settings without rewriting them', async () => {
+    const bridge = new TauriDesktopBridge();
+    await expect(bridge.getHardwareCapabilities()).resolves.toEqual({
+      cpuThreads: 8,
+      devices: [{ device: 'cpu', deviceIndex: 0, name: 'CPU', computeTypes: ['int8', 'float32'] }],
+    });
+    const execution = {
+      device: 'cpu' as const,
+      compute_type: 'int8' as const,
+      cpu_threads: 0,
+      device_index: 0,
+    };
+    await bridge.startTranscription({ ...DRAFT, execution });
+    expect(native.invoke).toHaveBeenCalledWith('start_transcription', {
+      draft: expect.objectContaining({ execution }),
     });
     bridge.dispose();
   });

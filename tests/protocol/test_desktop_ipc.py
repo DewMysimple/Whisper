@@ -89,6 +89,44 @@ def test_media_inspect_rejects_empty_path_list():
         CommandMessage("req-media-inspect", CommandMethod.MEDIA_INSPECT, {"paths": []})
 
 
+def test_execution_schema_and_domain_share_supported_values_and_bounds():
+    from whisper_subtitle.domain.execution import (
+        EXECUTION_COMPUTE_TYPES, EXECUTION_DEVICES, EXECUTION_INTEGER_LIMITS,
+    )
+
+    definition = load_schema()["$defs"]["ExecutionSettings"]
+    assert definition["additionalProperties"] is False
+    rules = definition["properties"]
+    assert rules["device"]["enum"] == list(EXECUTION_DEVICES)
+    assert rules["compute_type"]["enum"] == list(EXECUTION_COMPUTE_TYPES)
+    for key, bounds in EXECUTION_INTEGER_LIMITS.items():
+        assert (rules[key]["minimum"], rules[key]["maximum"]) == bounds
+
+
+@pytest.mark.parametrize(
+    "execution",
+    [None, [], {"device": "metal"}, {"compute_type": "default"},
+     {"cpu_threads": -1}, {"cpu_threads": 257}, {"cpu_threads": True},
+     {"cpu_threads": 1.5}, {"device_index": -1}, {"device_index": 32},
+     {"device_index": False}, {"parallel_workers": 2}],
+)
+def test_start_rejects_invalid_execution_settings(execution):
+    params = start_params()
+    params["execution"] = execution
+    with pytest.raises(ProtocolValidationError, match="execution"):
+        CommandMessage("req-execution", CommandMethod.TRANSCRIPTION_START, params)
+
+
+def test_execution_settings_are_partial_and_frozen():
+    for settings in ({}, {"cpu_threads": 0}, {"device": "cuda", "compute_type": "int8_float16", "device_index": 1}):
+        params = start_params()
+        original = dict(settings)
+        params["execution"] = settings
+        command = CommandMessage("req-execution", CommandMethod.TRANSCRIPTION_START, params)
+        settings["cpu_threads"] = 200
+        assert dict(command.params["execution"]) == original
+
+
 def queued(task_id="task-1") -> EventMessage:
     return EventMessage(
         EventCode.TASK_QUEUED,
@@ -204,6 +242,21 @@ def test_schema_parameter_boundaries_match_worker_domain_validation():
     assert properties["task"]["enum"] == ["transcribe", "translate"]
     assert properties["initial_prompt"]["anyOf"][0]["maxLength"] == 4000
     assert properties["hotwords"]["anyOf"][0]["maxLength"] == 4000
+
+
+def test_schema_execution_boundaries_match_worker_domain_validation():
+    from whisper_subtitle.domain.execution import (
+        EXECUTION_DEVICES,
+        EXECUTION_COMPUTE_TYPES,
+        EXECUTION_INTEGER_LIMITS,
+    )
+
+    properties = load_schema()["$defs"]["ExecutionSettings"]["properties"]
+    assert set(properties) == {"device", "compute_type", *EXECUTION_INTEGER_LIMITS}
+    assert properties["device"]["enum"] == list(EXECUTION_DEVICES)
+    assert properties["compute_type"]["enum"] == list(EXECUTION_COMPUTE_TYPES)
+    for name, (minimum, maximum) in EXECUTION_INTEGER_LIMITS.items():
+        assert properties[name] == {"type": "integer", "minimum": minimum, "maximum": maximum}
 
 
 def test_transcription_start_round_trips_structured_paths_and_custom_overrides():

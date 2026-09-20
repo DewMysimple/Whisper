@@ -8,6 +8,7 @@ import {
   Settings2,
   Sparkles,
   SlidersHorizontal,
+  Cpu,
 } from 'lucide-react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -24,6 +25,7 @@ const NAVIGATION: Array<{
 }> = [
   { id: 'workspace', label: '转录工作台', icon: AudioLines },
   { id: 'configuration', label: '模型与参数', icon: SlidersHorizontal },
+  { id: 'hardware', label: '硬件优化', icon: Cpu },
   { id: 'performance', label: '性能监控', icon: ChartNoAxesCombined },
   { id: 'tasks', label: '任务监控与记录', icon: Layers3 },
   { id: 'logs', label: 'Worker 日志', icon: ScrollText },

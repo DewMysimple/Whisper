@@ -30,7 +30,7 @@ mod logs;
 mod media;
 mod model_catalog;
 mod models;
-mod parameter_validation;
+mod option_validation;
 use self::logs::{worker_log_summary, worker_quality_diagnostic_log_lines};
 pub use self::media::{apply_media_inspections, inspect_input_paths};
 use self::model_catalog::DEFAULT_MODEL_ID;
@@ -137,7 +137,21 @@ pub struct StartDraft {
     pub inputs: Vec<BridgeInputSource>,
     pub base_preset_id: String,
     pub overrides: Map<String, Value>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_execution"
+    )]
+    pub execution: Option<Map<String, Value>>,
     pub output: BridgeOutputPolicy,
+}
+
+fn deserialize_execution<'de, D>(deserializer: D) -> Result<Option<Map<String, Value>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Missing execution keeps automatic selection; a present value must be an object.
+    Map::deserialize(deserializer).map(Some)
 }
 
 fn default_model_id() -> String {
@@ -947,7 +961,7 @@ mod validation;
 use validation::validate_start_draft;
 
 fn draft_to_protocol_params(draft: StartDraft) -> Value {
-    json!({
+    let mut params = json!({
         "model_id": draft.model_id,
         "recognition_strategy": draft.recognition_strategy,
         "inputs": draft.inputs,
@@ -973,7 +987,11 @@ fn draft_to_protocol_params(draft: StartDraft) -> Value {
             "preserve_source_markdown": draft.output.preserve_source_markdown,
             "conflict_policy": draft.output.conflict_policy,
         }
-    })
+    });
+    if let Some(execution) = draft.execution {
+        params["execution"] = Value::Object(execution);
+    }
+    params
 }
 
 #[cfg(test)]
@@ -1019,6 +1037,7 @@ mod tests {
             }],
             base_preset_id: "en_v1".to_owned(),
             overrides: Map::new(),
+            execution: None,
             output: BridgeOutputPolicy {
                 mode: "compatibility".to_owned(),
                 root_directory: None,
@@ -1084,6 +1103,66 @@ mod tests {
         assert_eq!(params["output"]["root_directory"], Value::Null);
         assert_eq!(params["output"]["preserve_source_markdown"], json!(false));
         assert!(params.get("effectiveParameters").is_none());
+        assert!(params.get("execution").is_none());
+    }
+
+    #[test]
+    fn freezes_explicit_execution_settings_without_inference_overrides() {
+        let execution = json!({
+            "device": "cuda",
+            "compute_type": "int8_float16",
+            "device_index": 1,
+            "cpu_threads": 8,
+        });
+        let mut bridge_draft = serde_json::to_value(valid_draft()).expect("serialize draft");
+        bridge_draft["execution"] = execution.clone();
+        let draft: StartDraft = serde_json::from_value(bridge_draft).expect("execution draft");
+        validate_start_draft(&draft).expect("valid execution settings");
+        let params = draft_to_protocol_params(draft);
+        assert_eq!(params["execution"], execution);
+        assert_eq!(params["profile"]["overrides"], json!({}));
+
+        let mut partial = valid_draft();
+        partial.execution = Some(Map::from_iter([("cpu_threads".to_owned(), json!(4))]));
+        validate_start_draft(&partial).expect("partial settings inherit omitted values");
+        assert_eq!(
+            draft_to_protocol_params(partial)["execution"],
+            json!({"cpu_threads": 4})
+        );
+
+        let mut automatic = valid_draft();
+        automatic.execution = Some(Map::new());
+        validate_start_draft(&automatic).expect("empty settings use automatic selection");
+        assert_eq!(draft_to_protocol_params(automatic)["execution"], json!({}));
+    }
+
+    #[test]
+    fn rejects_non_object_execution_and_invalid_option_fields() {
+        for execution in [json!(null), json!([]), json!("cuda"), json!(false)] {
+            let mut bridge_draft = serde_json::to_value(valid_draft()).expect("serialize draft");
+            bridge_draft["execution"] = execution;
+            assert!(serde_json::from_value::<StartDraft>(bridge_draft).is_err());
+        }
+        for execution in [
+            json!({"device": "mps"}),
+            json!({"device": null}),
+            json!({"compute_type": "invalid"}),
+            json!({"compute_type": false}),
+            json!({"device_index": -1}),
+            json!({"device_index": 32}),
+            json!({"cpu_threads": -1}),
+            json!({"cpu_threads": 257}),
+            json!({"cpu_threads": 2.5}),
+            json!({"cpu_threads": true}),
+            json!({"cpu_threads": "4"}),
+            json!({"cpuThreads": 4}),
+            json!({"num_workers": 2}),
+        ] {
+            let mut draft = valid_draft();
+            draft.execution = execution.as_object().cloned();
+            let error = validate_start_draft(&draft).expect_err("invalid execution option");
+            assert_eq!(error.code, "request.invalid");
+        }
     }
 
     #[test]
@@ -1554,6 +1633,11 @@ mod tests {
                     .join("chinese_short.wav")
             });
         let preset_id = env::var("WHISPER_SUBTITLE_GPU_PRESET").unwrap_or_else(|_| "cn".to_owned());
+        let execution = env::var("WHISPER_SUBTITLE_GPU_EXECUTION")
+            .ok()
+            .map(|value| {
+                serde_json::from_str::<Map<String, Value>>(&value).expect("execution object")
+            });
         let output_root = env::var_os("WHISPER_SUBTITLE_GPU_OUTPUT_ROOT")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -1572,6 +1656,16 @@ mod tests {
         assert_eq!(status.state, "ready");
         let environment = manager.environment().expect("environment command");
         assert_eq!(environment["data"]["result"]["available"], json!(true));
+        let capabilities = &environment["data"]["result"]["hardware_capabilities"];
+        assert!(
+            capabilities["cpu_threads"]
+                .as_u64()
+                .is_some_and(|count| count > 0)
+        );
+        assert!(capabilities["devices"].as_array().is_some_and(|devices| {
+            devices.iter().any(|device| device["device"] == "cuda")
+                && devices.iter().any(|device| device["device"] == "cpu")
+        }));
         let restarted = manager.restart().expect("real Worker must restart");
         assert_eq!(restarted.state, "ready");
         assert_ne!(restarted.pid, status.pid);
@@ -1601,6 +1695,7 @@ mod tests {
             }],
             base_preset_id: preset_id,
             overrides: Map::new(),
+            execution: execution.clone(),
             output: BridgeOutputPolicy {
                 mode: "custom".to_owned(),
                 root_directory: Some(output_root.to_string_lossy().into_owned()),
@@ -1626,6 +1721,15 @@ mod tests {
                 continue;
             }
             match message.get("event").and_then(Value::as_str) {
+                Some("task.queued") => {
+                    if let Some(execution) = &execution {
+                        for (name, value) in execution {
+                            if value != "auto" && !(name == "cpu_threads" && value == 0) {
+                                assert_eq!(message["data"]["hardware"][name], *value);
+                            }
+                        }
+                    }
+                }
                 Some("task.completed") => break message,
                 Some("task.failed" | "task.cancelled") => {
                     panic!("real task did not complete: {message}")

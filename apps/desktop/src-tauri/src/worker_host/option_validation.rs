@@ -1,19 +1,19 @@
-//! Validate public inference options against the generated v1 definition.
-//! This deliberately handles only the schema keywords used by ParameterOverrides.
+//! Validate inference and hardware options against their v1 definitions.
+//! This handles only the primitive schema keywords used by these option objects.
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::sync::LazyLock;
 
-static PARAMETERS: LazyLock<Value> = LazyLock::new(|| {
+static DEFINITIONS: LazyLock<Value> = LazyLock::new(|| {
     let schema: Value = serde_json::from_str(include_str!(
         "../../../../../contracts/desktop_ipc/v1/desktop_ipc.schema.json"
     ))
     .expect("embedded IPC schema must be valid JSON");
-    schema["$defs"]["ParameterOverrides"]["properties"].clone()
+    schema["$defs"].clone()
 });
 
 pub(super) fn valid_parameter(name: &str, value: &Value) -> bool {
-    let Some(rule) = PARAMETERS.get(name) else {
+    let Some(rule) = DEFINITIONS["ParameterOverrides"]["properties"].get(name) else {
         return false;
     };
     if !matches_rule(value, rule) {
@@ -32,6 +32,17 @@ pub(super) fn valid_parameter(name: &str, value: &Value) -> bool {
                 || !text.trim().is_empty());
     }
     true
+}
+
+pub(super) fn valid_execution(options: &Map<String, Value>) -> bool {
+    let Some(properties) = DEFINITIONS["ExecutionSettings"]["properties"].as_object() else {
+        return false;
+    };
+    options.iter().all(|(name, value)| {
+        properties
+            .get(name)
+            .is_some_and(|rule| matches_rule(value, rule))
+    })
 }
 
 fn matches_rule(value: &Value, rule: &Value) -> bool {
@@ -67,6 +78,7 @@ fn matches_rule(value: &Value, rule: &Value) -> bool {
                 && rule["maxItems"].as_u64().is_none_or(|max| count <= max)
                 && items.iter().all(|item| matches_rule(item, &rule["items"]))
         }),
+        None => rule.get("enum").is_some(),
         _ => false,
     }
 }
@@ -75,6 +87,27 @@ fn matches_rule(value: &Value, rule: &Value) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn accepts_execution_choices_and_boundaries_defined_by_the_schema() {
+        let fields = DEFINITIONS["ExecutionSettings"]["properties"]
+            .as_object()
+            .expect("execution schema properties");
+        assert_eq!(fields.len(), 4);
+        for (name, rule) in fields {
+            let values = rule["enum"]
+                .as_array()
+                .cloned()
+                .unwrap_or_else(|| vec![rule["minimum"].clone(), rule["maximum"].clone()]);
+            for value in values {
+                let options = Map::from_iter([(name.clone(), value)]);
+                assert!(
+                    valid_execution(&options),
+                    "valid schema choice: {options:?}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn accepts_public_options_and_rejects_invalid_values() {

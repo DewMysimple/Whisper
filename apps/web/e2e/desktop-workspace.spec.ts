@@ -358,16 +358,20 @@ test('keeps the selected-media preview synchronized and clearable from both work
 test('opens the authorized model and parameter workbench from navigation', async ({ page }) => {
   const navigation = page.getByRole('navigation', { name: '主导航' });
   await navigation.getByRole('button', { name: '模型与参数', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '模型切换' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '参数调节', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '本地模型' })).toBeVisible();
+  await expect(
+    page.getByLabel('模型与参数功能').getByRole('button', { name: /参数调节/ }),
+  ).toBeVisible();
 });
 
-test('does not expose the retired hardware optimization workbench', async ({ page }) => {
+test('opens the hardware optimization workbench without tooltip-only controls', async ({
+  page,
+}) => {
   await expect(page.locator('[title]')).toHaveCount(0);
   const navigation = page.getByRole('navigation', { name: '主导航' });
-  await expect(navigation.getByRole('button', { name: '硬件优化' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: '硬件优化' })).toHaveCount(0);
-  await expect(page.getByRole('group', { name: '推理设备' })).toHaveCount(0);
+  await navigation.getByRole('button', { name: '硬件优化' }).click();
+  await expect(page.getByRole('heading', { name: '硬件优化' })).toBeVisible();
+  await expect(page.getByLabel('执行设备', { exact: true })).toBeEnabled();
 });
 
 test('creates a task from the complete desktop workspace path', async ({ page }, testInfo) => {
@@ -1531,6 +1535,7 @@ test('opens the independent Worker log workspace and exposes only the restored s
   await expect(navigation.getByRole('button')).toHaveText([
     '转录工作台',
     '模型与参数',
+    '硬件优化',
     '性能监控',
     /任务监控与记录/,
     'Worker 日志',

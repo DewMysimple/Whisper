@@ -40,6 +40,7 @@ src/whisper_subtitle/
 ├── domain/
 │   ├── contracts.py           # Preset、请求、结果、进度事件
 │   ├── models.py              # 模型身份、能力与仓库映射唯一注册表
+│   ├── execution.py           # 桌面任务执行设置校验
 │   ├── presets.py             # 四 preset 的唯一注册表
 │   ├── transcription.py       # 引擎协议
 │   └── postprocess/           # 纯文本与片段后处理
@@ -110,7 +111,7 @@ CLI 或 Desktop IPC 输入
   → ProgressEvent / BatchResult
 ```
 
-CLI 和 Worker 共用同一 `TranscriptionService`；四个 preset 只改变注册表参数和后处理策略。`domain/presets.py` 是参数事实源，Web preset 选择和任务快照消费由 `tools/codegen/generate_preset_catalog.py` 生成的 TypeScript 投影。`domain/models.py` 是模型身份与能力事实源，`tools/codegen/generate_model_catalog.py` 将其投影到 Web TypeScript 和 Rust Host，并校验 IPC schema 中的模型枚举。当前开发源码提供“模型与参数”工作台，模型选择由本地清单检查，36 项推理参数按模型／preset 隔离保存。`domain/parameters.py` 生成 Web 类型与校验规则、参数默认投影和 IPC v1 参数定义，Host 读取内嵌 schema 校验，Worker 与 domain 共用归一化；显式覆盖才改变校准值。硬件优化仍不开放，Worker 在任务开始时自动解析设备，任务快照冻结参数、模型与实际硬件。`model.load`、`model.unload` 仅作为 Desktop IPC v1 冻结 Worker 兼容命令保留，当前 UI/bridge 不调用，且不再接受硬件偏好。
+CLI 和 Worker 共用同一 `TranscriptionService`；四个 preset 只改变注册表参数和后处理策略。`domain/presets.py` 是参数事实源，Web preset 选择和任务快照消费由 `tools/codegen/generate_preset_catalog.py` 生成的 TypeScript 投影。`domain/models.py` 是模型身份与能力事实源，`tools/codegen/generate_model_catalog.py` 将其投影到 Web TypeScript 和 Rust Host，并校验 IPC schema 中的模型枚举。当前开发源码提供“模型与参数”工作台，模型选择由本地清单检查，36 项推理参数按模型／preset 隔离保存。`domain/parameters.py` 生成 Web 类型与校验规则、参数默认投影和 IPC v1 参数定义，Host 读取内嵌 schema 校验，Worker 与 domain 共用归一化；显式覆盖才改变校准值。独立硬件优化工作台通过可选 execution 设置选择设备、GPU 编号、精度与 CPU 推理线程；省略字段保持既有自动默认。system.environment 返回 CTranslate2 实际能力，失败时保留原环境结果并给出 hardware_error。Worker 在提交时解析并检查显式选择，任务快照冻结参数、模型与实际 HardwareInfo；缓存只在模型与实际硬件配置一致时复用。`model.load`、`model.unload` 仅作为 Desktop IPC v1 冻结 Worker 兼容命令保留，当前 UI/bridge 不调用，且不再接受硬件偏好。
 
 Worker 流程为：
 
@@ -143,3 +144,5 @@ Web 工作台的事件归并位于 `apps/web/src/state/workspaceEvents.ts`，任
 - 可选正式安装介质为 NSIS current-user setup 与相邻 `_internal/` 的两部分离线布局；模型位于 `_internal/models/`，微软签名的 WebView2 Evergreen 离线安装器位于 `_internal/distribution/` 并由受控 NSIS 钩子执行，打包和安装均不下载前置依赖。
 - 完整便携目录包含桌面 EXE、Worker、CUDA 用户态依赖、模型和 distribution 元数据；目标运行时不需要 Python、Node.js 或 Rust。
 - 最终便携目录和 ZIP 直接位于 `dist/WhisperSubtitle/`、`dist/WhisperSubtitle.zip`；清单与 CycloneDX Python SBOM 位于应用 `_internal/`，外层 `WhisperSubtitle.sha256` 校验关键产物。当前产物未签名；自动更新未启用。
+
+硬件设置保存在新 executionOptions 中，旧硬件偏好不恢复；Web 与 Host 的 option_validation.rs 从 IPC ExecutionSettings 读取边界，Python domain/execution.py 保持对应校验。模型／参数页与硬件页复用任务／性能工作台的面板和连续分段卡，模型卡等宽等高。2026-09-20 本轮已获完整 dist 构建授权，正式前端、Host 和冻结 Worker 必须同步更新并完成交付验证。
