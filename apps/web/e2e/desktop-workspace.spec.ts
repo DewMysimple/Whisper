@@ -249,7 +249,7 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   ).resolves.toBe(1);
 });
 
-test('uses the same subtle press feedback for selectable cards', async ({ page }) => {
+test('keeps selection feedback separate from non-selecting action cards', async ({ page }) => {
   const pressAndReadTransform = async (card: Locator) => {
     await card.scrollIntoViewIfNeeded();
     const bounds = await card.boundingBox();
@@ -280,7 +280,6 @@ test('uses the same subtle press feedback for selectable cards', async ({ page }
   await expect(markdownFormat).toHaveClass(/selection-card/);
   await expect(finishAction).toHaveClass(/selection-card/);
   await pressAndReadTransform(transcriptMode);
-  await pressAndReadTransform(preflightProfile);
   await pressAndReadTransform(markdownFormat);
   await pressAndReadTransform(finishAction);
 

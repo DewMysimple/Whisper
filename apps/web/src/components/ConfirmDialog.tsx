@@ -2,6 +2,7 @@ import { AlertTriangle, X } from 'lucide-react';
 import { useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useDialogFocus } from './useDialogFocus';
+import { Button, IconButton } from './Button';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -62,38 +63,27 @@ export function ConfirmDialog({
             <p className="step-label">CONFIRM ACTION</p>
             <h2 id={titleId}>{title}</h2>
           </div>
-          <button
-            aria-label="关闭确认弹窗"
-            className="round-button"
-            disabled={pending}
-            onClick={onCancel}
-            type="button"
-          >
+          <IconButton label="关闭确认弹窗" disabled={pending} onClick={onCancel} type="button">
             <X size={17} />
-          </button>
+          </IconButton>
         </header>
         <p className="confirm-dialog-description" id={descriptionId}>
           {description}
         </p>
         {children && <div className="confirm-dialog-details">{children}</div>}
         <footer>
-          <button
-            className="secondary-button"
-            disabled={pending}
-            onClick={onCancel}
-            ref={cancelRef}
-            type="button"
-          >
+          <Button disabled={pending} onClick={onCancel} ref={cancelRef} type="button">
             {cancelLabel}
-          </button>
-          <button
-            className={`primary-button ${tone === 'danger' ? 'is-danger' : ''}`}
+          </Button>
+          <Button
+            variant="primary"
+            tone={tone}
             disabled={pending}
             onClick={onConfirm}
             type="button"
           >
             {pending ? '正在处理…' : confirmLabel}
-          </button>
+          </Button>
         </footer>
       </div>
     </div>,

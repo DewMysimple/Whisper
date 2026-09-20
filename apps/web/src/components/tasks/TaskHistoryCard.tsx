@@ -10,6 +10,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { CardButton } from '../CardButton';
+import { IconButton } from '../Button';
 import { memo } from 'react';
 import type { TaskSnapshot } from '../../contracts/desktop';
 import { getModelLabel } from '../../data/models';
@@ -144,74 +145,44 @@ export const TaskHistoryCard = memo(function TaskHistoryCard({
           <small>模型</small>
           <strong title={getModelLabel(task.modelId)}>{getModelLabel(task.modelId)}</strong>
         </div>
-        <div className="task-card-footer-actions">
+        <div className="task-card-footer-actions" role="group" aria-label={`${task.title} 的操作`}>
           {task.status === 'running' || task.status === 'queued' ? (
-            <button
-              aria-label={`取消 ${task.title}`}
-              className="icon-button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onCancel(task.id);
-              }}
-              type="button"
-            >
-              <CircleStop size={17} />
-            </button>
+            <IconButton label={`取消 ${task.title}`} onClick={() => onCancel(task.id)}>
+              <CircleStop size={16} />
+            </IconButton>
           ) : (
-            <div className="task-actions">
-              <button
-                aria-label={`${deleteArmed ? '再次点击删除' : '删除'} ${task.title} 的任务记录`}
+            <>
+              <IconButton
+                label={`${deleteArmed ? '再次点击删除' : '删除'} ${task.title} 的任务记录`}
                 aria-pressed={deleteArmed}
-                className={`icon-button is-danger-action ${deleteArmed ? 'is-delete-armed' : ''}`}
+                tone="danger"
                 data-confirm-action={`task:${task.id}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDelete(task);
-                }}
-                type="button"
+                onClick={() => onDelete(task)}
               >
-                <Trash2 size={17} />
-              </button>
+                <Trash2 size={16} />
+              </IconButton>
               {task.draft && (
-                <button
-                  aria-label={`${resumable ? '继续转录' : '重新转录'} ${task.title}`}
-                  className="icon-button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRestore(task);
-                  }}
-                  type="button"
+                <IconButton
+                  label={`${resumable ? '继续转录' : '重新转录'} ${task.title}`}
+                  onClick={() => onRestore(task)}
                 >
-                  <RotateCcw size={17} />
-                </button>
+                  <RotateCcw size={16} />
+                </IconButton>
               )}
               {task.status === 'completed' &&
                 task.outputAvailability !== 'missing' &&
                 taskOutputPaths(task).length > 0 && (
-                  <button
-                    aria-label={`在资源管理器中定位 ${task.title} 的输出`}
-                    className="icon-button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onReveal(task.id);
-                    }}
-                    type="button"
+                  <IconButton
+                    label={`在资源管理器中定位 ${task.title} 的输出`}
+                    onClick={() => onReveal(task.id)}
                   >
-                    <FolderOpen size={18} />
-                  </button>
+                    <FolderOpen size={16} />
+                  </IconButton>
                 )}
-              <button
-                aria-label={`查看 ${task.title} 详情`}
-                className="icon-button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onInspect(task.id);
-                }}
-                type="button"
-              >
-                <Eye size={18} />
-              </button>
-            </div>
+              <IconButton label={`查看 ${task.title} 详情`} onClick={() => onInspect(task.id)}>
+                <Eye size={16} />
+              </IconButton>
+            </>
           )}
         </div>
       </div>

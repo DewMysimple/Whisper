@@ -6,6 +6,7 @@ importance: high
 updated: 2026-09-20
 topic: tauri-react-desktop
 source_logs:
+  - "[[日志/2026-09-20-修复按钮闪跳与统一卡片操作]]"
   - "[[日志/2026-09-20-新清单开发态交互与布局整改]]"
   - "[[日志/2026-09-19-任务监控与记录深度维护]]"
   - "[[日志/2026-09-19-开发态功能与UI可维护性整改]]"
@@ -45,7 +46,8 @@ supersedes: null
 - `state/inputTaskPreview.ts` 把当前文件／目录选择投影为非持久化待执行输入列表；目录仅保留路径、媒体数、汇总时长与未知数，不推导子路径或逐文件时长，供执行前清单和任务监控共同读取；两个界面都通过 store 的 `clearInputs` 清空选择，不直接处理源文件。正式任务启动后仍以 Worker 事件为进度事实源。
 - `components/tasks/TasksView.tsx` 是任务工作台唯一入口；`TaskHistory` 管理搜索、筛选与动作，`TaskHistoryCard` 只接收快照和回调，`TaskMonitor` 组合主监控、`TaskMediaList` 和 `TaskProcessChain`。旧 compact／expanded 双分支已移除。组件与四个责任 CSS 的修改定位见 `apps/web/src/components/tasks/README.md`；当前视觉约定见 [[当前状态/项目概览]]。
 - `bridge/tauriWorkerDecoder.ts` 保存 Worker 消息解码、错误归一化和展示标签；`tauriWorkerEvents.ts` 负责消息到桌面任务事件的归并；`tauriDesktopBridge.ts` 负责 Tauri invoke、事件订阅、轮询和 DesktopBridge 生命周期。
-- `CardButton.tsx` 与 `card-button.css` 统一动作卡片的原生交互，供执行前清单、媒体卡、历史主卡、日志状态卡使用；`SegmentedCard` 与其样式统一任务页两项导航和四项筛选。动作卡不携带 `aria-pressed`，只有选择控件显式传入选中状态。
+- `Button.tsx` 的 `Button`／`IconButton` 集中通用动作的原生键盘、disabled、ref、焦点与危险状态展示；图标动作必须有可访问名称。`button.css` 是主次按钮和轻量图标按钮的样式入口，hover／active 不移动命中区域，渐变与背景色分层以避免悬停突变。页面只负责布局；相关职责与复用说明见 `components/README.md`。
+- `CardButton.tsx` 与 `card-button.css` 统一动作卡片的原生交互，供执行前清单、媒体卡、历史主卡、日志状态卡使用；`SegmentedCard` 与其样式统一任务页两项导航和四项筛选。动作卡不携带 `aria-pressed`，只有选择控件显式传入选中状态。公共动作卡按下只改变表面阴影，不缩放连续分段；已有 `selection-card` 继续保留其独立的选择交互。
 - `useTimedConfirmation` 统一历史与日志的原位二次确认取消时机，所属按钮通过 `data-confirm-action` 标识，不把清理对象或 bridge 调用塞入通用 hook。
 - `WorkerLogsView.tsx` 只把 Host 已生成的日志行解析为时间、来源和正文视觉列；复制、导出、清空及 store 缓冲区继续处理原始字符串，展示解析不构成新的日志协议。四张状态卡仅在当前缓冲区定位最近对应日志并聚焦控制台，暂时暂停自动跟随，无记录时明确反馈，不过滤或更改原始日志。
 - 工作台状态徽标共享高度、弹性布局和图文中心线，但继续保留各自图标：文本与 SRT 未启用态分别使用文件、字幕图标，执行前待补充态仍使用警告图标。待补充徽标、需要关注的媒体清单卡片及 SRT“选择以启用”共用柔和强调色通道；当前输出保留绿色，不用统一的新增图标替换原图标。
@@ -67,4 +69,4 @@ supersedes: null
 - `taskFiles.ts` 只从成功媒体的实际 `outputPaths` 选择 TXT／MD／SRT；单媒体旧历史可回退任务输出集合，批量无关联记录不得猜测输出。`revealPath` 继续使用已有 Host `reveal_output`，异常进入现有错误提示，未新增 IPC 或 shell 权限。
 - `workspaceDraft.ts` 统一输入去重与自定义参数判定；启用 SRT 时，其参数偏离预设也属于自定义。
 - 浏览器 Mock 对新提交任务串行模拟逐媒体完成，按实际选中的 TXT/MD/SRT 组合产生模拟输出事件；原生正式页面仍只接收 Host/Worker 数据。
-- `check:styles` 检查任务样式归属、同条件重复选择器／属性、旧祖先变体和 `!important`；新增样式直接修改原责任规则。检查器与视觉验证说明见 [[知识/流程/开发与验证]]。
+- `check:styles` 检查任务与公共按钮样式归属、同条件重复选择器／属性、旧祖先变体和 `!important`，并禁止全局 `button` 变换覆盖局部命中区域；新增样式直接修改原责任规则。检查器与视觉验证说明见 [[知识/流程/开发与验证]]。

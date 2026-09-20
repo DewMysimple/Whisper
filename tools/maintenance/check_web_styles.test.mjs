@@ -54,3 +54,31 @@ test('legacy duplicates are found without conflating media conditions', () => {
   assert.equal(result.shadowed.length, 1);
   assert.equal(result.shadowed[0].value, 'red');
 });
+
+test('shared action primitives keep a single owner and reject priority overrides', () => {
+  const result = inspectStyles([
+    ['styles.css', '.primary-button:hover { background: red } .card-button:active { color: red }'],
+    ['components/button.css', '.icon-action { color: red !important; color: blue }'],
+    ['components/card-button.css', '.card-button { padding: 0 } .card-button { margin: 0 }'],
+  ]);
+  assert.equal(result.problems.length, 5);
+  assert.match(result.problems.join('\n'), /components\/button.css/);
+  assert.match(result.problems.join('\n'), /duplicate selector/);
+});
+
+test('global button transforms cannot override fixed card hit areas', () => {
+  const result = inspectStyles([
+    ['styles.css', 'button:not(:disabled):active { transform: scale(.97) !important }'],
+  ]);
+  assert.equal(result.problems.length, 1);
+  assert.match(result.problems[0], /global button geometry/);
+  assert.deepEqual(
+    inspectStyles([
+      [
+        'styles.css',
+        '.selection-card:active { transform: scale(.98) } .launch-card .primary-button { width: 100% }',
+      ],
+    ]).problems,
+    [],
+  );
+});

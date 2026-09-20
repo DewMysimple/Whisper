@@ -16,6 +16,7 @@ import { canResumeTask, useWorkspace } from '../state/workspace';
 import { taskOutputPaths } from '../state/workspaceTaskState';
 import { TaskRestoreDialog } from './tasks/TaskRestoreDialog';
 import { useDialogFocus } from './useDialogFocus';
+import { Button, IconButton } from './Button';
 
 export function TaskDetail() {
   const task = useWorkspace((state) =>
@@ -84,15 +85,14 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
             <p className="step-label">TASK SNAPSHOT</p>
             <h2 id="task-detail-title">{task.title}</h2>
           </div>
-          <button
-            aria-label="关闭任务详情"
+          <IconButton
+            label="关闭任务详情"
             ref={closeRef}
-            className="round-button"
             onClick={() => void selectTask(null)}
             type="button"
           >
             <X size={18} />
-          </button>
+          </IconButton>
         </header>
 
         <div className="detail-status-line">
@@ -367,8 +367,7 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
 
         <footer>
           {task.draft && task.status !== 'running' && task.status !== 'queued' && (
-            <button
-              className="secondary-button"
+            <Button
               onClick={() => {
                 if (resumable) {
                   void resumeTask(task.id);
@@ -379,16 +378,12 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
               type="button"
             >
               <RotateCcw size={16} /> {resumable ? '继续转录' : '载入原配置'}
-            </button>
+            </Button>
           )}
           {task.outputAvailability !== 'missing' && outputs.length > 0 && (
-            <button
-              className="secondary-button"
-              onClick={() => void revealTaskOutput(task.id)}
-              type="button"
-            >
+            <Button onClick={() => void revealTaskOutput(task.id)} type="button">
               <FolderOpen size={16} /> 定位输出
-            </button>
+            </Button>
           )}
         </footer>
       </aside>

@@ -15,6 +15,7 @@ import { getModelLabel } from '../data/models';
 import { formatMediaDuration, summarizeInputDurations } from '../state/mediaDuration';
 import { useWorkspace } from '../state/workspace';
 import { CardButton } from './CardButton';
+import { Button } from './Button';
 import { ConfirmDialog } from './ConfirmDialog';
 
 function durationChecklistLabel(knownSeconds: number, unknownCount: number): string {
@@ -298,8 +299,9 @@ export function LaunchCard() {
           </button>
         )}
 
-        <button
-          className="primary-button launch-submit"
+        <Button
+          variant="primary"
+          className="launch-submit"
           disabled={!canStart}
           onClick={requestStart}
           type="button"
@@ -316,7 +318,7 @@ export function LaunchCard() {
           <kbd aria-hidden="true" className="launch-shortcut">
             CTRL + ENTER
           </kbd>
-        </button>
+        </Button>
       </div>
       <ConfirmDialog
         confirmLabel="继续转录"

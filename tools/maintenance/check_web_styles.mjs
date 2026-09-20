@@ -1,4 +1,4 @@
-/** Task CSS has one owner and one rule per selector/condition; legacy CSS is checked conservatively. */
+/** Owned task/shared CSS has one rule per selector/condition; legacy CSS is checked conservatively. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -8,6 +8,13 @@ const require = createRequire(new URL('../../apps/web/package.json', import.meta
 const postcss = require('postcss');
 const sourceRoot = fileURLToPath(new URL('../../apps/web/src/', import.meta.url));
 const taskDirectory = 'components/tasks/';
+const sharedOwners = new Map([
+  ['card-button', 'components/card-button.css'],
+  ['segmented-card', 'components/segmented-card.css'],
+  ['primary-button', 'components/button.css'],
+  ['secondary-button', 'components/button.css'],
+  ['icon-action', 'components/button.css'],
+]);
 
 export function taskStyleOwner(name) {
   if (name === 'tasks-view' || name.startsWith('task-workspace-')) return 'task-workspace.css';
@@ -30,12 +37,13 @@ export function inspectStyles(files) {
   const problems = [],
     shadowed = [];
   const seen = new Map(),
-    taskSelectors = new Map(),
+    ownedSelectors = new Map(),
     roots = new Map();
   for (const [filename, css] of files) {
     const root = postcss.parse(css, { from: filename });
     roots.set(filename, root);
     const taskFile = filename.startsWith(taskDirectory);
+    const ownedFile = taskFile || [...sharedOwners.values()].includes(filename);
     const report = (node, message) =>
       problems.push(`${filename}:${node.source.start.line}: ${message}`);
     root.walkRules((rule) => {
@@ -48,18 +56,30 @@ export function inspectStyles(files) {
           const owner = taskStyleOwner(name);
           if (owner && filename !== `${taskDirectory}${owner}`)
             report(rule, `.${name} belongs in ${taskDirectory}${owner}`);
+          const sharedOwner = sharedOwners.get(name);
+          // Page-specific sizing remains with the page, baseline interactions with the primitive.
+          if (sharedOwner && selector.startsWith(`.${name}`) && filename !== sharedOwner)
+            report(rule, `.${name} belongs in ${sharedOwner}`);
         }
-        if (!taskFile) continue;
+        if (
+          /^button(?=[:\[]|$)/.test(selector) &&
+          rule.nodes.some(
+            (node) =>
+              node.type === 'decl' && ['transform', 'translate', 'scale'].includes(node.prop),
+          )
+        )
+          report(rule, `global button geometry changes hit areas: ${selector}`);
+        if (!ownedFile) continue;
         if (/\.view-content\b|\.is-expanded\b|\.is-home\b/.test(selector))
           report(rule, `shell/obsolete variant dependency in ${selector}`);
         const key = `${conditions} :: ${selector}`;
-        if (taskSelectors.has(key))
-          report(rule, `duplicate selector ${selector}; edit ${taskSelectors.get(key)}`);
-        else taskSelectors.set(key, `${filename}:${rule.source.start.line}`);
+        if (ownedSelectors.has(key))
+          report(rule, `duplicate selector ${selector}; edit ${ownedSelectors.get(key)}`);
+        else ownedSelectors.set(key, `${filename}:${rule.source.start.line}`);
       }
       const properties = new Set();
       for (const declaration of rule.nodes.filter((node) => node.type === 'decl')) {
-        if (taskFile) {
+        if (ownedFile) {
           if (declaration.important)
             report(declaration, `!important hides the owning rule: ${rule.selector}`);
           if (properties.has(declaration.prop))

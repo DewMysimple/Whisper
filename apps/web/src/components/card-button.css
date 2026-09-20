@@ -6,8 +6,7 @@
   -webkit-tap-highlight-color: transparent;
   transition:
     background-color 150ms ease,
-    box-shadow 150ms ease,
-    transform 90ms ease;
+    box-shadow 150ms ease;
 }
 .card-button:not(:disabled):hover {
   box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 5%, transparent);
@@ -17,7 +16,7 @@
   outline-offset: -3px;
 }
 .card-button:not(:disabled):active {
-  transform: scale(0.99);
+  box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 11%, transparent);
 }
 .card-button:disabled {
   cursor: not-allowed;
@@ -25,8 +24,5 @@
 @media (prefers-reduced-motion: reduce) {
   .card-button {
     transition: none;
-  }
-  .card-button:not(:disabled):active {
-    transform: none;
   }
 }

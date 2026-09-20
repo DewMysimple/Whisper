@@ -1,0 +1,109 @@
+/* Shared actions never move their hit area during hover or press. */
+:is(.primary-button, .secondary-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: calc(40px + var(--content-control-bump, 0px));
+  padding: 0 15px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  font-size: calc(12px + var(--content-font-bump, 0px));
+  font-weight: 650;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.primary-button {
+  --button-accent: var(--accent);
+  --button-hover: var(--accent-hover);
+  min-height: calc(42px + var(--content-control-bump, 0px));
+  border-color: var(--button-accent);
+  background-color: var(--button-accent);
+  background-image: linear-gradient(180deg, #ffffff38, transparent 58%, #00000029);
+  color: var(--on-accent);
+  box-shadow:
+    0 9px 24px color-mix(in srgb, var(--button-accent) 24%, transparent),
+    inset 0 1px #ffffff52;
+}
+.primary-button:not(:disabled):hover {
+  border-color: var(--button-hover);
+  background-color: var(--button-hover);
+}
+.primary-button:not(:disabled):active {
+  box-shadow: inset 0 2px 5px #00000029;
+}
+.primary-button.is-danger {
+  --button-accent: var(--danger);
+  --button-hover: color-mix(in srgb, var(--danger) 88%, #000);
+  color: #fff;
+}
+.secondary-button {
+  border-color: color-mix(in srgb, var(--text) 11%, transparent);
+  background-color: color-mix(in srgb, var(--surface-raised) 86%, transparent);
+  box-shadow:
+    0 1px 2px #1d1d1f0a,
+    inset 0 1px #ffffff8f;
+}
+.secondary-button:not(:disabled):hover {
+  border-color: var(--border-strong);
+  background-color: var(--surface-hover);
+}
+.secondary-button:not(:disabled):active {
+  background-color: var(--surface-soft);
+  box-shadow: inset 0 1px 3px color-mix(in srgb, var(--text) 10%, transparent);
+}
+.secondary-button.is-danger {
+  color: var(--danger);
+}
+.icon-action {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.icon-action > span {
+  display: inline-flex;
+}
+.icon-action:not(:disabled):hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.icon-action:not(:disabled):active {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-raised));
+}
+.icon-action[data-tone='danger']:not(:disabled):hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.icon-action[data-tone='danger'][aria-pressed='true'] {
+  background: var(--danger);
+  color: #fff;
+}
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+.icon-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+.icon-action:disabled {
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  .primary-button,
+  .secondary-button,
+  .icon-action {
+    transition: none;
+  }
+}

@@ -16,6 +16,7 @@ import { desktopBridge } from '../bridge';
 import { useWorkspace } from '../state/workspace';
 import { useTimedConfirmation } from './useTimedConfirmation';
 import { CardButton } from './CardButton';
+import { Button } from './Button';
 import { useAutoFollow } from './useAutoFollow';
 
 interface ParsedWorkerLogLine {
@@ -203,32 +204,22 @@ export function WorkerLogsView() {
               <i /> {isReady ? '实时接收中' : '等待 Worker'}
             </span>
             <div>
-              <button
-                className="secondary-button"
-                disabled={logs.length === 0}
-                onClick={() => void copyLogs()}
-                type="button"
-              >
+              <Button disabled={logs.length === 0} onClick={() => void copyLogs()} type="button">
                 <Copy size={15} /> 复制全部
-              </button>
-              <button
-                className="secondary-button"
-                disabled={logs.length === 0}
-                onClick={() => void exportLogs()}
-                type="button"
-              >
+              </Button>
+              <Button disabled={logs.length === 0} onClick={() => void exportLogs()} type="button">
                 <Download size={15} /> 导出 TXT
-              </button>
-              <button
+              </Button>
+              <Button
                 aria-pressed={clearArmed}
-                className={`secondary-button is-danger-subtle ${clearArmed ? 'is-delete-armed' : ''}`}
+                className={`is-danger-subtle ${clearArmed ? 'is-delete-armed' : ''}`}
                 data-confirm-action="clear-logs"
                 disabled={logs.length === 0}
                 onClick={() => void clearLogs()}
                 type="button"
               >
                 <Trash2 size={15} /> {clearArmed ? '再次点击清空' : '清空日志'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
