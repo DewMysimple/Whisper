@@ -267,6 +267,7 @@ export interface WorkspaceState {
   sidebarWidth: number;
   workspaceWidth: number;
   topbarHeight: number;
+  topbarCollapsed: boolean;
   selectedTaskId: string | null;
   outputPreview: OutputPreview | null;
   previewLoading: boolean;
@@ -296,6 +297,7 @@ export interface WorkspaceState {
   setSidebarWidth(width: number): void;
   setWorkspaceWidth(width: number): void;
   setTopbarHeight(height: number): void;
+  setTopbarCollapsed(collapsed: boolean): void;
   restoreAppearanceDefaults(): void;
   setTaskFilter(filter: TaskFilter): void;
   setTaskSearch(search: string): void;
@@ -317,6 +319,7 @@ export interface WorkspaceState {
   setOutput(patch: Partial<OutputPolicy>): void;
   startTask(): Promise<void>;
   cancelTask(taskId: string): Promise<void>;
+  revealPath(path: string): Promise<void>;
   revealTaskOutput(taskId: string): Promise<void>;
   openTaskOutputDirectory(taskId: string): Promise<void>;
   auditTaskOutputs(): Promise<void>;
@@ -518,6 +521,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const next = { ...appearanceFromState(get()), workspaceWidth };
     applyAppearancePreferences(next);
     set({ workspaceWidth });
+    persistLater(get);
+  },
+  setTopbarCollapsed: (topbarCollapsed) => {
+    set({ topbarCollapsed });
     persistLater(get);
   },
   setTopbarHeight: (topbarHeight) => {
@@ -860,9 +867,16 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ lastError: errorMessage(error) });
     }
   },
+  revealPath: async (path) => {
+    try {
+      await desktopBridge.revealOutput(path);
+    } catch (error) {
+      set({ lastError: errorMessage(error) });
+    }
+  },
   revealTaskOutput: async (taskId) => {
     const task = get().tasks.find((item) => item.id === taskId);
-    const output = task?.outputs?.[0];
+    const output = taskOutputPaths(task)[0];
     if (task?.outputAvailability === 'missing') {
       set({ lastError: '该任务记录的输出文件已经被删除、移动或改名。' });
       return;
@@ -954,7 +968,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     set({ selectedTaskId: taskId, outputPreview: null, previewLoading: false });
     if (taskId === null) return;
     const task = get().tasks.find((item) => item.id === taskId);
-    const output = task?.outputs?.[0];
+    const output = taskOutputPaths(task)[0];
     if (
       task?.status !== 'completed' ||
       task.outputAvailability === 'missing' ||

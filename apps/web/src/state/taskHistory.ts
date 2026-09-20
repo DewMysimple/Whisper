@@ -102,7 +102,7 @@ export function taskTitleParts(title: string): {
   const extensionStart = title.lastIndexOf('.');
   if (extensionStart <= 0 || extensionStart === title.length - 1) return null;
   return {
-    basename: title.slice(0, extensionStart),
+    basename: title.slice(0, extensionStart).trimEnd(),
     extension: title.slice(extensionStart),
   };
 }

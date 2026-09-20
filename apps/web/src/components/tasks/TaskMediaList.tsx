@@ -1,19 +1,16 @@
-import { Check, FileAudio } from 'lucide-react';
+import { Check, FileAudio, FolderOpen } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
 import { useCallback, useRef } from 'react';
 import type { TaskMediaSnapshot, TaskSnapshot } from '../../contracts/desktop';
 import { formatMediaDuration } from '../../state/mediaDuration';
 import { formatElapsedSeconds } from '../../state/taskTiming';
 import { formatTaskStage } from '../../state/taskStage';
+import { useWorkspace } from '../../state/workspace';
+import { mediaRevealTarget } from '../../state/taskFiles';
+import { CardButton } from '../CardButton';
 import { useAutoFollow } from '../useAutoFollow';
 function fileName(path: string): string {
   return path.split(/[/\\]/).at(-1) ?? path;
-}
-
-function parentDirectory(path: string): string {
-  const parts = path.split(/[/\\]/);
-  parts.pop();
-  return parts.join('\\') || '本机媒体';
 }
 
 function mediaStatusLabel(media: TaskMediaSnapshot, task: TaskSnapshot): string {
@@ -42,8 +39,9 @@ export function TaskMediaList({
   mediaSeconds: number;
   isInputTaskPreview: boolean;
 }) {
+  const revealPath = useWorkspace((state) => state.revealPath);
   const mediaListRef = useRef<HTMLDivElement>(null);
-  const mediaRowRef = useRef<HTMLElement>(null);
+  const mediaRowRef = useRef<HTMLButtonElement>(null);
   const reducedMotion = useReducedMotion();
   const followCurrentMedia = useCallback(() => {
     const row = mediaRowRef.current;
@@ -80,9 +78,11 @@ export function TaskMediaList({
       </header>
       <div {...mediaFollowHandlers} ref={mediaListRef} className="task-media-list" tabIndex={0}>
         {mediaStates.map((media, index) => (
-          <article
+          <CardButton
             className={`task-media-row is-${media.status}`}
             key={media.path}
+            aria-label={`在资源管理器中定位 ${fileName(mediaRevealTarget(task, media))}`}
+            onClick={() => void revealPath(mediaRevealTarget(task, media))}
             ref={media.path === currentMedia?.path ? mediaRowRef : undefined}
           >
             <span className="task-media-index">{String(index + 1).padStart(2, '0')}</span>
@@ -91,7 +91,6 @@ export function TaskMediaList({
             </span>
             <div className="task-media-copy">
               <strong>{fileName(media.path)}</strong>
-              <span title={media.path}>{parentDirectory(media.path)}</span>
               <div
                 aria-label={
                   media.progress === null
@@ -115,7 +114,8 @@ export function TaskMediaList({
                 / {formatMediaDuration(media.durationSeconds)}
               </small>
             </div>
-          </article>
+            <FolderOpen className="task-media-reveal" size={16} aria-hidden="true" />
+          </CardButton>
         ))}
       </div>
     </section>

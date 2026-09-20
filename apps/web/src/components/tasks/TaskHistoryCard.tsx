@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react';
+import { CardButton } from '../CardButton';
 import { memo } from 'react';
 import type { TaskSnapshot } from '../../contracts/desktop';
 import { getModelLabel } from '../../data/models';
@@ -55,7 +56,7 @@ export const TaskHistoryCard = memo(function TaskHistoryCard({
   const titleParts = taskTitleParts(task.title);
   return (
     <article className={`task-row is-${taskStatusTone(task)}`}>
-      <button
+      <CardButton
         aria-label={`查看 ${task.title} 详情`}
         className="task-main"
         onClick={() => onInspect(task.id)}
@@ -87,8 +88,14 @@ export const TaskHistoryCard = memo(function TaskHistoryCard({
               <time dateTime={task.createdAt}>{formatTaskCreatedAt(task.createdAt)}</time>
             </span>
           </span>
+        </div>
+        <div className="task-card-progress-line">
+          <span>{taskStatusLabel(task)}</span>
           <span className="task-card-progress" aria-label={`任务进度 ${task.progress}%`}>
             <strong aria-hidden="true">{task.progress}%</strong>
+          </span>
+          <span className="task-card-track" aria-hidden="true">
+            <span style={{ width: `${Math.max(0, Math.min(100, task.progress))}%` }} />
           </span>
         </div>
         <dl className="task-history-facts">
@@ -130,13 +137,13 @@ export const TaskHistoryCard = memo(function TaskHistoryCard({
               </span>
             </dd>
           </div>
-          <div>
-            <dt>模型</dt>
-            <dd>{getModelLabel(task.modelId)}</dd>
-          </div>
         </dl>
-      </button>
+      </CardButton>
       <div className="task-card-footer">
+        <div className="task-card-model">
+          <small>模型</small>
+          <strong title={getModelLabel(task.modelId)}>{getModelLabel(task.modelId)}</strong>
+        </div>
         <div className="task-card-footer-actions">
           {task.status === 'running' || task.status === 'queued' ? (
             <button
@@ -156,7 +163,7 @@ export const TaskHistoryCard = memo(function TaskHistoryCard({
                 aria-label={`${deleteArmed ? '再次点击删除' : '删除'} ${task.title} 的任务记录`}
                 aria-pressed={deleteArmed}
                 className={`icon-button is-danger-action ${deleteArmed ? 'is-delete-armed' : ''}`}
-                data-delete-arm-key={`task:${task.id}`}
+                data-confirm-action={`task:${task.id}`}
                 onClick={(event) => {
                   event.stopPropagation();
                   onDelete(task);

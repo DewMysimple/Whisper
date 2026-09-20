@@ -3,9 +3,10 @@ type: knowledge
 status: active
 kind: module
 importance: high
-updated: 2026-09-19
+updated: 2026-09-20
 topic: tauri-react-desktop
 source_logs:
+  - "[[日志/2026-09-20-新清单开发态交互与布局整改]]"
   - "[[日志/2026-09-19-任务监控与记录深度维护]]"
   - "[[日志/2026-09-19-开发态功能与UI可维护性整改]]"
   - "[[日志/2026-08-23-项目记忆重建]]"
@@ -39,12 +40,14 @@ supersedes: null
 - `apps/web/src/bridge/mockDesktopBridge.ts` 只用于浏览器测试；`tauriDesktopBridge.ts` 是正式本地 bridge。
 - `apps/desktop/src-tauri/` 负责窗口、原生对话框、拖放、系统通知、Worker Host、权限和受限输出预览。
 - UI 状态通过版本化 localStorage 保存设置和最多 100 条任务，不依赖服务端数据库。
-- 外观配置在同一版本 1 payload 中保存主题、强调色、字体家族、框架/工作台/日志三组字号，以及展开导航、工作台最大宽度和顶栏高度；`appearancePreferences.ts` 负责校验后的 CSS 变量投影。顶栏高度默认 116px，合法范围为 96–168px，缺失字段按默认值迁移。设置页提供八组经浅色／深色界面校准的工作台强调色；自定义取色器把二维 HSV 面板、色相轨道和 RGB 输入换算为现有 `#RRGGBB` 事实源。强调色不透明度固定为 100%，成功、警告、错误等语义色不随强调色改变。日志字号在字段缺失时默认 13px，已有合法显式值保持不变。设置页的三组尺寸和三组字号共用受范围约束的纯数字文本输入：允许直接键入、加减按钮与方向键调节，失焦时收敛范围；两类数值使用一致的等宽字体参数，并以说明字阶加 2px 显示。工作区尺寸值按 `px` 前的白色数值区居中，三组字号按各自数值框居中；单位固定在右侧独立单元，且只有外层控件绘制焦点。`Sidebar.tsx` 的导航拖拽分隔条只通过 `setSidebarWidth` 更新事实源，`App.tsx` 的顶栏拖拽分隔条同样只通过 `setTopbarHeight` 更新事实源；两者都支持指针捕获、键盘调节与双击复位，组件不另存布局尺寸。
+- 外观配置在同一版本 1 payload 中保存主题、强调色、字体家族、框架/工作台/日志三组字号，以及展开导航、工作台最大宽度和顶栏高度；`appearancePreferences.ts` 负责校验后的 CSS 变量投影。顶栏收纳状态独立保存在版本 1 配置，旧配置默认展开，展开高度不会因收起而改写。顶栏高度默认 116px，合法范围为 96–168px，缺失字段按默认值迁移。设置页提供八组经浅色／深色界面校准的工作台强调色；自定义取色器把二维 HSV 面板、色相轨道和 RGB 输入换算为现有 `#RRGGBB` 事实源。强调色不透明度固定为 100%，成功、警告、错误等语义色不随强调色改变。日志字号在字段缺失时默认 13px，已有合法显式值保持不变。设置页的三组尺寸和三组字号共用受范围约束的纯数字文本输入：允许直接键入、加减按钮与方向键调节，失焦时收敛范围；两类数值使用一致的等宽字体参数，并以说明字阶加 2px 显示。工作区尺寸值按 `px` 前的白色数值区居中，三组字号按各自数值框居中；单位固定在右侧独立单元，且只有外层控件绘制焦点。`Sidebar.tsx` 的导航拖拽分隔条只通过 `setSidebarWidth` 更新事实源，`App.tsx` 的顶栏拖拽分隔条同样只通过 `setTopbarHeight` 更新事实源；两者都支持指针捕获、键盘调节与双击复位，组件不另存布局尺寸。
 - `state/workspaceEvents.ts` 集中 Worker/Host 事件归并，`state/workspaceTaskState.ts` 保存任务状态派生和质量诊断纯函数；`workspaceDraft.ts`、`workspacePersistence.ts` 和 `appearancePreferences.ts` 分别保存草稿、持久化和外观规则；`workspace.ts` 负责 store 组合和公开动作。
 - `state/inputTaskPreview.ts` 把当前文件／目录选择投影为非持久化待执行输入列表；目录仅保留路径、媒体数、汇总时长与未知数，不推导子路径或逐文件时长，供执行前清单和任务监控共同读取；两个界面都通过 store 的 `clearInputs` 清空选择，不直接处理源文件。正式任务启动后仍以 Worker 事件为进度事实源。
 - `components/tasks/TasksView.tsx` 是任务工作台唯一入口；`TaskHistory` 管理搜索、筛选与动作，`TaskHistoryCard` 只接收快照和回调，`TaskMonitor` 组合主监控、`TaskMediaList` 和 `TaskProcessChain`。旧 compact／expanded 双分支已移除。组件与四个责任 CSS 的修改定位见 `apps/web/src/components/tasks/README.md`；当前视觉约定见 [[当前状态/项目概览]]。
 - `bridge/tauriWorkerDecoder.ts` 保存 Worker 消息解码、错误归一化和展示标签；`tauriWorkerEvents.ts` 负责消息到桌面任务事件的归并；`tauriDesktopBridge.ts` 负责 Tauri invoke、事件订阅、轮询和 DesktopBridge 生命周期。
-- `WorkerLogsView.tsx` 只把 Host 已生成的日志行解析为时间、来源和正文视觉列；复制、导出、清空及 store 缓冲区继续处理原始字符串，展示解析不构成新的日志协议。
+- `CardButton.tsx` 与 `card-button.css` 统一动作卡片的原生交互，供执行前清单、媒体卡、历史主卡、日志状态卡使用；`SegmentedCard` 与其样式统一任务页两项导航和四项筛选。动作卡不携带 `aria-pressed`，只有选择控件显式传入选中状态。
+- `useTimedConfirmation` 统一历史与日志的原位二次确认取消时机，所属按钮通过 `data-confirm-action` 标识，不把清理对象或 bridge 调用塞入通用 hook。
+- `WorkerLogsView.tsx` 只把 Host 已生成的日志行解析为时间、来源和正文视觉列；复制、导出、清空及 store 缓冲区继续处理原始字符串，展示解析不构成新的日志协议。四张状态卡仅在当前缓冲区定位最近对应日志并聚焦控制台，暂时暂停自动跟随，无记录时明确反馈，不过滤或更改原始日志。
 - 工作台状态徽标共享高度、弹性布局和图文中心线，但继续保留各自图标：文本与 SRT 未启用态分别使用文件、字幕图标，执行前待补充态仍使用警告图标。待补充徽标、需要关注的媒体清单卡片及 SRT“选择以启用”共用柔和强调色通道；当前输出保留绿色，不用统一的新增图标替换原图标。
 - 原生窗口提醒与电源倒计时通知同样由 `DesktopBridge` 暴露；eslint 禁止 bridge 之外直接导入 `@tauri-apps/*`。
 - `contracts/modelCatalog.generated.ts` 由 Python 模型注册表生成，Web 不手工维护模型能力列表。
@@ -61,6 +64,7 @@ supersedes: null
 - `taskMonitor.ts`、`taskTiming.ts` 分别负责监控数据派生和耗时转换；当前媒体匹配统一容忍 Windows 大小写和斜杠差异。处理链路读取原始阶段码，失败／取消时已知阶段以前显示完成、当前阶段显示已中断、之后显示未执行；阶段未知时明确显示未记录。不得按总百分比推断当前媒体阶段，不得将运行中或跳过媒体计入处理完成数，排队等待不计入执行耗时。`TaskMediaList` 自动跟随只滚动自身列表，手动浏览后沿用 `useAutoFollow` 的暂停周期。
 - `useDialogFocus.ts` 统一弹窗焦点、Tab、Escape 与背景滚动控制；回调变化不会重新抢焦点，子弹窗外层点击不会冒泡关闭任务详情。确认终止时保留打开弹窗时的任务快照。
 - `TaskRestoreDialog` 共享历史／详情的配置恢复确认；`TaskDetail` 按任务 ID 隔离临时确认状态。`taskHistory.ts` 让筛选卡计数与任务列表共用判断规则；监控、历史、详情统一使用 `taskOutputPaths` 合并任务级和逐媒体输出。
+- `taskFiles.ts` 只从成功媒体的实际 `outputPaths` 选择 TXT／MD／SRT；单媒体旧历史可回退任务输出集合，批量无关联记录不得猜测输出。`revealPath` 继续使用已有 Host `reveal_output`，异常进入现有错误提示，未新增 IPC 或 shell 权限。
 - `workspaceDraft.ts` 统一输入去重与自定义参数判定；启用 SRT 时，其参数偏离预设也属于自定义。
 - 浏览器 Mock 对新提交任务串行模拟逐媒体完成，按实际选中的 TXT/MD/SRT 组合产生模拟输出事件；原生正式页面仍只接收 Host/Worker 数据。
 - `check:styles` 检查任务样式归属、同条件重复选择器／属性、旧祖先变体和 `!important`；新增样式直接修改原责任规则。检查器与视觉验证说明见 [[知识/流程/开发与验证]]。

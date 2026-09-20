@@ -154,6 +154,7 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   const logFontSize = value.logFontSize ?? DEFAULT_APPEARANCE.logFontSize;
   const sidebarWidth = value.sidebarWidth ?? DEFAULT_APPEARANCE.sidebarWidth;
   const workspaceWidth = value.workspaceWidth ?? DEFAULT_APPEARANCE.workspaceWidth;
+  const topbarCollapsed = value.topbarCollapsed ?? DEFAULT_APPEARANCE.topbarCollapsed;
   const topbarHeight = value.topbarHeight ?? DEFAULT_APPEARANCE.topbarHeight;
   const accentPreset = value.accentPreset ?? DEFAULT_APPEARANCE.accentPreset;
   const customAccentColor = value.customAccentColor ?? DEFAULT_APPEARANCE.customAccentColor;
@@ -161,6 +162,7 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   const monoFontFamily = value.monoFontFamily ?? DEFAULT_APPEARANCE.monoFontFamily;
   const requestedModelId = value.selectedModelId ?? DEFAULT_MODEL_ID;
   if (
+    typeof topbarCollapsed !== 'boolean' ||
     !isNumberInRange(uiFontSize, UI_FONT_SIZE_RANGE.minimum, UI_FONT_SIZE_RANGE.maximum, true) ||
     !isNumberInRange(
       workspaceFontSize,
@@ -278,6 +280,7 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
     sidebarWidth,
     workspaceWidth,
     topbarHeight,
+    topbarCollapsed,
     selectedModelId,
     selectedPresetId: value.selectedPresetId,
     profileMode,

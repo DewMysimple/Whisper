@@ -10,10 +10,12 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { desktopBridge } from '../bridge';
 import { useWorkspace } from '../state/workspace';
+import { useTimedConfirmation } from './useTimedConfirmation';
+import { CardButton } from './CardButton';
 import { useAutoFollow } from './useAutoFollow';
 
 interface ParsedWorkerLogLine {
@@ -53,7 +55,8 @@ export function WorkerLogsView() {
   const isReady = hostStatus.state === 'ready';
   const streamRef = useRef<HTMLDivElement>(null);
   const [feedback, setFeedback] = useState('');
-  const [clearArmed, setClearArmed] = useState(false);
+  const [confirmation, setConfirmation] = useTimedConfirmation<{ key: string }>();
+  const clearArmed = confirmation !== null;
   const reducedMotion = useReducedMotion();
   const logText = logs.length === 0 ? '' : `${logs.join('\r\n')}\r\n`;
 
@@ -75,25 +78,6 @@ export function WorkerLogsView() {
     targetKey: logs.length,
   });
 
-  useEffect(() => {
-    if (!clearArmed) return;
-    const timeout = window.setTimeout(() => setClearArmed(false), 4000);
-    const cancelOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setClearArmed(false);
-    };
-    const cancelOutside = (event: PointerEvent) => {
-      if (!(event.target instanceof Element)) return;
-      if (event.target.closest('[data-log-clear]') === null) setClearArmed(false);
-    };
-    document.addEventListener('keydown', cancelOnEscape);
-    document.addEventListener('pointerdown', cancelOutside, true);
-    return () => {
-      window.clearTimeout(timeout);
-      document.removeEventListener('keydown', cancelOnEscape);
-      document.removeEventListener('pointerdown', cancelOutside, true);
-    };
-  }, [clearArmed]);
-
   const copyLogs = async () => {
     try {
       await desktopBridge.copyWorkerLogs(logText);
@@ -105,16 +89,16 @@ export function WorkerLogsView() {
 
   const clearLogs = async () => {
     if (!clearArmed) {
-      setClearArmed(true);
+      setConfirmation({ key: 'clear-logs' });
       setFeedback('4 秒内再次点击以清空当前会话日志');
       return;
     }
     try {
       await desktopBridge.clearWorkerLogs();
-      setClearArmed(false);
+      setConfirmation(null);
       setFeedback('当前会话日志已清空');
     } catch {
-      setClearArmed(false);
+      setConfirmation(null);
       setFeedback('清空失败，Worker 日志未被删除');
     }
   };
@@ -128,10 +112,39 @@ export function WorkerLogsView() {
     }
   };
 
+  const locateLog = (kind: 'worker' | 'process' | 'model' | 'buffer') => {
+    logFollowHandlers.onPointerDown();
+    const stream = streamRef.current;
+    if (!stream) return;
+    const index =
+      kind === 'buffer'
+        ? logs.length - 1
+        : logs.findLastIndex((line) => {
+            const parsed = parseWorkerLogLine(line);
+            if (kind === 'model') return parsed.tone === 'model';
+            if (kind === 'process') return /\b(PID|HOST|PROCESS)\b/i.test(line);
+            return parsed.scope.toUpperCase() === 'WORKER';
+          });
+    stream.focus({ preventScroll: true });
+    const row = stream.querySelector<HTMLElement>(`[data-log-index="${index}"]`);
+    if (row) {
+      stream.scrollTo?.({
+        top:
+          stream.scrollTop + row.getBoundingClientRect().top - stream.getBoundingClientRect().top,
+        behavior: reducedMotion ? 'auto' : 'smooth',
+      });
+      setFeedback(`已定位第 ${index + 1} 行日志`);
+    } else setFeedback('当前会话暂无对应日志，后续事件会自动显示。');
+  };
+
   return (
     <div className="worker-logs-workspace">
       <section className="worker-log-status" aria-label="Worker 日志状态">
-        <article data-tone={isReady ? 'ready' : 'waiting'}>
+        <CardButton
+          onClick={() => locateLog('worker')}
+          title="定位最近的 Worker 日志"
+          data-tone={isReady ? 'ready' : 'waiting'}
+        >
           <span className="worker-log-status-icon">
             <span className={`worker-log-pulse ${isReady ? 'is-ready' : ''}`} />
           </span>
@@ -140,8 +153,8 @@ export function WorkerLogsView() {
             <strong>{isReady ? '运行就绪' : hostStatus.state.toUpperCase()}</strong>
             <span>{isReady ? '诊断通道连接正常' : '正在等待本地服务'}</span>
           </div>
-        </article>
-        <article>
+        </CardButton>
+        <CardButton onClick={() => locateLog('process')} title="定位进程日志">
           <span className="worker-log-status-icon">
             <Activity size={18} />
           </span>
@@ -150,8 +163,8 @@ export function WorkerLogsView() {
             <strong>{hostStatus.pid === null ? '等待启动' : `PID ${hostStatus.pid}`}</strong>
             <span>{hostStatus.pid === null ? '进程尚未分配' : '受桌面 Host 监管'}</span>
           </div>
-        </article>
-        <article>
+        </CardButton>
+        <CardButton onClick={() => locateLog('model')} title="定位模型日志">
           <span className="worker-log-status-icon">
             <Braces size={18} />
           </span>
@@ -160,8 +173,8 @@ export function WorkerLogsView() {
             <strong>{model.state === 'unloaded' ? '按需加载' : model.state.toUpperCase()}</strong>
             <span>{model.modelId ?? '任务开始时自动选择'}</span>
           </div>
-        </article>
-        <article>
+        </CardButton>
+        <CardButton onClick={() => locateLog('buffer')} title="定位最新日志">
           <span className="worker-log-status-icon">
             <CircleDot size={18} />
           </span>
@@ -170,7 +183,7 @@ export function WorkerLogsView() {
             <strong>{logs.length} 行日志</strong>
             <span>仅保留当前桌面会话</span>
           </div>
-        </article>
+        </CardButton>
       </section>
 
       <section className="worker-log-console panel" aria-labelledby="worker-log-title">
@@ -209,7 +222,7 @@ export function WorkerLogsView() {
               <button
                 aria-pressed={clearArmed}
                 className={`secondary-button is-danger-subtle ${clearArmed ? 'is-delete-armed' : ''}`}
-                data-log-clear
+                data-confirm-action="clear-logs"
                 disabled={logs.length === 0}
                 onClick={() => void clearLogs()}
                 type="button"
@@ -225,6 +238,7 @@ export function WorkerLogsView() {
           {...logFollowHandlers}
           ref={streamRef}
           role="log"
+          tabIndex={0}
         >
           {logs.length === 0 ? (
             <div className="worker-log-empty">
@@ -246,7 +260,7 @@ export function WorkerLogsView() {
             logs.map((line, index) => {
               const parsed = parseWorkerLogLine(line);
               return (
-                <code key={`${index}-${line}`}>
+                <code key={`${index}-${line}`} data-log-index={index}>
                   <span className="worker-log-line-number">
                     {String(index + 1).padStart(3, '0')}
                   </span>

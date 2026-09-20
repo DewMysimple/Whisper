@@ -1,12 +1,56 @@
-import { act, fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { TaskSnapshot, TaskMediaSnapshot } from '../../contracts/desktop';
 import { TaskMediaList } from './TaskMediaList';
+import { desktopBridge } from '../../bridge';
+import { useWorkspace } from '../../state/workspace';
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+});
+
+it('locates the source and then generated text using the same keyboard-operable card', async () => {
+  const reveal = vi.spyOn(desktopBridge, 'revealOutput').mockResolvedValue();
+  const task = { ...useWorkspace.getInitialState().tasks[0]!, sourceCount: 1 };
+  const media: TaskMediaSnapshot = {
+    path: 'D:\\recording.wav',
+    status: 'running',
+    stage: '转录中',
+    progress: 20,
+    elapsedSeconds: 1,
+  };
+  const user = userEvent.setup();
+  const { rerender } = render(
+    <TaskMediaList
+      task={task}
+      mediaStates={[media]}
+      currentMedia={undefined}
+      mediaSeconds={1}
+      isInputTaskPreview={false}
+    />,
+  );
+  const source = screen.getByRole('button', { name: '在资源管理器中定位 recording.wav' });
+  source.focus();
+  await user.keyboard('{Enter}');
+  expect(reveal).toHaveBeenLastCalledWith(media.path);
+  const done = { ...media, status: 'completed' as const, outputPaths: ['E:\\renamed.md'] };
+  rerender(
+    <TaskMediaList
+      task={task}
+      mediaStates={[done]}
+      currentMedia={undefined}
+      mediaSeconds={1}
+      isInputTaskPreview={false}
+    />,
+  );
+  await user.click(screen.getByRole('button', { name: '在资源管理器中定位 renamed.md' }));
+  expect(reveal).toHaveBeenLastCalledWith('E:\\renamed.md');
+  reveal.mockRejectedValueOnce(new Error('文件不存在'));
+  await user.click(screen.getByRole('button', { name: '在资源管理器中定位 renamed.md' }));
+  expect(useWorkspace.getState().lastError).toBe('文件不存在');
 });
 
 it('follows media inside its scroll container and respects manual browsing', () => {

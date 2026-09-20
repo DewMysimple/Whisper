@@ -116,3 +116,55 @@ test('task workbench honors content width and keeps responsive cards intact', as
       .toBe(width);
   }
 });
+
+test('navigation shares the management surface and cards keep an inset facts grid and a single footer row', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await openHistory(page);
+  await expect(page.locator('.task-history-manager .task-workspace-switcher')).toBeVisible();
+  await expect(page.locator('.task-workspace-switcher .segmented-card')).toHaveCount(2);
+  await expect(page.locator('.task-summary .segmented-card')).toHaveCount(4);
+  const footer = page.locator('.task-card-footer').nth(1);
+  const model = await footer.locator('.task-card-model').boundingBox();
+  const actions = await footer.locator('.task-card-footer-actions').boundingBox();
+  expect(Math.abs(model!.y + model!.height / 2 - actions!.y - actions!.height / 2)).toBeLessThan(1);
+  await page.getByRole('button', { name: '查看 Product Interview 06.mkv 详情' }).first().click();
+  const detail = page.getByRole('dialog');
+  await expect(detail.getByLabel('任务概要').locator('dt')).toHaveCount(6);
+  const preview = await detail.locator('.preview-section').boundingBox();
+  const parameters = await detail.locator('.parameter-snapshot').boundingBox();
+  expect(preview!.y).toBeLessThan(parameters!.y);
+  await expect
+    .poll(() => detail.evaluate((e) => e.scrollWidth - e.clientWidth))
+    .toBeLessThanOrEqual(1);
+});
+
+test('topbar folds without losing its expanded height and the settings preview opens the workbench', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const topbar = page.locator('.topbar');
+  const height = (await topbar.boundingBox())!.height;
+  await page.getByRole('button', { name: '收起顶栏' }).click();
+  await expect(topbar).toHaveCSS('height', '16px');
+  await expect(page.getByRole('button', { name: '展开顶栏' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await page
+    .getByRole('navigation', { name: '主导航' })
+    .getByRole('button', { name: '偏好设置' })
+    .click();
+  await page.getByRole('button', { name: '开始本地转录' }).click();
+  await expect(page.getByLabel('执行前清单')).toBeVisible();
+  await page.getByRole('button', { name: '展开顶栏' }).click();
+  await expect(topbar).toHaveCSS('height', `${height}px`);
+  await page.getByRole('button', { name: 'Worker 日志', exact: true }).click();
+  const cards = page.getByLabel('Worker 日志状态').getByRole('button');
+  for (let index = 0; index < 4; index++) {
+    await cards.nth(index).click();
+    await expect(cards.nth(index)).not.toHaveAttribute('aria-pressed');
+    await expect(page.getByRole('log')).toBeFocused();
+  }
+});

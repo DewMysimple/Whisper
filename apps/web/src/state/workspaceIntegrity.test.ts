@@ -44,6 +44,37 @@ describe('workspace task integrity', () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
+  it('previews and locates outputs recorded only on the completed media', async () => {
+    const path = 'D:\\Text\\lesson.txt';
+    const reveal = vi.spyOn(desktopBridge, 'revealOutput').mockResolvedValue();
+    const preview = vi
+      .spyOn(desktopBridge, 'readOutputPreview')
+      .mockResolvedValue({ path, content: 'transcript', truncated: false });
+    useWorkspace.setState({
+      tasks: [
+        {
+          ...TASK,
+          status: 'completed',
+          outputs: [],
+          mediaStates: [
+            {
+              path: 'D:\\lesson.wav',
+              status: 'completed',
+              progress: 100,
+              stage: '完成',
+              elapsedSeconds: 1,
+              outputPaths: [path],
+            },
+          ],
+        },
+      ],
+    });
+    await useWorkspace.getState().selectTask(TASK.id);
+    expect(preview).toHaveBeenCalledWith(path);
+    await useWorkspace.getState().revealTaskOutput(TASK.id);
+    expect(reveal).toHaveBeenCalledWith(path);
+  });
+
   it('locks submission before model inspection and preserves input added while awaiting the Host', async () => {
     const modelCheck = deferred<LocalModelDescriptor[]>();
     const list = vi.spyOn(desktopBridge, 'listLocalModels').mockReturnValue(modelCheck.promise);

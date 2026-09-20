@@ -23,6 +23,7 @@ const preferences: WorkspacePreferences = {
   sidebarWidth: 320,
   workspaceWidth: 1600,
   topbarHeight: 132,
+  topbarCollapsed: false,
   selectedModelId: 'large-v3-turbo',
   selectedPresetId: 'en_v1',
   profileMode: 'transcript',
@@ -82,6 +83,16 @@ describe('desktop workspace persistence', () => {
         }),
       ),
     ).toThrow(/字段或参数范围/);
+  });
+
+  it('persists a collapsed topbar independently of its expanded height', () => {
+    const folded = { ...preferences, topbarCollapsed: true, topbarHeight: 144 };
+    expect(importPreferences(exportPreferences(folded))).toEqual(folded);
+    expect(() =>
+      importPreferences(
+        exportPreferences({ ...folded, topbarCollapsed: 'yes' } as unknown as WorkspacePreferences),
+      ),
+    ).toThrow();
   });
 
   it('migrates a hidden legacy default model to Turbo without rewriting task history', () => {
@@ -180,6 +191,7 @@ describe('desktop workspace persistence', () => {
     delete legacy.preferences.sidebarWidth;
     delete legacy.preferences.workspaceWidth;
     delete legacy.preferences.topbarHeight;
+    delete legacy.preferences.topbarCollapsed;
     delete legacy.preferences.selectedModelId;
     legacy.preferences.hardwarePreference = {
       mode: 'cpu',
@@ -204,6 +216,7 @@ describe('desktop workspace persistence', () => {
         sidebarWidth: 304,
         workspaceWidth: 1540,
         topbarHeight: 116,
+        topbarCollapsed: false,
         selectedModelId: 'large-v3-turbo',
       }),
     );
@@ -232,6 +245,7 @@ describe('desktop workspace persistence', () => {
         sidebarWidth: 304,
         workspaceWidth: 1540,
         topbarHeight: 116,
+        topbarCollapsed: false,
       }),
     );
   });

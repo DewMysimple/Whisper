@@ -17,7 +17,7 @@ export function TaskProcessChain({ task }: { task: TaskSnapshot }) {
           <li className={`is-${step.state}`} key={step.label}>
             <span>{step.state === 'complete' ? <Check size={14} /> : <i />}</span>
             <strong>{step.label}</strong>
-            <small>{step.detail}</small>
+            {step.state !== 'complete' && <small>{step.detail}</small>}
           </li>
         ))}
       </ol>

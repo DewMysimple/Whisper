@@ -1,4 +1,4 @@
-import { Activity, History } from 'lucide-react';
+import { SegmentedCard } from '../SegmentedCard';
 import { useWorkspace } from '../../state/workspace';
 import { TaskHistory } from './TaskHistory';
 import { TaskMonitor } from './TaskMonitor';
@@ -16,45 +16,37 @@ export function TasksView() {
     0,
   );
 
+  const navigation = (
+    <div className="task-workspace-switcher" aria-label="任务监控与历史记录">
+      <SegmentedCard
+        label="任务监控"
+        value={active}
+        description={
+          previewCount > 0
+            ? `${previewCount} 个待处理媒体`
+            : active > 0
+              ? '排队或转录中'
+              : '当前空闲'
+        }
+        selected={mode === 'monitor'}
+        onClick={() => setMode('monitor')}
+      />
+      <SegmentedCard
+        label="历史记录"
+        value={tasks.length}
+        description="本机任务快照"
+        selected={mode === 'history'}
+        onClick={() => setMode('history')}
+      />
+    </div>
+  );
   return (
     <div className="tasks-view">
-      <div className="task-workspace-switcher" aria-label="任务监控与历史记录">
-        <button
-          aria-pressed={mode === 'monitor'}
-          className={mode === 'monitor' ? 'is-active' : ''}
-          onClick={() => setMode('monitor')}
-          type="button"
-        >
-          <Activity size={17} />
-          <span>
-            <strong>任务监控</strong>
-            <small>
-              {previewCount > 0
-                ? `${previewCount} 个待处理媒体`
-                : active > 0
-                  ? `${active} 项活动任务`
-                  : '当前空闲'}
-            </small>
-          </span>
-        </button>
-        <button
-          aria-pressed={mode === 'history'}
-          className={mode === 'history' ? 'is-active' : ''}
-          onClick={() => setMode('history')}
-          type="button"
-        >
-          <History size={17} />
-          <span>
-            <strong>历史记录</strong>
-            <small>{tasks.length} 条本机快照</small>
-          </span>
-        </button>
-      </div>
       {mode === 'monitor' ? (
-        <TaskMonitor />
+        <TaskMonitor navigation={navigation} />
       ) : (
         <div className="task-history-shell">
-          <TaskHistory />
+          <TaskHistory navigation={navigation} />
         </div>
       )}
     </div>

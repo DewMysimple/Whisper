@@ -14,6 +14,7 @@ import { getPreset, transcriptionTaskLabel } from '../data/presets';
 import { getModelLabel } from '../data/models';
 import { formatMediaDuration, summarizeInputDurations } from '../state/mediaDuration';
 import { useWorkspace } from '../state/workspace';
+import { CardButton } from './CardButton';
 import { ConfirmDialog } from './ConfirmDialog';
 
 function durationChecklistLabel(knownSeconds: number, unknownCount: number): string {
@@ -28,9 +29,9 @@ function durationChecklistLabel(knownSeconds: number, unknownCount: number): str
 }
 
 const CONFLICT_POLICY_LABEL = {
-  confirm_overwrite: '同名时执行前确认覆盖',
-  confirm_skip: '同名时执行前确认跳过',
-  auto_rename: '同名时自动安全重命名',
+  confirm_overwrite: '覆盖',
+  confirm_skip: '跳过',
+  auto_rename: '重命名',
 } as const;
 
 const HOST_STATUS_LABEL = {
@@ -73,7 +74,7 @@ export function LaunchCard() {
     profileMode === 'subtitle'
       ? [output.srtEnabled ? 'SRT' : null, output.txtEnabled ? 'TXT' : null]
       : [output.txtEnabled ? 'TXT' : null, output.markdownEnabled ? 'MD' : null];
-  const outputSummary = selectedOutputFormats.filter((format) => format !== null).join(' + ');
+  const outputSummary = selectedOutputFormats.filter((format) => format !== null).join(' · ');
   const canStart =
     inputs.length > 0 &&
     !hasInvalidInput &&
@@ -194,9 +195,9 @@ export function LaunchCard() {
           </div>
         </div>
         <div aria-label="执行前清单" className="preflight-list">
-          <button
+          <CardButton
             aria-label="前往版本与模型配置"
-            className="selection-card preflight-item"
+            className="preflight-item"
             onClick={openProfileConfiguration}
             type="button"
           >
@@ -211,11 +212,11 @@ export function LaunchCard() {
               </strong>
               <small>{getModelLabel(selectedModelId)} · 本地离线处理</small>
             </div>
-          </button>
+          </CardButton>
 
-          <button
+          <CardButton
             aria-label="前往输入来源配置"
-            className={`selection-card preflight-item ${inputs.length === 0 || hasInvalidInput ? 'needs-attention' : ''}`}
+            className={`preflight-item ${inputs.length === 0 || hasInvalidInput ? 'needs-attention' : ''}`}
             onClick={() =>
               focusChecklistTarget('.source-panel', '.source-action-button.is-primary')
             }
@@ -231,11 +232,11 @@ export function LaunchCard() {
                 {inputs.length} 项输入来源 · {durationChecklist}
               </small>
             </div>
-          </button>
+          </CardButton>
 
-          <button
+          <CardButton
             aria-label="前往输出策略配置"
-            className={`selection-card preflight-item ${needsOutputRoot || !hasOutputTarget ? 'needs-attention' : ''}`}
+            className={`preflight-item ${needsOutputRoot || !hasOutputTarget ? 'needs-attention' : ''}`}
             onClick={() => focusChecklistTarget('.output-panel', '.output-location-action')}
             type="button"
           >
@@ -252,11 +253,11 @@ export function LaunchCard() {
                 <span>{CONFLICT_POLICY_LABEL[output.conflictPolicy]}</span>
               </small>
             </div>
-          </button>
+          </CardButton>
 
-          <button
+          <CardButton
             aria-label="前往执行方式配置"
-            className={`selection-card preflight-item ${hostStatus.state !== 'ready' ? 'needs-attention' : ''}`}
+            className={`preflight-item ${hostStatus.state !== 'ready' ? 'needs-attention' : ''}`}
             onClick={() =>
               focusChecklistTarget(
                 '.output-panel',
@@ -280,7 +281,7 @@ export function LaunchCard() {
                 <span>{HOST_STATUS_LABEL[hostStatus.state]}</span>
               </small>
             </div>
-          </button>
+          </CardButton>
         </div>
 
         {readinessMessage && <p className="launch-summary">{readinessMessage}</p>}

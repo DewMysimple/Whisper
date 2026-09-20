@@ -7,7 +7,7 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { TaskMediaList } from './TaskMediaList';
 import { TaskProcessChain } from './TaskProcessChain';
 
@@ -46,7 +46,7 @@ function monitorSourceSummary(task: TaskSnapshot): string | null {
     : `文件夹输入 · ${task.sourceCount} 个媒体文件`;
 }
 
-export function TaskMonitor() {
+export function TaskMonitor({ navigation }: { navigation?: ReactNode }) {
   const tasks = useWorkspace((state) => state.tasks);
   const inputs = useWorkspace((state) => state.inputs);
   const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
@@ -75,14 +75,17 @@ export function TaskMonitor() {
 
   if (activeTask === undefined) {
     return (
-      <section className="task-monitor-empty" aria-labelledby="task-monitor-empty-title">
-        <span aria-hidden="true">
-          <Radio size={24} />
-        </span>
-        <div>
-          <p className="step-label">LIVE TASK MONITOR</p>
-          <h2 id="task-monitor-empty-title">当前没有正在执行的任务</h2>
-          <p>开始转录后，这里会展开真实媒体清单、逐文件进度和完整处理阶段。</p>
+      <section className="task-monitor-hero">
+        {navigation}
+        <div className="task-monitor-empty" aria-labelledby="task-monitor-empty-title">
+          <span aria-hidden="true">
+            <Radio size={24} />
+          </span>
+          <div>
+            <p className="step-label">LIVE TASK MONITOR</p>
+            <h2 id="task-monitor-empty-title">当前没有正在执行的任务</h2>
+            <p>开始转录后，这里会展开真实媒体清单、逐文件进度和完整处理阶段。</p>
+          </div>
         </div>
       </section>
     );
@@ -116,6 +119,7 @@ export function TaskMonitor() {
     <>
       <div className="task-monitor-layout">
         <section className="task-monitor-hero" aria-labelledby="task-monitor-title">
+          {navigation}
           <header>
             <div className="task-monitor-overline">
               <p className="step-label">

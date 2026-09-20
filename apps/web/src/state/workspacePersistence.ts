@@ -20,6 +20,7 @@ export function preferencesFromState(state: WorkspaceState): WorkspacePreference
     sidebarWidth: state.sidebarWidth,
     workspaceWidth: state.workspaceWidth,
     topbarHeight: state.topbarHeight,
+    topbarCollapsed: state.topbarCollapsed,
     selectedModelId: state.selectedModelId,
     selectedPresetId: state.selectedPresetId,
     profileMode: state.profileMode,
@@ -48,6 +49,7 @@ export function appearanceFromState(
     | 'sidebarWidth'
     | 'workspaceWidth'
     | 'topbarHeight'
+    | 'topbarCollapsed'
   >,
 ) {
   return {
@@ -62,6 +64,7 @@ export function appearanceFromState(
     sidebarWidth: state.sidebarWidth,
     workspaceWidth: state.workspaceWidth,
     topbarHeight: state.topbarHeight,
+    topbarCollapsed: state.topbarCollapsed,
   };
 }
 

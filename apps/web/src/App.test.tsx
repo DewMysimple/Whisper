@@ -62,9 +62,7 @@ describe('desktop workspace', () => {
     expect(checklist).toHaveTextContent('输出策略TXT跟随每个媒体文件');
     expect(checklist).toHaveTextContent('执行方式原声转录完成后无操作本地 Worker 已就绪');
     expect(within(checklist).getByText('跟随每个媒体文件', { exact: true })).toBeInTheDocument();
-    expect(
-      within(checklist).getByText('同名时执行前确认覆盖', { exact: true }),
-    ).toBeInTheDocument();
+    expect(within(checklist).getByText('覆盖', { exact: true })).toBeInTheDocument();
     expect(within(checklist).getByText('完成后无操作', { exact: true })).toBeInTheDocument();
     expect(within(checklist).getByText('本地 Worker 已就绪', { exact: true })).toBeInTheDocument();
     const checklistLinks = [
@@ -74,7 +72,7 @@ describe('desktop workspace', () => {
       within(checklist).getByRole('button', { name: '前往执行方式配置' }),
     ];
     for (const link of checklistLinks) {
-      expect(link).toHaveClass('selection-card');
+      expect(link).toHaveClass('card-button');
       expect(link).not.toHaveClass('is-selected');
       expect(link).not.toHaveAttribute('aria-pressed');
     }

@@ -1,4 +1,4 @@
-import { AlertTriangle, Moon, Search, Sun, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Moon, Search, Sun, X } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -134,6 +134,8 @@ function TopbarResizeHandle() {
 }
 
 function Topbar() {
+  const collapsed = useWorkspace((state) => state.topbarCollapsed);
+  const setCollapsed = useWorkspace((state) => state.setTopbarCollapsed);
   const hostStatus = useWorkspace((state) => state.hostStatus);
   const activeView = useWorkspace((state) => state.activeView);
   const setActiveView = useWorkspace((state) => state.setActiveView);
@@ -158,7 +160,16 @@ function Topbar() {
   const nextTheme = resolvedTheme === 'dark' ? 'light' : 'dark';
 
   return (
-    <header className="topbar">
+    <header className={`topbar ${collapsed ? 'is-collapsed' : ''}`}>
+      <button
+        type="button"
+        className="topbar-collapse-button"
+        aria-label={collapsed ? '展开顶栏' : '收起顶栏'}
+        aria-expanded={!collapsed}
+        onClick={() => setCollapsed(!collapsed)}
+      >
+        {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+      </button>
       <div className="title-block">
         <p className="eyebrow">{copy.eyebrow}</p>
         <h1>{copy.title}</h1>
@@ -192,7 +203,7 @@ function Topbar() {
           {resolvedTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </div>
-      <TopbarResizeHandle />
+      {!collapsed && <TopbarResizeHandle />}
     </header>
   );
 }

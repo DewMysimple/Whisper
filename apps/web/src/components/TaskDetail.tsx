@@ -10,7 +10,7 @@ import {
   formatMediaDuration,
   taskDurationSummary,
 } from '../state/mediaDuration';
-import { formatTaskCreatedAt } from '../state/taskHistory';
+import { formatTaskCreatedAt, taskStatusLabel, taskStatusTone } from '../state/taskHistory';
 import { formatTaskStage } from '../state/taskStage';
 import { canResumeTask, useWorkspace } from '../state/workspace';
 import { taskOutputPaths } from '../state/workspaceTaskState';
@@ -96,24 +96,33 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
         </header>
 
         <div className="detail-status-line">
-          <span
-            className={`status-badge ${task.outputAvailability === 'missing' ? 'failed' : task.status}`}
-          >
-            {task.outputAvailability === 'missing' ? 'OUTPUT MISSING' : task.status.toUpperCase()}
-          </span>
-          <span>{getPreset(task.presetId).label}</span>
-          <span>{transcriptionTaskLabel(task.draft?.effectiveParameters.task)}</span>
-          <span>{getModelLabel(task.modelId)}</span>
-          <span>{formatResolvedHardware(task.hardware)}</span>
-          <span>{formatTaskCreatedAt(task.createdAt)}</span>
-          <span>{task.elapsed}</span>
-          <span>{formatDurationSummary(taskDurationSummary(task))}</span>
+          <span className={`status-badge ${taskStatusTone(task)}`}>{taskStatusLabel(task)}</span>
+          <span>{task.progress}%</span>
           <span>
             {task.outputAvailability === 'missing'
               ? '输出文件已丢失或移动'
               : formatTaskStage(task.stage)}
           </span>
         </div>
+
+        <dl className="detail-facts" aria-label="任务概要">
+          {[
+            [
+              '转录模式',
+              `${getPreset(task.presetId).label} · ${transcriptionTaskLabel(task.draft?.effectiveParameters.task)}`,
+            ],
+            ['模型', getModelLabel(task.modelId)],
+            ['执行硬件', formatResolvedHardware(task.hardware)],
+            ['创建时间', formatTaskCreatedAt(task.createdAt)],
+            ['处理耗时', task.elapsed],
+            ['媒体时长', formatDurationSummary(taskDurationSummary(task))],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
 
         <section className="detail-section">
           <h3>输入快照</h3>
@@ -128,9 +137,36 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
                 ? input.durationSeconds !== undefined
                   ? `已知 ${formatMediaDuration(input.durationSeconds)} + ${input.unknownDurationCount} 个未知`
                   : `${input.unknownDurationCount} 个时长未知`
-                : `时长 ${formatMediaDuration(input.durationSeconds)}`}
+                : input.durationSeconds === undefined
+                  ? '时长未知'
+                  : `时长 ${formatMediaDuration(input.durationSeconds)}`}
             </code>
           )) ?? <span>旧任务没有保存输入快照。</span>}
+        </section>
+
+        {outputs.length > 0 && (
+          <section className="detail-section">
+            <h3>输出文件</h3>
+            {outputs.map((output) => (
+              <code key={output}>{output}</code>
+            ))}
+          </section>
+        )}
+
+        <section className="detail-section preview-section">
+          <h3>
+            <FileText size={16} /> 输出预览
+          </h3>
+          {previewLoading ? (
+            <span>正在读取本地输出…</span>
+          ) : preview ? (
+            <>
+              <pre>{preview.content}</pre>
+              {preview.truncated && <small>预览已截断为前 128 KiB。</small>}
+            </>
+          ) : (
+            <span>任务完成后可预览 TXT、Markdown 或 SRT。</span>
+          )}
         </section>
 
         <section className="detail-section">
@@ -326,31 +362,6 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
                 </div>
               )}
             </>
-          )}
-        </section>
-
-        {outputs.length > 0 && (
-          <section className="detail-section">
-            <h3>输出文件</h3>
-            {outputs.map((output) => (
-              <code key={output}>{output}</code>
-            ))}
-          </section>
-        )}
-
-        <section className="detail-section preview-section">
-          <h3>
-            <FileText size={16} /> 输出预览
-          </h3>
-          {previewLoading ? (
-            <span>正在读取本地输出…</span>
-          ) : preview ? (
-            <>
-              <pre>{preview.content}</pre>
-              {preview.truncated && <small>预览已截断为前 128 KiB。</small>}
-            </>
-          ) : (
-            <span>任务完成后可预览 TXT、Markdown 或 SRT。</span>
           )}
         </section>
 

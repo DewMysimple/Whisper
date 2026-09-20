@@ -274,7 +274,7 @@ test('uses the same subtle press feedback for selectable cards', async ({ page }
   const finishAction = page.getByRole('button', { name: '无操作' });
 
   await expect(transcriptMode).toHaveClass(/selection-card/);
-  await expect(preflightProfile).toHaveClass(/selection-card/);
+  await expect(preflightProfile).toHaveClass(/card-button/);
   await expect(preflightProfile).not.toHaveClass(/is-selected/);
   await expect(preflightProfile).not.toHaveAttribute('aria-pressed');
   await expect(markdownFormat).toHaveClass(/selection-card/);
@@ -801,7 +801,7 @@ test('supports workspace navigation, theme and configuration export', async ({
       .locator('.task-summary-card')
       .first()
       .evaluate((element) => getComputedStyle(element).padding),
-  ).resolves.toBe('15px 20px');
+  ).resolves.toBe('16px 20px');
   await page.getByRole('button', { name: '偏好设置' }).click();
   await page.getByRole('button', { name: '增大工作台内容字号' }).click();
   await page.getByRole('button', { name: '增大工作台内容字号' }).click();
@@ -970,8 +970,13 @@ test('supports workspace navigation, theme and configuration export', async ({
             formatStyle.fontSize === parameterStyle.fontSize &&
             formatStyle.fontWeight === parameterStyle.fontWeight &&
             formatStyle.lineHeight === parameterStyle.lineHeight,
-          factsReachCardEdges:
-            Math.abs(facts.left - main.left) <= 1 && Math.abs(facts.right - main.right) <= 1,
+          factsHaveInsetClosedBorder:
+            facts.left - main.left >= 12 &&
+            main.right - facts.right >= 12 &&
+            getComputedStyle(card.querySelector('.task-history-facts')!).borderLeftWidth ===
+              '1px' &&
+            parseFloat(getComputedStyle(card.querySelector('.task-history-facts')!).borderRadius) >=
+              10,
           configRulesJoinRowBorders: configCells.every(
             (cell) =>
               Math.abs(cell.top - configRow.top) <= 1 &&
@@ -995,7 +1000,7 @@ test('supports workspace navigation, theme and configuration export', async ({
     parameterTextIsFullyVisible: true,
     presetTextIsFullyVisible: true,
     formatUsesUnifiedValueStyle: true,
-    factsReachCardEdges: true,
+    factsHaveInsetClosedBorder: true,
     configRulesJoinRowBorders: true,
     configAndStatsColumnsAlign: true,
     parameterCellIsThird: true,
@@ -1050,11 +1055,11 @@ test('supports workspace navigation, theme and configuration export', async ({
       .locator('.task-row')
       .first()
       .evaluate((card) => {
-        const state = card.querySelector('.task-status')!.getBoundingClientRect();
+        const state = card.querySelector('.task-card-heading')!.getBoundingClientRect();
         const progress = card.querySelector('.task-card-progress')!.getBoundingClientRect();
-        return Math.abs(state.top + state.height / 2 - (progress.top + progress.height / 2));
+        return progress.top - state.bottom;
       }),
-  ).resolves.toBeLessThan(1);
+  ).resolves.toBeGreaterThan(8);
   await expect(
     page.locator('.task-toolbar').evaluate((toolbar) => {
       const tops = Array.from(toolbar.children, (child) => child.getBoundingClientRect().top);
@@ -1161,7 +1166,7 @@ test('supports workspace navigation, theme and configuration export', async ({
       .locator('.task-summary-card')
       .first()
       .evaluate((element) => getComputedStyle(element).padding),
-  ).resolves.toBe('15px 20px');
+  ).resolves.toBe('16px 20px');
   await page.getByRole('searchbox', { name: '搜索任务' }).fill('Interview');
   await expect(page.getByTitle('Product Interview 06.mkv')).toBeVisible();
   await page.getByRole('button', { name: '清除任务搜索' }).click();
@@ -1180,7 +1185,10 @@ test('supports workspace navigation, theme and configuration export', async ({
       const headingBounds = heading.getBoundingClientRect();
       const statusBounds = heading.querySelector('.task-status')!.getBoundingClientRect();
       const identityBounds = title.closest('.task-card-identity')!.getBoundingClientRect();
-      const progressBounds = heading.querySelector('.task-card-progress')!.getBoundingClientRect();
+      const progressBounds = title
+        .closest('.task-row')!
+        .querySelector('.task-card-progress')!
+        .getBoundingClientRect();
       const titleBounds = title.getBoundingClientRect();
       const extensionBounds = extension.getBoundingClientRect();
       return {
@@ -1189,7 +1197,7 @@ test('supports workspace navigation, theme and configuration export', async ({
         extensionIsVisible:
           extensionBounds.width > 0 && extensionBounds.right <= titleBounds.right + 1,
         identityIsRightOfIcon: identityBounds.left - statusBounds.right >= 7,
-        identityStaysBeforeProgress: progressBounds.left - identityBounds.right >= 7,
+        progressBelowTitle: progressBounds.top >= headingBounds.bottom + 8,
         overflow: basenameStyle.overflow,
         progressIsRightAligned: Math.abs(progressBounds.right - headingBounds.right) <= 1,
         scrollWidth: basename.scrollWidth,
@@ -1203,7 +1211,7 @@ test('supports workspace navigation, theme and configuration export', async ({
       extension: '.mkv',
       extensionIsVisible: true,
       identityIsRightOfIcon: true,
-      identityStaysBeforeProgress: true,
+      progressBelowTitle: true,
       overflow: 'hidden',
       progressIsRightAligned: true,
       textOverflow: 'ellipsis',
@@ -1498,7 +1506,7 @@ test('creates an SRT task from the independent subtitle profile', async ({ page 
   await expect(txtOutput).not.toBeChecked();
   await txtOutput.check();
   await expect(txtOutput).toBeChecked();
-  await expect(page.getByRole('button', { name: '开始生成 SRT + TXT' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '开始生成 SRT · TXT' })).toHaveCount(1);
   await txtOutput.uncheck();
   await expect(page.getByRole('button', { name: '开始生成 SRT' })).toHaveCount(1);
   await expect(page.getByRole('spinbutton', { name: 'Compression ratio' })).toHaveCount(0);
@@ -1536,14 +1544,14 @@ test('opens the independent Worker log workspace and exposes only the restored s
   await page.getByRole('button', { name: 'Worker 日志' }).click();
   await expect(page.getByRole('heading', { name: '实时诊断输出' })).toBeVisible();
   await expect(page.getByLabel('Worker 日志状态')).toContainText('BUFFER');
-  await expect(page.getByLabel('Worker 日志状态').locator('article')).toHaveCount(4);
+  await expect(page.getByLabel('Worker 日志状态').locator('button')).toHaveCount(4);
   await expect(
     page.getByLabel('Worker 日志状态').evaluate((status) => {
-      const cards = Array.from(status.querySelectorAll('article'), (card) =>
+      const cards = Array.from(status.querySelectorAll('button'), (card) =>
         card.getBoundingClientRect(),
       );
       const style = getComputedStyle(status);
-      const ready = cards.length > 0 ? status.querySelector('article')! : null;
+      const ready = cards.length > 0 ? status.querySelector('button')! : null;
       const greenProbe = document.createElement('span');
       greenProbe.style.color = 'var(--green)';
       status.appendChild(greenProbe);

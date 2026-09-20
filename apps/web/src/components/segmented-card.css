@@ -1,0 +1,49 @@
+.segmented-card {
+  --segment-accent: var(--accent);
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 16px 20px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+.segmented-card:first-child {
+  border-left: 0;
+}
+.segmented-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: transparent;
+}
+.segmented-card.is-active {
+  background: color-mix(in srgb, var(--segment-accent) 9%, var(--surface-raised));
+}
+.segmented-card.is-active::before {
+  background: var(--segment-accent);
+}
+.segmented-card small,
+.segmented-card > span {
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  line-height: 1.5;
+}
+.segmented-card strong {
+  font-size: calc(var(--ui-font-size) + 8px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.segmented-card.is-active small,
+.segmented-card.is-active strong {
+  color: var(--segment-accent);
+}
+.segmented-card[data-filter='completed'] {
+  --segment-accent: var(--green);
+}
+.segmented-card[data-filter='failed'] {
+  --segment-accent: var(--danger);
+}

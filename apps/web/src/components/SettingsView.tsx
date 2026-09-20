@@ -658,7 +658,10 @@ export function SettingsView() {
               框架 {uiFontSize}px · 内容 {workspaceFontSize}px · 日志 {logFontSize}px
             </span>
             <div>
-              <button type="button" tabIndex={-1}>
+              <button
+                type="button"
+                onClick={() => useWorkspace.getState().setActiveView('workspace')}
+              >
                 开始本地转录
               </button>
               <code>[WORKER] ready · LOCAL IPC</code>

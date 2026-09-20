@@ -16,6 +16,7 @@ export interface AppearancePreferences {
   sidebarWidth: number;
   workspaceWidth: number;
   topbarHeight: number;
+  topbarCollapsed: boolean;
 }
 
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
@@ -30,6 +31,7 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   sidebarWidth: 304,
   workspaceWidth: 1540,
   topbarHeight: 116,
+  topbarCollapsed: false,
 };
 
 export const UI_FONT_SIZE_RANGE = { minimum: 12, maximum: 18 } as const;

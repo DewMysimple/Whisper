@@ -1,5 +1,5 @@
 import { AlertCircle, Eraser, Search, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { TaskSnapshot } from '../../contracts/desktop';
 import {
   availableTaskDates,
@@ -8,10 +8,12 @@ import {
   taskHistoryCounts,
 } from '../../state/taskHistory';
 import { canResumeTask, isAbnormalTask, useWorkspace } from '../../state/workspace';
+import { useTimedConfirmation } from '../useTimedConfirmation';
+import { SegmentedCard } from '../SegmentedCard';
 import { TaskDateFilter } from './TaskDateFilter';
 import { TaskHistoryCard } from './TaskHistoryCard';
 import { TaskRestoreDialog } from './TaskRestoreDialog';
-export function TaskHistory() {
+export function TaskHistory({ navigation }: { navigation?: ReactNode }) {
   const tasks = useWorkspace((state) => state.tasks);
   const cancelTask = useWorkspace((state) => state.cancelTask);
   const revealTaskOutput = useWorkspace((state) => state.revealTaskOutput);
@@ -29,10 +31,10 @@ export function TaskHistory() {
   const setTaskDateRange = useWorkspace((state) => state.setTaskDateRange);
   const deleteTaskHistory = useWorkspace((state) => state.deleteTaskHistory);
   const [restoreTask, setRestoreTask] = useState<TaskSnapshot | null>(null);
-  const [armedDelete, setArmedDelete] = useState<{
+  const [armedDelete, setArmedDelete] = useTimedConfirmation<{
     key: string;
     label: string;
-  } | null>(null);
+  }>();
   const visibleTasks = useMemo(
     () =>
       tasks
@@ -74,32 +76,12 @@ export function TaskHistory() {
     [resumeTask],
   );
   useEffect(() => {
-    if (armedDelete === null) return;
-    const timeout = window.setTimeout(() => setArmedDelete(null), 4000);
-    const cancelOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setArmedDelete(null);
-    };
-    const cancelOutside = (event: PointerEvent) => {
-      if (!(event.target instanceof Element)) return;
-      const owner = event.target.closest('[data-delete-arm-key]');
-      if (owner?.getAttribute('data-delete-arm-key') !== armedDelete.key) {
-        setArmedDelete(null);
-      }
-    };
-    document.addEventListener('keydown', cancelOnEscape);
-    document.addEventListener('pointerdown', cancelOutside, true);
-    return () => {
-      window.clearTimeout(timeout);
-      document.removeEventListener('keydown', cancelOnEscape);
-      document.removeEventListener('pointerdown', cancelOutside, true);
-    };
-  }, [armedDelete]);
-  useEffect(() => {
     void auditTaskOutputs();
   }, [auditTaskOutputs]);
   return (
     <section className="task-panel" aria-labelledby="task-title">
       <div className="task-history-manager">
+        {navigation}
         <div className="task-history-manager-main">
           <div className="task-history-heading">
             <div>
@@ -138,7 +120,7 @@ export function TaskHistory() {
                 }
                 aria-pressed={armedDelete?.key === 'clear-completed'}
                 className={`task-history-clear ${armedDelete?.key === 'clear-completed' ? 'is-delete-armed' : ''}`}
-                data-delete-arm-key="clear-completed"
+                data-confirm-action="clear-completed"
                 disabled={outputAuditPending || completedCount === 0}
                 onClick={() =>
                   armOrDelete('clear-completed', '再次点击清除历史', clearCompletedHistory)
@@ -159,7 +141,7 @@ export function TaskHistory() {
                 }
                 aria-pressed={armedDelete?.key === 'clear-abnormal'}
                 className={`task-history-clear is-danger-subtle ${armedDelete?.key === 'clear-abnormal' ? 'is-delete-armed' : ''}`}
-                data-delete-arm-key="clear-abnormal"
+                data-confirm-action="clear-abnormal"
                 disabled={outputAuditPending || abnormalCount === 0}
                 onClick={() =>
                   armOrDelete('clear-abnormal', '再次点击清除异常', clearAbnormalHistory)
@@ -176,50 +158,25 @@ export function TaskHistory() {
           </div>
         </div>
         <div className="task-summary task-summary-band" aria-label="历史任务筛选">
-          <button
-            data-filter="all"
-            aria-pressed={taskFilter === 'all'}
-            className={`task-summary-card ${taskFilter === 'all' ? 'is-active' : ''}`}
-            onClick={() => setTaskFilter('all')}
-            type="button"
-          >
-            <small>全部任务</small>
-            <strong>{tasks.length}</strong>
-            <span>本机历史快照</span>
-          </button>
-          <button
-            data-filter="active"
-            aria-pressed={taskFilter === 'active'}
-            className={`task-summary-card ${taskFilter === 'active' ? 'is-active' : ''}`}
-            onClick={() => setTaskFilter('active')}
-            type="button"
-          >
-            <small>正在运行</small>
-            <strong>{activeCount}</strong>
-            <span>排队或转录中</span>
-          </button>
-          <button
-            data-filter="completed"
-            aria-pressed={taskFilter === 'completed'}
-            className={`task-summary-card ${taskFilter === 'completed' ? 'is-active' : ''}`}
-            onClick={() => setTaskFilter('completed')}
-            type="button"
-          >
-            <small>已完成</small>
-            <strong>{completedCount}</strong>
-            <span>本机输出已生成</span>
-          </button>
-          <button
-            data-filter="failed"
-            aria-pressed={taskFilter === 'failed'}
-            className={`task-summary-card ${taskFilter === 'failed' ? 'is-active' : ''}`}
-            onClick={() => setTaskFilter('failed')}
-            type="button"
-          >
-            <small>需要处理</small>
-            <strong>{attentionCount}</strong>
-            <span>转录失败任务</span>
-          </button>
+          {(
+            [
+              ['all', '全部任务', tasks.length, '本机历史快照'],
+              ['active', '正在运行', activeCount, '排队或转录中'],
+              ['completed', '已完成', completedCount, '本机输出已生成'],
+              ['failed', '需要处理', attentionCount, '转录失败任务'],
+            ] as const
+          ).map(([filter, label, count, description]) => (
+            <SegmentedCard
+              key={filter}
+              className="task-summary-card"
+              filter={filter}
+              label={label}
+              value={count}
+              description={description}
+              selected={taskFilter === filter}
+              onClick={() => setTaskFilter(filter)}
+            />
+          ))}
         </div>
       </div>
       <span aria-live="polite" className="sr-only">
