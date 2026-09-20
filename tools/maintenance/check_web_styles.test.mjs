@@ -93,3 +93,13 @@ test('diagnostics and summary typography cannot leak back into global styles', (
   assert.match(result.problems.join('\n'), /components\/summary-text.css/);
   assert.match(result.problems.join('\n'), /components\/diagnostic-text.css/);
 });
+
+test('configuration and shared entry surfaces retain their own style definitions', () => {
+  const result = inspectStyles([
+    ['styles.css', '.config-field { padding: 0 } .workspace-entry-card { color: red }'],
+    ['components/configuration.css', '.config-field { padding: 1px } .config-field { padding: 2px !important }'],
+  ]);
+  assert.equal(result.problems.length, 4);
+  assert.match(result.problems.join('\n'), /components\/configuration.css/);
+  assert.match(result.problems.join('\n'), /components\/workspace-entry-card.css/);
+});

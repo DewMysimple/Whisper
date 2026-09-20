@@ -70,6 +70,11 @@ export function appearanceFromState(
 
 let persistenceTimer: ReturnType<typeof setTimeout> | undefined;
 let pendingState: (() => WorkspaceState) | undefined;
+// Browser preview data must never become real desktop tasks on the same dev URL.
+export const workspaceStorageKey =
+  desktopBridge.mode === 'mock'
+    ? 'whisper-subtitle.preview-state.v1'
+    : 'whisper-subtitle.desktop-state.v1';
 
 export function flushPersistence(): void {
   if (persistenceTimer !== undefined) clearTimeout(persistenceTimer);
@@ -79,7 +84,7 @@ export function flushPersistence(): void {
   if (!get) return;
   try {
     const state = get();
-    saveWorkspaceState(preferencesFromState(state), state.tasks);
+    saveWorkspaceState(preferencesFromState(state), state.tasks, workspaceStorageKey);
   } catch {
     get().handleEvent({
       type: 'worker.error',
@@ -90,7 +95,6 @@ export function flushPersistence(): void {
 }
 
 export function persistLater(get: () => WorkspaceState): void {
-  if (desktopBridge.mode !== 'tauri') return;
   pendingState = get;
   // Throttle rather than debounce: continuous progress must still reach storage.
   persistenceTimer ??= setTimeout(flushPersistence, 150);

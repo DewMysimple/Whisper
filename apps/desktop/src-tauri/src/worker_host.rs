@@ -30,6 +30,7 @@ mod logs;
 mod media;
 mod model_catalog;
 mod models;
+mod parameter_validation;
 use self::logs::{worker_log_summary, worker_quality_diagnostic_log_lines};
 pub use self::media::{apply_media_inspections, inspect_input_paths};
 use self::model_catalog::DEFAULT_MODEL_ID;

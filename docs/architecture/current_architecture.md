@@ -110,7 +110,7 @@ CLI 或 Desktop IPC 输入
   → ProgressEvent / BatchResult
 ```
 
-CLI 和 Worker 共用同一 `TranscriptionService`；四个 preset 只改变注册表参数和后处理策略。`domain/presets.py` 是参数事实源，Web preset 选择和任务快照消费由 `tools/codegen/generate_preset_catalog.py` 生成的 TypeScript 投影。`domain/models.py` 是模型身份与能力事实源，`tools/codegen/generate_model_catalog.py` 将其投影到 Web TypeScript 和 Rust Host，并校验 IPC schema 中的模型枚举。当前桌面不提供独立模型切换、推理参数或硬件优化工作台；Worker 在任务开始时自动解析设备，任务快照只记录实际使用的模型和硬件。`model.load`、`model.unload` 仅作为 Desktop IPC v1 冻结 Worker 兼容命令保留，当前 UI/bridge 不调用，且不再接受硬件偏好。
+CLI 和 Worker 共用同一 `TranscriptionService`；四个 preset 只改变注册表参数和后处理策略。`domain/presets.py` 是参数事实源，Web preset 选择和任务快照消费由 `tools/codegen/generate_preset_catalog.py` 生成的 TypeScript 投影。`domain/models.py` 是模型身份与能力事实源，`tools/codegen/generate_model_catalog.py` 将其投影到 Web TypeScript 和 Rust Host，并校验 IPC schema 中的模型枚举。当前开发源码提供“模型与参数”工作台，模型选择由本地清单检查，36 项推理参数按模型／preset 隔离保存。`domain/parameters.py` 生成 Web 类型与校验规则、参数默认投影和 IPC v1 参数定义，Host 读取内嵌 schema 校验，Worker 与 domain 共用归一化；显式覆盖才改变校准值。硬件优化仍不开放，Worker 在任务开始时自动解析设备，任务快照冻结参数、模型与实际硬件。`model.load`、`model.unload` 仅作为 Desktop IPC v1 冻结 Worker 兼容命令保留，当前 UI/bridge 不调用，且不再接受硬件偏好。
 
 Worker 流程为：
 

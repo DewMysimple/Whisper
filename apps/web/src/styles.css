@@ -4142,38 +4142,6 @@ textarea:focus {
   transform: translateY(-1px);
 }
 
-.path-entry {
-  margin-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
-}
-
-.path-entry-toggle {
-  display: flex;
-  width: 100%;
-  min-height: 38px;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 2px 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: calc(10px + var(--content-font-bump));
-  text-align: left;
-}
-
-.path-entry-chevron {
-  margin-left: auto;
-  transition: transform 160ms ease;
-}
-
-.path-entry.is-open .path-entry-chevron {
-  transform: rotate(180deg);
-}
-
-.path-entry .path-paste-row {
-  margin-top: 10px;
-}
-
 .launch-action-heading {
   display: flex;
   align-items: center;
@@ -4294,8 +4262,7 @@ textarea:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .source-action-button,
-  .path-entry-chevron {
+  .source-action-button {
     transition: none;
   }
 }
@@ -4514,12 +4481,6 @@ textarea:focus {
 
 .task-progress-empty span {
   font-size: 10px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .task-progress-track > span {
-    transition: none;
-  }
 }
 
 .directory-path-input > small {
@@ -5077,58 +5038,14 @@ textarea:focus {
     min-height: 0;
   }
 
-  .source-panel .path-entry {
-    display: grid;
-    min-height: 0;
-    margin-top: 12px;
-    padding: 0 16px 16px;
-    border: 1px solid var(--border);
-    border-radius: 15px;
-    background: color-mix(in srgb, var(--surface) 76%, var(--surface-raised));
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .source-panel .path-entry-toggle {
-    padding-top: 12px;
-  }
-
   .source-panel .path-paste-row {
     min-height: 0;
     align-items: stretch;
   }
 
-  .view-content:not(.is-home) .source-panel .path-entry .directory-path-input,
-  .view-content:not(.is-home) .source-panel .path-entry .directory-path-input textarea {
-    height: 100%;
-    min-height: 0;
-    max-height: none;
-  }
-
   .source-panel .path-paste-row > .secondary-button {
     align-self: end;
   }
-}
-
-.path-entry-idle-copy {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 6px;
-  padding: 18px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.path-entry-idle-copy strong {
-  color: var(--text);
-  font-size: max(11px, calc(var(--ui-font-size) - 1px));
-  letter-spacing: -0.015em;
-}
-
-.path-entry-idle-copy span {
-  max-width: 42ch;
-  font-size: max(9px, calc(var(--ui-font-size) - 4px));
-  line-height: 1.55;
 }
 
 .workspace-grid .preset-panel:not(.subtitle-profile-panel) {
@@ -5229,13 +5146,6 @@ textarea:focus {
     height: auto;
   }
 
-  .source-panel .path-entry {
-    padding: 0 12px 12px;
-    border: 1px solid var(--border);
-    border-radius: 13px;
-    background: color-mix(in srgb, var(--surface) 76%, var(--surface-raised));
-  }
-
   .source-panel .directory-path-input textarea {
     min-height: 112px;
     resize: none;
@@ -5243,7 +5153,6 @@ textarea:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .path-entry-idle-copy,
   .task-progress-track > span {
     transition: none;
   }
@@ -5319,46 +5228,6 @@ textarea:focus {
 }
 
 /* Phase 4 / modification 23: direct clipboard intake and stable profile geometry. */
-.source-panel .clipboard-intake {
-  width: 100%;
-  min-width: 0;
-  padding: 0 16px 16px;
-  border: 1px solid var(--border);
-  border-radius: 15px;
-  background: color-mix(in srgb, var(--surface) 76%, var(--surface-raised));
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    background-color 140ms ease,
-    transform 90ms ease-out;
-}
-
-.source-panel .clipboard-intake:hover,
-.source-panel .clipboard-intake:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
-  background: color-mix(in srgb, var(--accent) 5%, var(--surface-raised));
-}
-
-.source-panel .clipboard-intake:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 68%, white);
-  outline-offset: 3px;
-}
-
-.source-panel .clipboard-intake:active:not(:disabled) {
-  transform: scale(0.995);
-}
-
-.source-panel .clipboard-intake:disabled {
-  cursor: wait;
-  opacity: 0.72;
-}
-
-.source-panel .clipboard-intake .path-entry-toggle {
-  padding-top: 12px;
-}
 
 /* Phase 4 / modification 27: task controls and frozen task metadata. */
 .finish-action-options {
@@ -5388,33 +5257,11 @@ textarea:focus {
   .workspace-grid .source-panel {
     grid-template-rows: auto minmax(220px, 7fr) minmax(118px, 3fr) auto;
   }
-
-  .source-panel .clipboard-intake {
-    min-height: 0;
-    margin-top: 12px;
-  }
-}
-
-@media (max-width: 1100px) {
-  .source-panel .clipboard-intake {
-    min-height: 132px;
-    padding: 0 12px 12px;
-  }
 }
 
 @media (max-width: 620px) {
   .finish-action-options {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .source-panel .clipboard-intake {
-    transition: none;
-  }
-
-  .source-panel .clipboard-intake:active:not(:disabled) {
-    transform: none;
   }
 }
 
@@ -5476,11 +5323,6 @@ output,
 .view-content small:where(:not(.tasks-view *, .worker-logs-workspace *, .summary-text *)),
 .view-content .output-footnote,
 .view-content .sample-note {
-  font-size: var(--font-caption) !important;
-  line-height: 1.5;
-}
-
-.view-content .clipboard-intake span {
   font-size: var(--font-caption) !important;
   line-height: 1.5;
 }

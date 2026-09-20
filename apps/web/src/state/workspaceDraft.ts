@@ -124,7 +124,7 @@ export function normalizedTaskOverrides(
   overrides: Partial<EditableParameters>,
 ): Partial<EditableParameters> {
   const normalized = { ...overrides };
-  for (const key of ['initial_prompt', 'hotwords'] as const) {
+  for (const key of ['initial_prompt', 'hotwords', 'prefix'] as const) {
     const value = normalized[key];
     if (typeof value !== 'string') continue;
     const text = normalizePromptText(value).trim();

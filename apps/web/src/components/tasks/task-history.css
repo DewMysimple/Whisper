@@ -278,9 +278,6 @@
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
-.task-card-created > svg {
-  flex: 0 0 auto;
-}
 .task-card-progress {
   color: var(--text-muted);
   font-family: var(--mono);

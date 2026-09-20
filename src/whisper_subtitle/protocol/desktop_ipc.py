@@ -99,25 +99,6 @@ _OUTPUT_MODES = frozenset({"compatibility", "custom"})
 _CONFLICT_POLICIES = frozenset({"overwrite", "fail", "auto_rename", "skip"})
 _CANCEL_REASONS = frozenset({"user", "shutdown", "superseded"})
 
-_PARAMETER_RULES: Mapping[str, tuple[type, float, float]] = MappingProxyType(
-    {
-        "beam_size": (int, 1, 20),
-        "best_of": (int, 1, 20),
-        "patience": (float, 0, 5),
-        "length_penalty": (float, 0, 2),
-        "temperature": (float, 0, 1),
-        "repetition_penalty": (float, 1, 2),
-        "no_repeat_ngram_size": (int, 0, 10),
-        "compression_ratio_threshold": (float, 0, 10),
-        "log_prob_threshold": (float, -10, 0),
-        "no_speech_threshold": (float, 0, 1),
-        "condition_on_previous_text": (bool, 0, 1),
-        "prompt_reset_on_temperature": (float, 0, 1),
-        "min_silence_duration_ms": (int, 0, 10000),
-    }
-)
-_SPECIAL_PARAMETER_NAMES = frozenset({"task", "initial_prompt", "hotwords"})
-
 _SUBTITLE_PARAMETER_RULES: Mapping[str, tuple[type, float, float]] = MappingProxyType(
     {
         "max_characters_per_line": (int, 8, 84),

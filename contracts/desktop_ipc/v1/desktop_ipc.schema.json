@@ -92,22 +92,366 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "task": { "enum": ["transcribe", "translate"] },
-        "beam_size": { "type": "integer", "minimum": 1, "maximum": 20 },
-        "best_of": { "type": "integer", "minimum": 1, "maximum": 20 },
-        "patience": { "type": "number", "minimum": 0, "maximum": 5 },
-        "length_penalty": { "type": "number", "minimum": 0, "maximum": 2 },
-        "temperature": { "type": "number", "minimum": 0, "maximum": 1 },
-        "repetition_penalty": { "type": "number", "minimum": 1, "maximum": 2 },
-        "no_repeat_ngram_size": { "type": "integer", "minimum": 0, "maximum": 10 },
-        "compression_ratio_threshold": { "type": "number", "minimum": 0, "maximum": 10 },
-        "log_prob_threshold": { "type": "number", "minimum": -10, "maximum": 0 },
-        "no_speech_threshold": { "type": "number", "minimum": 0, "maximum": 1 },
-        "condition_on_previous_text": { "type": "boolean" },
-        "prompt_reset_on_temperature": { "type": "number", "minimum": 0, "maximum": 1 },
-        "initial_prompt": { "type": "string", "minLength": 1, "maxLength": 4000 },
-        "hotwords": { "type": "string", "minLength": 1, "maxLength": 4000 },
-        "min_silence_duration_ms": { "type": "integer", "minimum": 0, "maximum": 10000 }
+        "beam_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "best_of": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "patience": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 5
+        },
+        "length_penalty": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "temperature": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 10,
+              "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          ]
+        },
+        "repetition_penalty": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "no_repeat_ngram_size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "compression_ratio_threshold": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "log_prob_threshold": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": -10,
+              "maximum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "no_speech_threshold": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "condition_on_previous_text": {
+          "type": "boolean"
+        },
+        "prompt_reset_on_temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "multilingual": {
+          "type": "boolean"
+        },
+        "language_detection_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "language_detection_segments": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "suppress_blank": {
+          "type": "boolean"
+        },
+        "word_timestamps": {
+          "type": "boolean"
+        },
+        "max_initial_timestamp": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 30
+        },
+        "vad_filter": {
+          "type": "boolean"
+        },
+        "vad_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "vad_neg_threshold": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_speech_duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "min_silence_duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "max_speech_duration_s": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 999999
+        },
+        "speech_pad_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "max_new_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 440
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "chunk_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "hallucination_silence_threshold": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 3600
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "append_punctuations": {
+          "type": "string",
+          "maxLength": 4000,
+          "minLength": 0
+        },
+        "hotwords": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 4000,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "initial_prompt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 4000,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 4000,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prepend_punctuations": {
+          "type": "string",
+          "maxLength": 4000,
+          "minLength": 0
+        },
+        "task": {
+          "type": "string",
+          "enum": [
+            "transcribe",
+            "translate"
+          ]
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "en",
+                "zh",
+                "de",
+                "es",
+                "ru",
+                "ko",
+                "fr",
+                "ja",
+                "pt",
+                "tr",
+                "pl",
+                "ca",
+                "nl",
+                "ar",
+                "sv",
+                "it",
+                "id",
+                "hi",
+                "fi",
+                "vi",
+                "he",
+                "uk",
+                "el",
+                "ms",
+                "cs",
+                "ro",
+                "da",
+                "hu",
+                "ta",
+                "no",
+                "th",
+                "ur",
+                "hr",
+                "bg",
+                "lt",
+                "la",
+                "mi",
+                "ml",
+                "cy",
+                "sk",
+                "te",
+                "fa",
+                "lv",
+                "bn",
+                "sr",
+                "az",
+                "sl",
+                "kn",
+                "et",
+                "mk",
+                "br",
+                "eu",
+                "is",
+                "hy",
+                "ne",
+                "mn",
+                "bs",
+                "kk",
+                "sq",
+                "sw",
+                "gl",
+                "mr",
+                "pa",
+                "si",
+                "km",
+                "sn",
+                "yo",
+                "so",
+                "af",
+                "oc",
+                "ka",
+                "be",
+                "tg",
+                "sd",
+                "gu",
+                "am",
+                "yi",
+                "lo",
+                "uz",
+                "fo",
+                "ht",
+                "ps",
+                "tk",
+                "nn",
+                "mt",
+                "sa",
+                "lb",
+                "my",
+                "bo",
+                "tl",
+                "mg",
+                "as",
+                "tt",
+                "haw",
+                "ln",
+                "ha",
+                "ba",
+                "jw",
+                "su",
+                "yue"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "suppress_tokens": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "integer",
+            "minimum": -1,
+            "maximum": 51864
+          }
+        }
       }
     },
     "TranscriptionProfile": {

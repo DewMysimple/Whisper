@@ -116,22 +116,7 @@ fn validate_overrides(
                         && TRANSLATION_MODEL_IDS.contains(&model_id)
                         && matches!(base_preset_id, "en_v1" | "en_v2"))
             }),
-            "beam_size" | "best_of" => value.as_i64().is_some_and(|item| (1..=20).contains(&item)),
-            "patience" => number_in_range(value, 0.0, 5.0),
-            "length_penalty" => number_in_range(value, 0.0, 2.0),
-            "temperature" | "no_speech_threshold" | "prompt_reset_on_temperature" => {
-                number_in_range(value, 0.0, 1.0)
-            }
-            "repetition_penalty" => number_in_range(value, 1.0, 2.0),
-            "no_repeat_ngram_size" => value.as_i64().is_some_and(|item| (0..=10).contains(&item)),
-            "compression_ratio_threshold" => number_in_range(value, 0.0, 10.0),
-            "log_prob_threshold" => number_in_range(value, -10.0, 0.0),
-            "condition_on_previous_text" => value.is_boolean(),
-            "initial_prompt" | "hotwords" => value.as_str().is_some_and(valid_prompt_text),
-            "min_silence_duration_ms" => value
-                .as_i64()
-                .is_some_and(|item| (0..=10_000).contains(&item)),
-            _ => false,
+            _ => super::parameter_validation::valid_parameter(name, value),
         };
         if !valid {
             return Err(HostError::new(
@@ -141,19 +126,4 @@ fn validate_overrides(
         }
     }
     Ok(())
-}
-
-fn valid_prompt_text(value: &str) -> bool {
-    let normalized = value.trim();
-    !normalized.is_empty()
-        && normalized.chars().count() <= 4000
-        && normalized
-            .chars()
-            .all(|character| !character.is_control() || matches!(character, '\n' | '\t'))
-}
-
-fn number_in_range(value: &Value, minimum: f64, maximum: f64) -> bool {
-    value
-        .as_f64()
-        .is_some_and(|item| item.is_finite() && (minimum..=maximum).contains(&item))
 }

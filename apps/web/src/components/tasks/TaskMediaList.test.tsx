@@ -46,6 +46,7 @@ it('locates the source and then generated text using the same keyboard-operable 
       isInputTaskPreview={false}
     />,
   );
+  expect(screen.queryByText('已完成', { exact: true })).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: '在资源管理器中定位 renamed.md' }));
   expect(reveal).toHaveBeenLastCalledWith('E:\\renamed.md');
   reveal.mockRejectedValueOnce(new Error('文件不存在'));

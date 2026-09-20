@@ -1,3 +1,5 @@
+import type { EditableParameters } from '../data/presetCatalog.generated';
+export type { EditableParameters } from '../data/presetCatalog.generated';
 import {
   CALIBRATED_MODEL_IDS,
   DEFAULT_MODEL_ID,
@@ -43,25 +45,6 @@ export interface InputSource {
   durationSeconds?: number;
   unknownDurationCount?: number;
   detail?: string;
-}
-
-export interface EditableParameters {
-  task: TranscriptionTask;
-  beam_size: number;
-  best_of: number;
-  patience: number;
-  length_penalty: number;
-  temperature: number;
-  repetition_penalty: number;
-  no_repeat_ngram_size: number;
-  compression_ratio_threshold: number;
-  log_prob_threshold: number;
-  no_speech_threshold: number;
-  condition_on_previous_text: boolean;
-  prompt_reset_on_temperature: number;
-  initial_prompt: string;
-  hotwords: string;
-  min_silence_duration_ms: number;
 }
 
 export interface SubtitleParameters {

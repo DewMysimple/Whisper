@@ -355,13 +355,11 @@ test('keeps the selected-media preview synchronized and clearable from both work
   await expect(page.getByText('P20-核心语法-整数类型.mp4', { exact: true })).toHaveCount(0);
 });
 
-test('does not expose the retired model switching workbench', async ({ page }) => {
+test('opens the authorized model and parameter workbench from navigation', async ({ page }) => {
   const navigation = page.getByRole('navigation', { name: '主导航' });
-  await expect(navigation.getByRole('button', { name: '模型切换' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /查看并修改当前模型与模式/ })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: '当前推理模型' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: '本地模型库' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: '当前模型参数' })).toHaveCount(0);
+  await navigation.getByRole('button', { name: '模型与参数', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '模型切换' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '参数调节', exact: true })).toBeVisible();
 });
 
 test('does not expose the retired hardware optimization workbench', async ({ page }) => {
@@ -1532,6 +1530,7 @@ test('opens the independent Worker log workspace and exposes only the restored s
   const navigation = page.getByRole('navigation', { name: '主导航' });
   await expect(navigation.getByRole('button')).toHaveText([
     '转录工作台',
+    '模型与参数',
     '性能监控',
     /任务监控与记录/,
     'Worker 日志',

@@ -17,6 +17,7 @@ supersedes: null
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-20 | maintenance | - | archived | readable-diagnostics-shared-presentation-2026-09-20 | [[日志/2026-09-20-统一监控诊断字体与公共展示组件.md|统一监控诊断字体与公共展示组件]] |
 | 2026-09-20 | ui | - | archived | history-type-and-preview-motion-2026-09-20 | [[日志/2026-09-20-精简历史标题时间与外观按钮动效.md|精简历史标题时间与外观按钮动效]] |
+| 2026-09-20 | feature | - | archived | public-inference-workbench-2026-09-20 | [[日志/2026-09-20-模型与参数工作台及参数公开.md|模型与参数工作台及参数公开]] |
 | 2026-09-20 | ui | - | archived | development-checklist-ui-2026-09-20 | [[日志/2026-09-20-新清单开发态交互与布局整改.md|新清单开发态交互与布局整改]] |
 | 2026-09-20 | ui | - | archived | stable-action-cards-2026-09-20 | [[日志/2026-09-20-修复按钮闪跳与统一卡片操作.md|修复按钮闪跳与统一卡片操作]] |
 | 2026-09-19 | operations | 从当前已同步的 `master` 源码重新构建完整便携版，并整体替换 `dist/WhisperSubtitle/`、`dist/WhisperSubtitle.zip` 与外层校验文件，确保用户拿到最新桌面、冻结 Worker、模型布局和发布元数据。 | archived | rebuild-latest-portable-release | [[日志/2026-09-19-重建并同步最新便携版.md|重建并同步最新便携版]] |

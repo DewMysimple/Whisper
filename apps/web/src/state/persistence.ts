@@ -1,3 +1,4 @@
+import { isParameters, isParameterOverrides as isOverrides } from './parameterValidation';
 import type {
   EditableParameters,
   ModelId,
@@ -17,7 +18,6 @@ import {
 import { getPreset } from '../data/presets';
 import { getSubtitlePreset } from '../data/subtitlePresets';
 import {
-  isV3ModelId,
   parameterProfileKey,
   parseParameterProfileKey,
   sanitizeProfileOverrides,
@@ -84,9 +84,9 @@ interface PersistedWorkspace {
 const STORAGE_KEY = 'whisper-subtitle.desktop-state.v1';
 const TASK_LIMIT = 100;
 
-export function loadWorkspaceState(): PersistedWorkspace | null {
+export function loadWorkspaceState(storageKey = STORAGE_KEY): PersistedWorkspace | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (raw === null) return null;
     const value: unknown = JSON.parse(raw);
     if (!isRecord(value) || value.schemaVersion !== 1) return null;
@@ -103,13 +103,17 @@ export function loadWorkspaceState(): PersistedWorkspace | null {
   }
 }
 
-export function saveWorkspaceState(preferences: WorkspacePreferences, tasks: TaskSnapshot[]): void {
+export function saveWorkspaceState(
+  preferences: WorkspacePreferences,
+  tasks: TaskSnapshot[],
+  storageKey = STORAGE_KEY,
+): void {
   const payload: PersistedWorkspace = {
     schemaVersion: 1,
     preferences,
     tasks: tasks.slice(0, TASK_LIMIT),
   };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  localStorage.setItem(storageKey, JSON.stringify(payload));
 }
 
 export function exportPreferences(preferences: WorkspacePreferences): string {
@@ -198,7 +202,7 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   ) {
     return null;
   }
-  const selectedModelId = isV3ModelId(requestedModelId) ? requestedModelId : DEFAULT_MODEL_ID;
+  const selectedModelId = requestedModelId;
   const profileMode = value.profileMode ?? 'transcript';
   if (profileMode !== 'transcript' && profileMode !== 'subtitle') return null;
   if (!isOverrides(value.overrides)) return null;
@@ -234,7 +238,6 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   if (!isParameters(importedParameterSnapshot)) return null;
   const parameters = {
     ...getPreset(value.selectedPresetId, selectedModelId).parameters,
-    ...(value.parameterProfiles === undefined ? importedParameterSnapshot : {}),
     ...currentOverrides,
   };
   if (!isParameters(parameters)) return null;
@@ -364,65 +367,6 @@ function normalizeTaskSnapshot(task: TaskSnapshot): TaskSnapshot {
   };
 }
 
-function isParameters(value: unknown): value is EditableParameters {
-  if (!isRecord(value)) return false;
-  return (
-    (value.task === 'transcribe' || value.task === 'translate') &&
-    isNumberInRange(value.beam_size, 1, 20, true) &&
-    isNumberInRange(value.best_of, 1, 20, true) &&
-    isNumberInRange(value.patience, 0, 5) &&
-    isNumberInRange(value.length_penalty, 0, 2) &&
-    isNumberInRange(value.temperature, 0, 1) &&
-    isNumberInRange(value.repetition_penalty, 1, 2) &&
-    isNumberInRange(value.no_repeat_ngram_size, 0, 10, true) &&
-    isNumberInRange(value.compression_ratio_threshold, 0, 10) &&
-    isNumberInRange(value.log_prob_threshold, -10, 0) &&
-    isNumberInRange(value.no_speech_threshold, 0, 1) &&
-    typeof value.condition_on_previous_text === 'boolean' &&
-    isNumberInRange(value.prompt_reset_on_temperature, 0, 1) &&
-    isPromptText(value.initial_prompt) &&
-    isPromptText(value.hotwords) &&
-    isNumberInRange(value.min_silence_duration_ms, 0, 10000, true)
-  );
-}
-
-function isOverrides(value: unknown): value is Partial<EditableParameters> {
-  if (!isRecord(value)) return false;
-  const allowed = new Set([
-    'task',
-    'beam_size',
-    'best_of',
-    'patience',
-    'length_penalty',
-    'temperature',
-    'repetition_penalty',
-    'no_repeat_ngram_size',
-    'compression_ratio_threshold',
-    'log_prob_threshold',
-    'no_speech_threshold',
-    'condition_on_previous_text',
-    'prompt_reset_on_temperature',
-    'initial_prompt',
-    'hotwords',
-    'min_silence_duration_ms',
-  ]);
-  if (Object.keys(value).some((key) => !allowed.has(key))) return false;
-  return Object.entries(value).every(([key, item]) => {
-    if (key === 'task') return item === 'transcribe' || item === 'translate';
-    if (key === 'initial_prompt' || key === 'hotwords') return isPromptText(item);
-    if (key === 'condition_on_previous_text') return typeof item === 'boolean';
-    if (key === 'beam_size' || key === 'best_of') return isNumberInRange(item, 1, 20, true);
-    if (key === 'patience') return isNumberInRange(item, 0, 5);
-    if (key === 'length_penalty') return isNumberInRange(item, 0, 2);
-    if (key === 'repetition_penalty') return isNumberInRange(item, 1, 2);
-    if (key === 'no_repeat_ngram_size') return isNumberInRange(item, 0, 10, true);
-    if (key === 'compression_ratio_threshold') return isNumberInRange(item, 0, 10);
-    if (key === 'log_prob_threshold') return isNumberInRange(item, -10, 0);
-    if (key === 'min_silence_duration_ms') return isNumberInRange(item, 0, 10000, true);
-    return isNumberInRange(item, 0, 1);
-  });
-}
-
 function parseParameterProfiles(value: unknown): ParameterProfiles | null {
   if (value === undefined) return {};
   if (!isRecord(value)) return null;
@@ -454,14 +398,6 @@ function parseRecognitionStrategyProfiles(value: unknown): RecognitionStrategyPr
       return null;
   }
   return {};
-}
-
-function isPromptText(value: unknown): value is string {
-  if (typeof value !== 'string' || Array.from(value).length > 4000) return false;
-  return Array.from(value).every((character) => {
-    const code = character.codePointAt(0) ?? 0;
-    return character === '\n' || character === '\t' || code >= 0x20;
-  });
 }
 
 function isSubtitleParameters(value: unknown): value is SubtitleParameters {

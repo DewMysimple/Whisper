@@ -87,7 +87,6 @@ export const TaskHistoryCard = memo(function TaskHistoryCard({
             </span>
           </span>
           <time className="task-card-created" dateTime={task.createdAt}>
-            <Clock3 aria-hidden="true" size={13} />
             {formatTaskCreatedAt(task.createdAt)}
           </time>
         </div>

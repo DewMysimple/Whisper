@@ -168,7 +168,12 @@ def main() -> int:
                     if message["event"] != "task.completed":
                         raise RuntimeError(f"task did not complete: {message}")
                     break
-            transcript = preset_output / "Text" / f"{INPUT_PATH.stem}.txt"
+            if message["data"]["failure_count"] or message["data"]["success_count"] != 1:
+                raise RuntimeError(f"media did not complete successfully: {message}")
+            transcript = next(
+                Path(path) for path in message["data"]["outputs"]
+                if Path(path).suffix.lower() == ".txt"
+            )
             actual_hash = normalized_text_sha256(transcript)
             expected_hash = normalized_text_sha256(golden)
             if actual_hash != expected_hash:

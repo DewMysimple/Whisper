@@ -9,6 +9,7 @@ import pytest
 
 from whisper_subtitle.domain.contracts import ProgressEvent
 from whisper_subtitle.domain.presets import EDITABLE_PARAMETER_RULES
+from whisper_subtitle.domain.parameters import SPECIAL_PARAMETERS
 from whisper_subtitle.presentation.console import progress_event_payload
 from whisper_subtitle.protocol import (
     PROTOCOL_SCHEMA_VERSION,
@@ -190,20 +191,19 @@ def test_schema_is_self_contained_and_has_no_unresolved_local_refs():
 def test_schema_parameter_boundaries_match_worker_domain_validation():
     properties = load_schema()["$defs"]["ParameterOverrides"]["properties"]
 
-    assert set(properties) == set(EDITABLE_PARAMETER_RULES) | {
-        "task",
-        "initial_prompt",
-        "hotwords",
-    }
+    assert set(properties) == set(EDITABLE_PARAMETER_RULES) | SPECIAL_PARAMETERS
     for name, (expected_type, minimum, maximum) in EDITABLE_PARAMETER_RULES.items():
+        rule = properties[name]
+        rule = rule.get("anyOf", [rule])[0]
+        rule = rule.get("oneOf", [rule])[0]
         if expected_type is bool:
-            assert properties[name]["type"] == "boolean"
+            assert rule["type"] == "boolean"
             continue
-        assert properties[name]["minimum"] == minimum
-        assert properties[name]["maximum"] == maximum
+        assert rule["minimum"] == minimum
+        assert rule["maximum"] == maximum
     assert properties["task"]["enum"] == ["transcribe", "translate"]
-    assert properties["initial_prompt"]["maxLength"] == 4000
-    assert properties["hotwords"]["maxLength"] == 4000
+    assert properties["initial_prompt"]["anyOf"][0]["maxLength"] == 4000
+    assert properties["hotwords"]["anyOf"][0]["maxLength"] == 4000
 
 
 def test_transcription_start_round_trips_structured_paths_and_custom_overrides():

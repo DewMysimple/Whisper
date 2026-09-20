@@ -21,7 +21,14 @@ describe('desktop workspace', () => {
       within(navigation)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['转录工作台', '性能监控', '任务监控与记录2', 'Worker 日志', '偏好设置']);
+    ).toEqual([
+      '转录工作台',
+      '模型与参数',
+      '性能监控',
+      '任务监控与记录2',
+      'Worker 日志',
+      '偏好设置',
+    ]);
     expect(screen.queryByRole('button', { name: '硬件优化' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '模型切换' })).not.toBeInTheDocument();
     expect(

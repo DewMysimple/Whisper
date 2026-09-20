@@ -25,3 +25,7 @@
 `WorkerLogsView.tsx` 的布局、浅深主题变量、空状态与响应式规则只在 `worker-logs.css` 维护；已删除旧 `.log-view` 和全局诊断覆盖。新规则应直接修改原责任选择器，不能在 `styles.css` 末尾追加同名覆盖。`check:styles` 对日志与两个公共文字入口执行归属、重复选择器、重复属性和优先级检查。日志展示不改写 store 缓冲区，复制／导出始终使用原始字符串。
 
 任务页的组件职责与样式入口见 `tasks/README.md`。
+
+`WorkspaceEntryCard` 共用路径读取与参数跳转的标签／主文案／说明结构，底层使用 `CardButton`，外观只在 `workspace-entry-card.css` 维护。
+
+`ConfigurationView` 负责本地模型清单和参数分组，`ParameterField` 负责编辑缓冲、校验反馈与逐项复位；配置事实由 workspace 保存。`data/parameterPresentation.ts` 只保存文案与分组，字段类型／范围／默认值从 Python 生成，校验入口为 `state/parameterValidation.ts`。样式只放在 `configuration.css`，禁止追加到全局。

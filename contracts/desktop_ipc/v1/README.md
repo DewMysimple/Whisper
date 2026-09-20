@@ -178,3 +178,9 @@ remain unchanged.
 - Unknown methods produce `protocol.unknown_method`.
 - Unsupported versions produce `protocol.unsupported_version`.
 - The retained CLI JSONL shape with `type: progress` is not a v1 desktop IPC message. Its PyQt5 consumer was retired in batch 7; the CLI channel remains available independently.
+
+## Public inference controls (2026-09-20 development revision)
+
+`ParameterOverrides` is generated from `domain/parameters.py` by `tools/codegen/generate_preset_catalog.py`. The 36 options include language detection, decoding and temperature fallback, guidance, VAD, window size and word alignment. Omission inherits the preset/engine value; nullable fields explicitly disable a check or select automatic behavior. Temperatures accept a scalar or 1–10 strictly increasing values in 0–1. VAD fields are flattened in IPC and nested under `vad_parameters` before inference. SRT output always enables word timestamps.
+
+Python validates using the domain normalizer. Rust validates the embedded schema plus ordered temperatures and model/preset translation capabilities. Canonical CLI presets and message lifecycle are unchanged. The new fields require the matching source Host and Worker: the previous frozen release cannot accept these added options. This revision does not rebuild release artifacts.

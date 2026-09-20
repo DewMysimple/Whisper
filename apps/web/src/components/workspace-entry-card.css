@@ -1,0 +1,47 @@
+.workspace-entry-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  width: 100%;
+  min-width: 0;
+  min-height: 142px;
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--surface) 76%, var(--surface-raised));
+  color: var(--text);
+  text-align: left;
+}
+.workspace-entry-card:hover,
+.workspace-entry-card:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface-raised));
+}
+.workspace-entry-card:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+.workspace-entry-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: max(12px, calc(var(--workspace-font-size) - 1px));
+}
+.workspace-entry-copy {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 18px 8px;
+  text-align: center;
+  line-height: 1.6;
+}
+.workspace-entry-copy strong {
+  font-size: var(--workspace-font-size);
+  font-weight: 600;
+}
+.workspace-entry-copy > span {
+  color: var(--text-muted);
+  font-size: max(12px, calc(var(--workspace-font-size) - 1px));
+}

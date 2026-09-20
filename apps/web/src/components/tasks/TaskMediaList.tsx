@@ -19,7 +19,7 @@ function mediaStatusLabel(media: TaskMediaSnapshot, task: TaskSnapshot): string 
     (media.status === 'running' || media.status === 'pending')
   )
     return media.status === 'running' ? '处理已中断' : '未处理';
-  if (media.status === 'completed') return '已完成';
+  if (media.status === 'completed') return '';
   if (media.status === 'running') return formatTaskStage(media.stage);
   if (media.status === 'failed') return '处理失败';
   if (media.status === 'skipped') return '已跳过';
@@ -106,7 +106,7 @@ export function TaskMediaList({
             </div>
             <div className="task-media-state">
               <strong>{media.progress === null ? '—' : `${Math.round(media.progress)}%`}</strong>
-              <span>{mediaStatusLabel(media, task)}</span>
+              {media.status !== 'completed' && <span>{mediaStatusLabel(media, task)}</span>}
               <small>
                 {formatElapsedSeconds(
                   media.path === currentMedia?.path ? mediaSeconds : media.elapsedSeconds,

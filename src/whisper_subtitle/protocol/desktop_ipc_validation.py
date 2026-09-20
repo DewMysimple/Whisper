@@ -11,6 +11,7 @@ from ..domain.models import (
     SECONDARY_RECOGNITION_MODEL_IDS,
     TRANSLATION_MODEL_IDS,
 )
+from ..domain.parameters import normalize_overrides
 from .desktop_ipc import (
     CommandMethod,
     ErrorCode,
@@ -27,10 +28,8 @@ from .desktop_ipc import (
     _INPUT_ORIGINS,
     _MODEL_IDS,
     _OUTPUT_MODES,
-    _PARAMETER_RULES,
     _PRESET_IDS,
     _RECOGNITION_STRATEGIES,
-    _SPECIAL_PARAMETER_NAMES,
     _SUBTITLE_PARAMETER_RULES,
     _freeze_json,
 )
@@ -173,60 +172,15 @@ def _validate_parameter_overrides(
     overrides = _require_object(
         value, "params.profile.overrides", code=ErrorCode.REQUEST_INVALID
     )
-    unknown = set(overrides) - set(_PARAMETER_RULES) - _SPECIAL_PARAMETER_NAMES
-    if unknown:
-        raise ProtocolValidationError(
-            ErrorCode.REQUEST_INVALID,
-            "params.profile.overrides contains unsupported parameters",
-            data={"unsupported": sorted(unknown)},
-        )
-    for name, parameter_value in overrides.items():
-        if name == "task":
-            if parameter_value not in {"transcribe", "translate"} or (
-                parameter_value == "translate"
-                and (
-                    base_preset_id not in {"en_v1", "en_v2"}
-                    or model_id not in TRANSLATION_MODEL_IDS
-                )
-            ):
-                raise ProtocolValidationError(
-                    ErrorCode.REQUEST_INVALID,
-                    "invalid override for task",
-                )
-            continue
-        if name in {"initial_prompt", "hotwords"}:
-            if (
-                not isinstance(parameter_value, str)
-                or not parameter_value.strip()
-                or len(parameter_value) > 4000
-                or any(
-                    ord(character) < 0x20 and character not in {"\n", "\t"}
-                    for character in parameter_value
-                )
-            ):
-                raise ProtocolValidationError(
-                    ErrorCode.REQUEST_INVALID,
-                    f"invalid override for {name}",
-                )
-            continue
-        expected_type, minimum, maximum = _PARAMETER_RULES[name]
-        if expected_type is bool:
-            valid_type = type(parameter_value) is bool
-        elif expected_type is int:
-            valid_type = type(parameter_value) is int
-        else:
-            valid_type = type(parameter_value) in {int, float}
-        if not valid_type or not minimum <= parameter_value <= maximum:
-            raise ProtocolValidationError(
-                ErrorCode.REQUEST_INVALID,
-                f"invalid override for {name}",
-                data={
-                    "parameter": name,
-                    "minimum": minimum,
-                    "maximum": maximum,
-                    "received": parameter_value,
-                },
-            )
+    try:
+        normalized = normalize_overrides(overrides)
+        if normalized.get("task") == "translate" and (
+            base_preset_id not in {"en_v1", "en_v2"}
+            or model_id not in TRANSLATION_MODEL_IDS
+        ):
+            raise ValueError("invalid override for task")
+    except ValueError as exc:
+        raise ProtocolValidationError(ErrorCode.REQUEST_INVALID, str(exc)) from exc
 
 
 def _validate_output_target(value: Any, field_name: str) -> None:

@@ -1,9 +1,13 @@
-import { Check, FileText, Sparkles } from 'lucide-react';
+import { WorkspaceEntryCard } from './WorkspaceEntryCard';
+import { getModelLabel } from '../data/models';
+import { Check, FileText, Sparkles, SlidersHorizontal } from 'lucide-react';
 
 import { PRESETS } from '../data/presets';
 import { useWorkspace } from '../state/workspace';
 
 export function PresetPanel() {
+  const openConfiguration = useWorkspace((state) => state.openConfiguration);
+  const modelId = useWorkspace((state) => state.selectedModelId);
   const profileMode = useWorkspace((state) => state.profileMode);
   const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
   const selectProfile = useWorkspace((state) => state.selectProfile);
@@ -53,6 +57,14 @@ export function PresetPanel() {
           </button>
         ))}
       </div>
+      <WorkspaceEntryCard
+        aria-label="前往参数调节"
+        icon={<SlidersHorizontal size={15} />}
+        label="模型与参数"
+        title="调整当前识别参数"
+        description={`${getModelLabel(modelId)} · ${Object.keys(overrides).length ? `${Object.keys(overrides).length} 项自定义` : '默认参数'} · 点击进入参数调节`}
+        onClick={() => openConfiguration('parameters')}
+      />
     </section>
   );
 }

@@ -20,6 +20,9 @@ const sharedOwners = new Map([
   ['summary-label', 'components/summary-text.css'],
   ['summary-value', 'components/summary-text.css'],
   ['summary-description', 'components/summary-text.css'],
+  ['workspace-entry-card', 'components/workspace-entry-card.css'],
+  ['workspace-entry-label', 'components/workspace-entry-card.css'],
+  ['workspace-entry-copy', 'components/workspace-entry-card.css'],
   ['diagnostic-text', 'components/diagnostic-text.css'],
 ]);
 
@@ -53,6 +56,7 @@ export function inspectStyles(files) {
     const ownedFile =
       taskFile ||
       filename === 'components/worker-logs.css' ||
+      filename === 'components/configuration.css' ||
       [...sharedOwners.values()].includes(filename);
     const report = (node, message) =>
       problems.push(`${filename}:${node.source.start.line}: ${message}`);
@@ -68,6 +72,13 @@ export function inspectStyles(files) {
             report(rule, `.${name} belongs in ${taskDirectory}${owner}`);
           if (/^worker-logs?-/.test(name) && filename !== 'components/worker-logs.css')
             report(rule, `.${name} belongs in components/worker-logs.css`);
+          // config-card is the existing settings import/export panel, not this workbench.
+          if (
+            /^(config-|configuration-view$)/.test(name) &&
+            name !== 'config-card' &&
+            filename !== 'components/configuration.css'
+          )
+            report(rule, `.${name} belongs in components/configuration.css`);
           const sharedOwner = sharedOwners.get(name);
           // Page-specific sizing remains with the page, baseline interactions with the primitive.
           if (sharedOwner && selector.startsWith(`.${name}`) && filename !== sharedOwner)

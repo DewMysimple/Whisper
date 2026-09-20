@@ -1,3 +1,4 @@
+import { isParameterValue, sameParameter } from './parameterValidation';
 import { create } from 'zustand';
 
 import { desktopBridge } from '../bridge';
@@ -72,6 +73,7 @@ import {
   flushPersistence,
   persistLater,
   preferencesFromState,
+  workspaceStorageKey,
 } from './workspacePersistence';
 
 export { canResumeTask, isAbnormalTask } from './workspaceTaskState';
@@ -211,7 +213,8 @@ const INITIAL_TASKS: TaskSnapshot[] = [
 
 export type { TaskFilter } from './taskHistory';
 export type TaskWorkspaceMode = 'monitor' | 'history';
-export type WorkspaceViewId = 'workspace' | 'performance' | 'tasks' | 'logs' | 'settings';
+export type WorkspaceViewId =
+  'workspace' | 'configuration' | 'performance' | 'tasks' | 'logs' | 'settings';
 
 export interface PendingOverwrite {
   draft: TranscriptionDraft;
@@ -256,6 +259,8 @@ export interface WorkspaceState {
   lastError: string | null;
   startingTask: boolean;
   activeView: WorkspaceViewId;
+  configurationTab: 'models' | 'parameters';
+  openConfiguration(tab: 'models' | 'parameters'): void;
   theme: ThemePreference;
   accentPreset: AccentPreset;
   customAccentColor: string;
@@ -311,6 +316,9 @@ export interface WorkspaceState {
   removeInput(id: string): void;
   clearInputs(): void;
   selectProfile(mode: ProfileMode, id: PresetId): void;
+  selectModel(modelId: ModelId): void;
+  setParameter<K extends keyof EditableParameters>(key: K, value: EditableParameters[K]): void;
+  resetParameter(key?: keyof EditableParameters): void;
   setSubtitleParameter<K extends keyof SubtitleParameters>(
     key: K,
     value: SubtitleParameters[K],
@@ -393,6 +401,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   lastError: null,
   startingTask: false,
   activeView: 'workspace',
+  configurationTab: 'models',
+  openConfiguration: (configurationTab) => set({ configurationTab, activeView: 'configuration' }),
   ...DEFAULT_APPEARANCE,
   selectedTaskId: null,
   outputPreview: null,
@@ -614,6 +624,74 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
   removeInput: (id) => set((state) => ({ inputs: state.inputs.filter((item) => item.id !== id) })),
   clearInputs: () => set({ inputs: [] }),
+  selectModel: (modelId) => {
+    const state = get();
+    set({
+      selectedModelId: modelId,
+      parameters: profileParameters(state.parameterProfiles, modelId, state.selectedPresetId),
+      overrides: profileOverrides(state.parameterProfiles, modelId, state.selectedPresetId),
+    });
+    persistLater(get);
+  },
+  setParameter: (key, value) => {
+    const normalized =
+      typeof value === 'string' && ['initial_prompt', 'hotwords', 'prefix'].includes(key)
+        ? value.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim()
+        : value;
+    if (!isParameterValue(key, normalized)) return;
+    const state = get();
+    if (
+      key === 'task' &&
+      value === 'translate' &&
+      !translationTaskSupported(state.selectedModelId, state.selectedPresetId)
+    )
+      return;
+    const base = getPreset(state.selectedPresetId, state.selectedModelId).parameters;
+    const overrides = { ...state.overrides, [key]: normalized };
+    // Keep a fixed zero temperature as an override when the model uses a ladder.
+    if (
+      sameParameter(normalized, base[key]) ||
+      (['initial_prompt', 'hotwords', 'prefix'].includes(key) && normalized === '')
+    )
+      delete overrides[key];
+    const parameterProfiles = withProfileOverrides(
+      state.parameterProfiles,
+      state.selectedModelId,
+      state.selectedPresetId,
+      overrides,
+    );
+    set({
+      parameterProfiles,
+      overrides,
+      parameters: profileParameters(
+        parameterProfiles,
+        state.selectedModelId,
+        state.selectedPresetId,
+      ),
+    });
+    persistLater(get);
+  },
+  resetParameter: (key) => {
+    const state = get();
+    const overrides = key === undefined ? {} : { ...state.overrides };
+    if (key !== undefined) delete overrides[key];
+    const parameterProfiles = withProfileOverrides(
+      state.parameterProfiles,
+      state.selectedModelId,
+      state.selectedPresetId,
+      overrides,
+    );
+    set({
+      parameterProfiles,
+      overrides,
+      parameters: profileParameters(
+        parameterProfiles,
+        state.selectedModelId,
+        state.selectedPresetId,
+      ),
+    });
+    persistLater(get);
+  },
   selectProfile: (profileMode, id) => {
     const subtitleParameters = getSubtitlePreset(id).subtitleParameters;
     const parameterProfiles = get().parameterProfiles;
@@ -734,7 +812,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       basePresetId: state.selectedPresetId,
       profileMode: state.profileMode,
       overrides: normalizedTaskOverrides(state.overrides),
-      effectiveParameters: state.parameters,
+      effectiveParameters: {
+        ...state.parameters,
+        word_timestamps: state.output.srtEnabled || state.parameters.word_timestamps,
+      },
       subtitleParameters: state.subtitleParameters,
       output: state.output,
     };
@@ -1198,8 +1279,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   handleEvent: (event) => handleWorkspaceEvent(event, set, get, persistLater),
   initialize: () => {
     if (get().initialized) return () => undefined;
-    if (desktopBridge.mode === 'tauri' && !hydrated) {
-      const persisted = loadWorkspaceState();
+    if (!hydrated) {
+      const persisted = loadWorkspaceState(workspaceStorageKey);
       if (persisted !== null) {
         applyAppearancePreferences(persisted.preferences);
         set({

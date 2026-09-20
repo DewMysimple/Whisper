@@ -7,6 +7,7 @@ import {
   ScrollText,
   Settings2,
   Sparkles,
+  SlidersHorizontal,
 } from 'lucide-react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -22,6 +23,7 @@ const NAVIGATION: Array<{
   icon: typeof AudioLines;
 }> = [
   { id: 'workspace', label: '转录工作台', icon: AudioLines },
+  { id: 'configuration', label: '模型与参数', icon: SlidersHorizontal },
   { id: 'performance', label: '性能监控', icon: ChartNoAxesCombined },
   { id: 'tasks', label: '任务监控与记录', icon: Layers3 },
   { id: 'logs', label: 'Worker 日志', icon: ScrollText },

@@ -8,6 +8,7 @@ from typing import Any
 
 from .contracts import Preset
 from .models import CALIBRATED_MODEL_IDS, TRANSLATION_MODEL_IDS
+from .parameters import PARAMETER_RULES, VAD_PARAMETER_NAMES, normalize_overrides
 from .postprocess.strategies import STRATEGY_LABELS
 
 
@@ -54,23 +55,7 @@ DISPLAY_KEYS = (
 DEFAULT_PRESET_ID = "en_v1"
 DEFAULT_CLI_ALIAS = "en"
 
-EDITABLE_PARAMETER_RULES = MappingProxyType(
-    {
-        "beam_size": (int, 1, 20),
-        "best_of": (int, 1, 20),
-        "patience": (float, 0, 5),
-        "length_penalty": (float, 0, 2),
-        "temperature": (float, 0, 1),
-        "repetition_penalty": (float, 1, 2),
-        "no_repeat_ngram_size": (int, 0, 10),
-        "compression_ratio_threshold": (float, 0, 10),
-        "log_prob_threshold": (float, -10, 0),
-        "no_speech_threshold": (float, 0, 1),
-        "condition_on_previous_text": (bool, 0, 1),
-        "prompt_reset_on_temperature": (float, 0, 1),
-        "min_silence_duration_ms": (int, 0, 10000),
-    }
-)
+EDITABLE_PARAMETER_RULES = MappingProxyType(PARAMETER_RULES)
 
 
 def _params(
@@ -295,13 +280,7 @@ def derive_preset(
     base = get_preset_by_id(base_preset_id)
     if not isinstance(overrides, Mapping):
         raise TypeError("overrides must be a mapping")
-    text_override_keys = {"initial_prompt", "hotwords"}
-    task_override_keys = {"task"}
-    unknown = set(overrides) - (
-        set(EDITABLE_PARAMETER_RULES) | text_override_keys | task_override_keys
-    )
-    if unknown:
-        raise ValueError(f"unsupported parameter overrides: {sorted(unknown)}")
+    overrides = normalize_overrides(overrides)
 
     params = base.transcription_options()
     if model_id in MODEL_CALIBRATED_IDS:
@@ -347,26 +326,11 @@ def derive_preset(
             )
         params["task"] = task
 
-    for name in text_override_keys.intersection(overrides):
-        params[name] = _normalize_prompt_override(name, overrides[name])
-
     for name, value in overrides.items():
-        if name in text_override_keys or name in task_override_keys:
-            continue
-        expected_type, minimum, maximum = EDITABLE_PARAMETER_RULES[name]
-        if expected_type is bool:
-            valid_type = type(value) is bool
-        elif expected_type is int:
-            valid_type = type(value) is int
+        if name in VAD_PARAMETER_NAMES:
+            params["vad_parameters"][VAD_PARAMETER_NAMES[name]] = value
         else:
-            valid_type = type(value) in {int, float}
-        if not valid_type or not minimum <= value <= maximum:
-            raise ValueError(f"invalid override for {name}: {value!r}")
-        normalized = float(value) if expected_type is float else value
-        if name == "min_silence_duration_ms":
-            params["vad_parameters"][name] = normalized
-        else:
-            params[name] = normalized
+            params[name] = value
 
     return Preset(
         id=base.id,
@@ -377,17 +341,6 @@ def derive_preset(
         params=params,
         postprocess_strategy=base.postprocess_strategy,
     )
-
-
-def _normalize_prompt_override(name: str, value: Any) -> str:
-    if not isinstance(value, str):
-        raise ValueError(f"invalid override for {name}: {value!r}")
-    normalized = value.replace("\r\n", "\n").replace("\r", "\n").strip()
-    if not normalized or len(normalized) > 4000:
-        raise ValueError(f"invalid override for {name}: text length is outside 1..4000")
-    if any(ord(character) < 0x20 and character not in {"\n", "\t"} for character in normalized):
-        raise ValueError(f"invalid override for {name}: text contains control characters")
-    return normalized
 
 
 def get_postprocess_label(preset: Preset) -> str:

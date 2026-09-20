@@ -1,3 +1,4 @@
+import { WorkspaceEntryCard } from './WorkspaceEntryCard';
 import { useState } from 'react';
 
 import { ClipboardPaste, FileAudio, FolderOpen, LoaderCircle } from 'lucide-react';
@@ -77,27 +78,19 @@ export function SourcePanel() {
         </div>
       </div>
 
-      <button
+      <WorkspaceEntryCard
+        className="clipboard-intake"
         aria-busy={clipboardBusy}
         aria-label="粘贴 Windows 路径"
-        className="path-entry clipboard-intake"
         disabled={clipboardBusy}
         onClick={() => void pasteClipboardPaths()}
-        type="button"
-      >
-        <span className="path-entry-toggle">
-          {clipboardBusy ? (
-            <LoaderCircle className="spin" size={15} />
-          ) : (
-            <ClipboardPaste size={15} />
-          )}
-          {clipboardBusy ? '正在读取 Windows 剪贴板' : '粘贴 Windows 路径'}
-        </span>
-        <span className="path-entry-idle-copy">
-          <strong>{clipboardBusy ? '正在检查路径' : '点击读取文件或文件夹路径'}</strong>
-          <span>自动读取当前剪贴板，检查后直接加入任务清单。</span>
-        </span>
-      </button>
+        icon={
+          clipboardBusy ? <LoaderCircle className="spin" size={15} /> : <ClipboardPaste size={15} />
+        }
+        label={clipboardBusy ? '正在读取 Windows 剪贴板' : '粘贴 Windows 路径'}
+        title={clipboardBusy ? '正在检查路径' : '点击读取文件或文件夹路径'}
+        description="自动读取当前剪贴板，检查后直接加入任务清单。"
+      />
     </section>
   );
 }

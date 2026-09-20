@@ -95,7 +95,23 @@ describe('desktop workspace persistence', () => {
     ).toThrow();
   });
 
-  it('migrates a hidden legacy default model to Turbo without rewriting task history', () => {
+  it('rebuilds inherited values from the current model instead of an obsolete full snapshot', () => {
+    const restored = importPreferences(
+      JSON.stringify({
+        schemaVersion: 1,
+        preferences: {
+          ...preferences,
+          parameterProfiles: undefined,
+          parameters: { ...preferences.parameters, temperature: 0, initial_prompt: '' },
+        },
+      }),
+    );
+    expect(restored.parameters.temperature).toEqual([0, 0.2, 0.4, 0.6]);
+    expect(restored.parameters.initial_prompt).toBeNull();
+    expect(restored.overrides).toEqual({});
+  });
+
+  it('preserves the selected model and migrates its legacy profile without rewriting task history', () => {
     const legacy = {
       schemaVersion: 1,
       preferences: {
@@ -110,9 +126,9 @@ describe('desktop workspace persistence', () => {
     localStorage.setItem('whisper-subtitle.desktop-state.v1', JSON.stringify(legacy));
 
     const restored = loadWorkspaceState();
-    expect(restored?.preferences.selectedModelId).toBe('large-v3-turbo');
+    expect(restored?.preferences.selectedModelId).toBe('medium');
     expect(restored?.preferences.parameters.beam_size).toBe(8);
-    expect(restored?.preferences.parameterProfiles['large-v3-turbo:en_v1']?.beam_size).toBe(8);
+    expect(restored?.preferences.parameterProfiles['medium:en_v1']?.beam_size).toBe(8);
     expect(restored?.tasks[0]?.modelId).toBe('medium');
   });
 
