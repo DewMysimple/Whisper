@@ -8,12 +8,13 @@
 .config-workbench,
 .config-section {
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 .config-workbench:has(.rounded-select.is-open),
 .config-section:has(.rounded-select.is-open) {
   position: relative;
   z-index: 5;
+  overflow: visible;
 }
 .config-tabs {
   display: grid;
@@ -27,22 +28,12 @@
   font-size: calc(var(--workspace-font-size) + 8px);
   overflow-wrap: anywhere;
 }
-.config-context {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--accent) 4%, var(--surface-raised));
-}
 .config-description {
   margin: 0;
   color: var(--text-muted);
   font-size: max(12px, calc(var(--workspace-font-size) - 1px));
   line-height: 1.65;
 }
-.config-context button,
 .config-section-heading button,
 .config-parameter-toolbar button {
   flex-shrink: 0;
@@ -231,6 +222,7 @@
   align-items: center;
   gap: 24px;
   padding: 22px 24px;
+  border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
   background: color-mix(in srgb, var(--accent) 3%, var(--surface-raised));
 }
 .config-profile-select {
@@ -248,6 +240,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
+  border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
   background: var(--surface-raised);
 }
 .config-field {
@@ -272,6 +265,13 @@
     inset 3px 0 var(--accent),
     1px 0 0 var(--border),
     0 1px 0 var(--border);
+}
+/* The menu can leave its panel while open; keep the exposed grid corners round. */
+.config-parameter-grid > .config-field:nth-child(3n + 1):nth-last-child(-n + 3) {
+  border-bottom-left-radius: calc(var(--radius-lg) - 1px);
+}
+.config-parameter-grid > .config-field:last-child:nth-child(3n) {
+  border-bottom-right-radius: calc(var(--radius-lg) - 1px);
 }
 .config-field-heading {
   display: flex;
@@ -344,9 +344,17 @@
   .config-parameter-toolbar {
     flex-wrap: wrap;
   }
+  .config-parameter-grid > .config-field {
+    border-radius: 0;
+  }
+  .config-parameter-grid > .config-field:nth-child(2n + 1):nth-last-child(-n + 2) {
+    border-bottom-left-radius: calc(var(--radius-lg) - 1px);
+  }
+  .config-parameter-grid > .config-field:last-child:nth-child(2n) {
+    border-bottom-right-radius: calc(var(--radius-lg) - 1px);
+  }
 }
 @container (max-width: 580px) {
-  .config-context,
   .config-parameter-toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -356,6 +364,12 @@
   .config-model-grid,
   .config-parameter-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .config-parameter-grid > .config-field {
+    border-radius: 0;
+  }
+  .config-parameter-grid > .config-field:last-child {
+    border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
   }
   .config-models,
   .config-field {

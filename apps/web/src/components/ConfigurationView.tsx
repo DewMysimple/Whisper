@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Check, Cpu, FolderOpen, RefreshCw, RotateCcw } from 'lucide-react';
+import { Check, Cpu, FolderOpen, RefreshCw, RotateCcw } from 'lucide-react';
 import { desktopBridge } from '../bridge';
 import type { LocalModelDescriptor } from '../contracts/desktop';
 import { PRESETS, getPreset } from '../data/presets';
@@ -155,7 +155,6 @@ function LocalModels() {
 export function ConfigurationView() {
   const tab = useWorkspace((s) => s.configurationTab);
   const openConfiguration = useWorkspace((s) => s.openConfiguration);
-  const setActiveView = useWorkspace((s) => s.setActiveView);
   const modelId = useWorkspace((s) => s.selectedModelId);
   const presetId = useWorkspace((s) => s.selectedPresetId);
   const profileMode = useWorkspace((s) => s.profileMode);
@@ -181,15 +180,6 @@ export function ConfigurationView() {
             onClick={() => openConfiguration('parameters')}
           />
         </nav>
-        <div className="config-context">
-          <p className="config-description">
-            配置按模型与识别模式分别保存，已开始的任务保持原配置。
-          </p>
-          <Button onClick={() => setActiveView('workspace')}>
-            <ArrowLeft size={16} />
-            返回转录工作台
-          </Button>
-        </div>
         {tab === 'models' ? (
           <LocalModels />
         ) : (

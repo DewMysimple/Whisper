@@ -56,7 +56,7 @@ test('configures models and parameters through the shared entry, persists them a
   await page.getByRole('button', { name: '前往参数调节' }).click();
   await expect(page.getByLabel('初始提示词', { exact: true })).toHaveValue('Whisper\n中文术语');
   await expect(page.getByLabel('温度与回退序列', { exact: true })).toHaveValue('0, 0.3, 0.6');
-  await page.getByRole('button', { name: '返回转录工作台' }).click();
+  await page.getByRole('button', { name: '转录工作台', exact: true }).click();
   await page.getByRole('button', { name: '选择媒体文件' }).click();
   await page.getByRole('button', { name: /开始本地转录/ }).click();
   await expect
@@ -225,7 +225,7 @@ test('configuration renders in both themes and preserves accessible editable fie
       (element as HTMLElement).style.removeProperty('width');
     });
   }
-  await page.getByRole('button', { name: '返回转录工作台' }).click();
+  await page.getByRole('button', { name: '转录工作台', exact: true }).click();
   await page.getByRole('button', { name: /任务监控与记录/ }).click();
   await page
     .getByLabel('任务监控与历史记录')
@@ -279,4 +279,63 @@ test('configuration shares the monitor navigation and performance panel presenta
     'true',
   );
   await expect(page.locator('.config-field')).toHaveCount(36);
+});
+
+test('switching model and parameter pages preserves horizontal alignment and rounded panel corners', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 2248, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: /模型与参数/ }).click();
+  const navigation = page.getByLabel('模型与参数功能');
+  const workbench = page.locator('.config-workbench');
+  await expect(workbench.locator('.config-context')).toHaveCount(0);
+  const modelLeft = await workbench.evaluate((element) => element.getBoundingClientRect().left);
+  await navigation.getByRole('button', { name: /参数调节/ }).click();
+  await expect(page.locator('.config-section')).toHaveCount(5);
+  const parameterLeft = await workbench.evaluate((element) => element.getBoundingClientRect().left);
+  expect(parameterLeft).toBeCloseTo(modelLeft, 1);
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight))
+    .toBe(true);
+  await expect(page.locator('.config-section').first()).toHaveCSS('overflow', 'hidden');
+  await page.screenshot({ path: testInfo.outputPath('parameter-panel-corners.png') });
+  await page.getByRole('combobox', { name: '任务类型' }).click();
+  await expect(page.locator('.config-section').first()).toHaveCSS('overflow', 'visible');
+  await expect(page.getByRole('option', { name: '原声转录' })).toBeVisible();
+  await page.getByRole('combobox', { name: '任务类型' }).press('Escape');
+  const lastMode = page.getByRole('combobox', { name: '每窗口最大新 token 数模式' });
+  await lastMode.click();
+  await expect(page.locator('.config-section').nth(1)).toHaveCSS('overflow', 'visible');
+  const defaultLimit = page.getByRole('option', { name: '模型默认上限' });
+  await expect(defaultLimit).toBeVisible();
+  expect(
+    await defaultLimit.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return element.contains(
+        document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2),
+      );
+    }),
+  ).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('parameter-bottom-menu.png') });
+  await lastMode.press('Escape');
+  await navigation.getByRole('button', { name: /模型切换/ }).click();
+  expect(await workbench.evaluate((element) => element.getBoundingClientRect().left)).toBeCloseTo(
+    modelLeft,
+    1,
+  );
+  await navigation.getByRole('button', { name: /参数调节/ }).click();
+  const configuration = page.locator('.configuration-view');
+  const lastField = page.locator('.config-section').nth(1).locator('.config-field').last();
+  for (const width of [850, 540]) {
+    await configuration.evaluate((element, nextWidth) => {
+      (element as HTMLElement).style.width = `${nextWidth}px`;
+    }, width);
+    const corners = await lastField.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return [parseFloat(style.borderBottomLeftRadius), parseFloat(style.borderBottomRightRadius)];
+    });
+    expect(corners[0]).toBeGreaterThan(0);
+    expect(corners[1] > 0).toBe(width === 540);
+  }
 });
