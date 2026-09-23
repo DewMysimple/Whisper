@@ -145,4 +145,4 @@ Web 工作台的事件归并位于 `apps/web/src/state/workspaceEvents.ts`，任
 - 完整便携目录包含桌面 EXE、Worker、CUDA 用户态依赖、模型和 distribution 元数据；目标运行时不需要 Python、Node.js 或 Rust。
 - 最终便携目录和 ZIP 直接位于 `dist/WhisperSubtitle/`、`dist/WhisperSubtitle.zip`；清单与 CycloneDX Python SBOM 位于应用 `_internal/`，外层 `WhisperSubtitle.sha256` 校验关键产物。当前产物未签名；自动更新未启用。
 
-硬件设置保存在新 executionOptions 中，旧硬件偏好不恢复；Web 与 Host 的 option_validation.rs 从 IPC ExecutionSettings 读取边界，Python domain/execution.py 保持对应校验。模型／参数页与硬件页复用任务／性能工作台的面板和连续分段卡，模型卡等宽等高。2026-09-20 本轮已获完整 dist 构建授权，正式前端、Host 和冻结 Worker 必须同步更新并完成交付验证。
+硬件设置保存在新 executionOptions 中，旧硬件偏好不恢复；Web 与 Host 的 option_validation.rs 从 IPC ExecutionSettings 读取边界，Python domain/execution.py 保持对应校验。模型／参数页与硬件页复用任务／性能工作台的面板和连续分段卡，模型卡等宽等高。2026-09-23 最新完整 dist 已同步重建正式前端、Host 和冻结 Worker，并完成清单、ZIP、协议握手与真实 EXE 生命周期验证。
