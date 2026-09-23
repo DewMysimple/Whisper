@@ -19,13 +19,18 @@ export interface AppearancePreferences {
   topbarCollapsed: boolean;
 }
 
+export const INTERFACE_SIZE_PRESETS = {
+  small: { uiFontSize: 12, workspaceFontSize: 12, logFontSize: 11 },
+  balanced: { uiFontSize: 14, workspaceFontSize: 14, logFontSize: 13 },
+  large: { uiFontSize: 16, workspaceFontSize: 16, logFontSize: 15 },
+} as const;
+export type InterfaceSizePreset = keyof typeof INTERFACE_SIZE_PRESETS;
+
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
   theme: 'system',
   accentPreset: 'orange',
   customAccentColor: '#FF5B04',
-  uiFontSize: 14,
-  workspaceFontSize: 14,
-  logFontSize: 13,
+  ...INTERFACE_SIZE_PRESETS.balanced,
   uiFontFamily: 'system',
   monoFontFamily: 'cascadia-mono',
   sidebarWidth: 304,
@@ -37,6 +42,20 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
 export const UI_FONT_SIZE_RANGE = { minimum: 12, maximum: 18 } as const;
 export const WORKSPACE_FONT_SIZE_RANGE = { minimum: 12, maximum: 18 } as const;
 export const LOG_FONT_SIZE_RANGE = { minimum: 10, maximum: 16 } as const;
+export function currentInterfaceSizePreset(
+  preferences: Pick<AppearancePreferences, 'uiFontSize' | 'workspaceFontSize' | 'logFontSize'>,
+): InterfaceSizePreset | null {
+  for (const [id, sizes] of Object.entries(INTERFACE_SIZE_PRESETS)) {
+    if (
+      preferences.uiFontSize === sizes.uiFontSize &&
+      preferences.workspaceFontSize === sizes.workspaceFontSize &&
+      preferences.logFontSize === sizes.logFontSize
+    ) {
+      return id as InterfaceSizePreset;
+    }
+  }
+  return null;
+}
 export const SIDEBAR_WIDTH_RANGE = { minimum: 264, maximum: 360, step: 8 } as const;
 export const WORKSPACE_WIDTH_RANGE = { minimum: 1200, maximum: 1760, step: 20 } as const;
 export const TOPBAR_HEIGHT_RANGE = { minimum: 96, maximum: 168, step: 4 } as const;

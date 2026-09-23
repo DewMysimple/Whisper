@@ -23,6 +23,8 @@ const sharedOwners = new Map([
   ['rounded-select', 'components/rounded-select.css'],
   ['rounded-select-trigger', 'components/rounded-select.css'],
   ['rounded-select-list', 'components/rounded-select.css'],
+  ['preference-choice-card', 'components/preference-choice-card.css'],
+  ['preference-choice-card-label', 'components/preference-choice-card.css'],
   ['workspace-entry-card', 'components/workspace-entry-card.css'],
   ['workspace-entry-label', 'components/workspace-entry-card.css'],
   ['workspace-entry-copy', 'components/workspace-entry-card.css'],

@@ -1,5 +1,78 @@
 import { expect, test, type Locator } from '@playwright/test';
 
+test('offers shared theme-style cards for three persistent interface-size presets', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '偏好设置' }).click();
+  const sizeChoices = page.getByRole('group', { name: '整体界面大小' });
+  await expect(sizeChoices.getByRole('radio')).toHaveCount(3);
+  await expect(sizeChoices.getByRole('radio', { name: '平衡' })).toBeChecked();
+  await expect(page.locator('.theme-choice-grid .preference-choice-card')).toHaveCount(3);
+  await expect(sizeChoices.locator('.preference-choice-card')).toHaveCount(3);
+
+  await sizeChoices.getByText('偏小').click();
+  await expect(sizeChoices.getByRole('radio', { name: '偏小' })).toBeChecked();
+  await expect(
+    page
+      .locator('html')
+      .evaluate((element) => [
+        element.style.getPropertyValue('--ui-font-size'),
+        element.style.getPropertyValue('--workspace-font-size'),
+        element.style.getPropertyValue('--log-font-size'),
+      ]),
+  ).resolves.toEqual(['12px', '12px', '11px']);
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const saved = localStorage.getItem('whisper-subtitle.preview-state.v1');
+        if (!saved) return null;
+        const preferences = JSON.parse(saved).preferences;
+        return [preferences.uiFontSize, preferences.workspaceFontSize, preferences.logFontSize];
+      }),
+    )
+    .toEqual([12, 12, 11]);
+
+  await page.reload();
+  await page.getByRole('button', { name: '偏好设置' }).click();
+  await expect(
+    page.getByRole('group', { name: '整体界面大小' }).getByRole('radio', { name: '偏小' }),
+  ).toBeChecked();
+  await page.getByRole('group', { name: '整体界面大小' }).getByText('偏大').click();
+  await expect(page.getByRole('spinbutton', { name: '界面框架字号数值' })).toHaveValue('16');
+  await expect(page.getByRole('spinbutton', { name: '工作台内容字号数值' })).toHaveValue('16');
+  await expect(page.getByRole('spinbutton', { name: 'Worker 日志字号数值' })).toHaveValue('15');
+
+  await page.getByRole('button', { name: '增大Worker 日志字号' }).click();
+  await expect(
+    page.getByRole('group', { name: '整体界面大小' }).getByRole('radio', { checked: true }),
+  ).toHaveCount(0);
+  await page.getByRole('group', { name: '整体界面大小' }).getByText('平衡').click();
+  await expect(
+    page.getByRole('group', { name: '整体界面大小' }).getByRole('radio', { name: '平衡' }),
+  ).toBeChecked();
+
+  for (const theme of ['浅色', '深色']) {
+    await page.getByRole('radio', { name: theme }).locator('..').click();
+    await page.locator('.theme-choice-grid').screenshot({
+      animations: 'disabled',
+      path: testInfo.outputPath(`theme-cards-${theme === '浅色' ? 'light' : 'dark'}.png`),
+    });
+    await page.locator('.typography-settings-card').screenshot({
+      animations: 'disabled',
+      path: testInfo.outputPath(`interface-size-cards-${theme === '浅色' ? 'light' : 'dark'}.png`),
+    });
+  }
+
+  await page.setViewportSize({ width: 760, height: 900 });
+  await expect(
+    page.locator('.interface-size-choice-grid').evaluate((element) => ({
+      cardsPerRow: getComputedStyle(element).gridTemplateColumns.split(' ').length,
+      overflow: element.scrollWidth - element.clientWidth,
+    })),
+  ).resolves.toEqual({ cardsPerRow: 1, overflow: 0 });
+});
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '转录工作台' })).toBeVisible();

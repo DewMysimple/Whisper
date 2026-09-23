@@ -122,3 +122,12 @@ test('shared dropdown behavior has one style owner', () => {
   assert.equal(result.problems.length, 2);
   assert.match(result.problems.join('\n'), /components\/rounded-select.css/);
 });
+
+test('preference choice cards keep their shared surface in one stylesheet', () => {
+  const result = inspectStyles([
+    ['styles.css', '.preference-choice-card { background: red }'],
+    ['components/preference-choice-card.css', '.preference-choice-card { background: blue }'],
+  ]);
+  assert.equal(result.problems.length, 1);
+  assert.match(result.problems.join('\n'), /components\/preference-choice-card.css/);
+});

@@ -32,6 +32,7 @@ import { getSubtitlePreset } from '../data/subtitlePresets';
 import {
   applyAppearancePreferences,
   DEFAULT_APPEARANCE,
+  INTERFACE_SIZE_PRESETS,
   exportPreferences,
   importPreferences,
   loadWorkspaceState,
@@ -43,6 +44,7 @@ import {
   TOPBAR_HEIGHT_RANGE,
   LOG_FONT_SIZE_RANGE,
   type AccentPreset,
+  type InterfaceSizePreset,
   type MonoFontFamily,
   type ThemePreference,
   type UiFontFamily,
@@ -299,6 +301,7 @@ export interface WorkspaceState {
   setAccentPreset(preset: AccentPreset): void;
   setCustomAccentColor(color: string): void;
   setUiFontSize(size: number): void;
+  setInterfaceSizePreset(preset: InterfaceSizePreset): void;
   setWorkspaceFontSize(size: number): void;
   setLogFontSize(size: number): void;
   setUiFontFamily(family: UiFontFamily): void;
@@ -484,6 +487,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const next = { ...appearanceFromState(get()), uiFontSize };
     applyAppearancePreferences(next);
     set({ uiFontSize });
+    persistLater(get);
+  },
+  setInterfaceSizePreset: (preset) => {
+    const sizes = INTERFACE_SIZE_PRESETS[preset];
+    const next = { ...appearanceFromState(get()), ...sizes };
+    applyAppearancePreferences(next);
+    set(sizes);
     persistLater(get);
   },
   setWorkspaceFontSize: (workspaceFontSize) => {

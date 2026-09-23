@@ -46,6 +46,7 @@ import {
 
 export {
   DEFAULT_APPEARANCE,
+  INTERFACE_SIZE_PRESETS,
   LOG_FONT_SIZE_RANGE,
   SIDEBAR_WIDTH_RANGE,
   UI_FONT_SIZE_RANGE,
@@ -55,9 +56,11 @@ export {
   applyAppearancePreferences,
   applyThemePreference,
   normalizeHexColor,
+  currentInterfaceSizePreset,
 } from './appearancePreferences';
 export type {
   AccentPreset,
+  InterfaceSizePreset,
   MonoFontFamily,
   ThemePreference,
   UiFontFamily,

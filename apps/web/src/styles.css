@@ -4770,34 +4770,13 @@ textarea:focus {
   color: var(--text-muted);
 }
 
-.theme-choice-grid {
+.theme-choice-grid,
+.interface-size-choice-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0;
   padding: 0;
   border: 0;
-}
-
-.theme-choice-grid label {
-  display: grid;
-  gap: 8px;
-  border: 1px solid var(--border);
-  cursor: pointer;
-}
-
-.theme-choice-grid label.is-selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
-}
-
-.theme-choice-grid input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.theme-choice-grid label > strong {
-  text-align: center;
 }
 
 .theme-sample {
@@ -4995,7 +4974,8 @@ textarea:focus {
     flex-direction: column;
   }
 
-  .theme-choice-grid {
+  .theme-choice-grid,
+  .interface-size-choice-grid {
     grid-template-columns: 1fr;
   }
 
@@ -5999,31 +5979,9 @@ output,
   line-height: 1.5;
 }
 
-.theme-choice-grid {
+.theme-choice-grid,
+.interface-size-choice-grid {
   gap: var(--space-3);
-}
-
-.theme-choice-grid label {
-  padding: 10px;
-  border-radius: 14px;
-  background: var(--surface);
-  transition:
-    border-color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.theme-choice-grid label:hover {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-  background: color-mix(in srgb, var(--accent) 3%, var(--surface));
-}
-
-.theme-choice-grid label.is-selected {
-  background: color-mix(in srgb, var(--accent) 5%, var(--surface-raised));
-}
-
-.theme-choice-grid label > strong {
-  font-size: var(--font-caption);
 }
 
 .accent-setting-row {
@@ -6114,6 +6072,106 @@ output,
   background: var(--accent-soft);
   color: var(--text-muted);
   font-size: var(--font-caption) !important;
+}
+
+.interface-size-preset-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.interface-size-preset-heading strong {
+  font-size: var(--font-body);
+}
+
+.interface-size-preset-heading small {
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  line-height: 1.45;
+}
+
+.interface-size-choice-grid {
+  width: 100%;
+  max-width: 900px;
+}
+
+.interface-size-sample {
+  position: relative;
+  display: grid;
+  height: 76px;
+  grid-template-columns: 25% minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface-raised);
+}
+
+.interface-size-sample > i {
+  background: color-mix(in srgb, var(--text) 7%, var(--surface-raised));
+}
+
+.interface-size-sample > span:not(.interface-size-default-badge) {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 5px;
+  padding: 10px 15px;
+}
+
+.interface-size-sample b,
+.interface-size-sample em,
+.interface-size-sample strong {
+  display: block;
+  height: var(--size-line-height);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 19%, var(--surface-raised));
+}
+
+.interface-size-sample b {
+  width: var(--size-first-line);
+}
+
+.interface-size-sample em {
+  width: var(--size-second-line);
+}
+
+.interface-size-sample strong {
+  width: var(--size-accent-line);
+  background: var(--accent);
+}
+
+.interface-size-sample.is-small {
+  --size-line-height: 4px;
+  --size-first-line: 46%;
+  --size-second-line: 59%;
+  --size-accent-line: 33%;
+}
+
+.interface-size-sample.is-balanced {
+  --size-line-height: 6px;
+  --size-first-line: 57%;
+  --size-second-line: 71%;
+  --size-accent-line: 43%;
+}
+
+.interface-size-sample.is-large {
+  --size-line-height: 8px;
+  --size-first-line: 68%;
+  --size-second-line: 85%;
+  --size-accent-line: 53%;
+}
+
+.interface-size-default-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 3px 5px;
+  border-radius: 5px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--text) 8%, transparent);
 }
 
 .font-family-grid {
@@ -6347,24 +6405,6 @@ body.sidebar-resizing .app-shell {
   letter-spacing: 0.05em;
   line-height: 1;
   box-shadow: 0 2px 7px rgba(29, 29, 31, 0.06);
-}
-
-.theme-choice-copy {
-  display: grid;
-  align-content: start;
-  text-align: center;
-}
-
-.theme-choice-grid label > .theme-choice-copy > strong {
-  font-size: var(--font-caption);
-  line-height: 1.3;
-}
-
-.theme-choice-copy small {
-  color: var(--text-muted);
-  font-size: max(10px, calc(var(--workspace-font-size) - 3px));
-  font-weight: 450;
-  line-height: 1.35;
 }
 
 /* The shared RoundedSelect supplies the themed listbox to every workbench. */
@@ -6803,14 +6843,6 @@ body.sidebar-resizing .app-shell {
 
 /* Phase 4 / modification 34: tighter preference controls, structured logs,
    integrated history and one shared workspace-state language. */
-.theme-choice-grid label {
-  grid-template-rows: auto auto;
-}
-
-.theme-choice-copy {
-  gap: 0;
-}
-
 .dimension-control-input {
   min-width: 0;
   grid-template-columns: 32px minmax(72px, 1fr) 32px minmax(104px, 112px);

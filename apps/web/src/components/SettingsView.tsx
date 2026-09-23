@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import {
   LOG_FONT_SIZE_RANGE,
+  currentInterfaceSizePreset,
   normalizeHexColor,
   SIDEBAR_WIDTH_RANGE,
   UI_FONT_SIZE_RANGE,
@@ -25,11 +26,13 @@ import {
   WORKSPACE_WIDTH_RANGE,
   TOPBAR_HEIGHT_RANGE,
   type AccentPreset,
+  type InterfaceSizePreset,
   type MonoFontFamily,
   type UiFontFamily,
 } from '../state/persistence';
 import { useWorkspace } from '../state/workspace';
 import { Button } from './Button';
+import { PreferenceChoiceCard } from './PreferenceChoiceCard';
 import { RoundedSelect } from './RoundedSelect';
 
 const ACCENT_PALETTE: Array<{
@@ -76,6 +79,12 @@ const THEMES = [
     label: '深色',
   },
 ] as const;
+
+const INTERFACE_SIZE_CHOICES: Array<{ id: InterfaceSizePreset; label: string }> = [
+  { id: 'small', label: '偏小' },
+  { id: 'balanced', label: '平衡' },
+  { id: 'large', label: '偏大' },
+];
 
 function hexToRgb(hex: string): [number, number, number] {
   return [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)].map((part) =>
@@ -521,6 +530,7 @@ export function SettingsView() {
   const setWorkspaceFontSize = useWorkspace((state) => state.setWorkspaceFontSize);
   const logFontSize = useWorkspace((state) => state.logFontSize);
   const setLogFontSize = useWorkspace((state) => state.setLogFontSize);
+  const setInterfaceSizePreset = useWorkspace((state) => state.setInterfaceSizePreset);
   const uiFontFamily = useWorkspace((state) => state.uiFontFamily);
   const setUiFontFamily = useWorkspace((state) => state.setUiFontFamily);
   const monoFontFamily = useWorkspace((state) => state.monoFontFamily);
@@ -542,6 +552,11 @@ export function SettingsView() {
   const restartWorker = useWorkspace((state) => state.restartWorker);
   const [accentDraft, setAccentDraft] = useState(customAccentColor);
   const normalizedAccent = normalizeHexColor(accentDraft);
+  const selectedInterfaceSize = currentInterfaceSizePreset({
+    uiFontSize,
+    workspaceFontSize,
+    logFontSize,
+  });
 
   useEffect(() => setAccentDraft(customAccentColor), [customAccentColor]);
 
@@ -625,25 +640,21 @@ export function SettingsView() {
           <fieldset className="theme-choice-grid">
             <legend className="sr-only">主题</legend>
             {THEMES.map((option) => (
-              <label className={theme === option.id ? 'is-selected' : ''} key={option.id}>
-                <input
-                  aria-label={option.label}
-                  checked={theme === option.id}
-                  name="theme"
-                  onChange={() => setTheme(option.id)}
-                  type="radio"
-                  value={option.id}
-                />
+              <PreferenceChoiceCard
+                checked={theme === option.id}
+                key={option.id}
+                label={option.label}
+                name="theme"
+                onChange={() => setTheme(option.id)}
+                value={option.id}
+              >
                 <span className={`theme-sample is-${option.id}`} aria-hidden="true">
                   {option.id === 'system' && <span className="theme-mode-badge">AUTO</span>}
                   <i />
                   <b />
                   <em />
                 </span>
-                <span className="theme-choice-copy">
-                  <strong>{option.label}</strong>
-                </span>
-              </label>
+              </PreferenceChoiceCard>
             ))}
           </fieldset>
 
@@ -779,6 +790,35 @@ export function SettingsView() {
               <span>字体家族全局统一；桌面框架、工作台内容与日志字号分别生效。</span>
             </div>
           </div>
+          <div className="interface-size-preset-heading">
+            <strong>整体界面大小</strong>
+            <small>同时调整框架、工作台内容和 Worker 日志字号；下方仍可分别微调。</small>
+          </div>
+          <fieldset className="interface-size-choice-grid">
+            <legend className="sr-only">整体界面大小</legend>
+            {INTERFACE_SIZE_CHOICES.map((option) => (
+              <PreferenceChoiceCard
+                checked={selectedInterfaceSize === option.id}
+                key={option.id}
+                label={option.label}
+                name="interface-size"
+                onChange={() => setInterfaceSizePreset(option.id)}
+                value={option.id}
+              >
+                <span className={`interface-size-sample is-${option.id}`} aria-hidden="true">
+                  <i />
+                  <span>
+                    <b />
+                    <em />
+                    <strong />
+                  </span>
+                  {option.id === 'balanced' && (
+                    <span className="interface-size-default-badge">默认</span>
+                  )}
+                </span>
+              </PreferenceChoiceCard>
+            ))}
+          </fieldset>
           <div className="font-family-grid">
             <div className="font-family-control">
               <span>
