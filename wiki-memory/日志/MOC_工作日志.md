@@ -16,6 +16,7 @@ supersedes: null
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-23 | ui | - | archived | shared-workbench-selects-2026-09-23 | [[日志/2026-09-23-统一工作台下拉菜单与强调色.md|统一工作台下拉菜单与强调色]] |
+| 2026-09-23 | ui | - | archived | model-card-hover-and-directory-entry-2026-09-23 | [[日志/2026-09-23-模型卡片悬停与路径入口整改.md|模型卡片悬停与路径入口整改]] |
 | 2026-09-23 | ui | - | archived | interface-size-preset-width-and-layout-2026-09-23 | [[日志/2026-09-23-整体界面预设补齐宽度与布局.md|整体界面预设补齐宽度与布局]] |
 | 2026-09-23 | ui | - | archived | interface-size-presets-2026-09-23 | [[日志/2026-09-23-偏好设置整体界面大小预设.md|偏好设置整体界面大小预设]] |
 | 2026-09-23 | bug | - | archived | root-browser-preview-launcher-2026-09-23 | [[日志/2026-09-23-修复根目录浏览器预览启动脚本.md|修复根目录浏览器预览启动脚本]] |

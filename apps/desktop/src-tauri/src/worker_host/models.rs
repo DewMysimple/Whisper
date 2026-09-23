@@ -44,6 +44,11 @@ fn find_local_model(root: &Path, model_id: &str, repositories: &[&str]) -> Optio
     })
 }
 
+pub(super) fn model_directory_target(root: &Path, model_id: &str) -> Option<PathBuf> {
+    let (_, _, repositories) = MODEL_CATALOG.iter().find(|(id, _, _)| *id == model_id)?;
+    Some(find_local_model(root, model_id, repositories).unwrap_or_else(|| root.to_path_buf()))
+}
+
 fn directory_size(path: &Path) -> u64 {
     let Ok(entries) = std::fs::read_dir(path) else {
         return 0;

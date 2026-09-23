@@ -15,6 +15,7 @@ import type {
   InputOrigin,
   InputSource,
   LocalModelDescriptor,
+  ModelId,
   ModelStatus,
   OutputPathStatus,
   OutputPreview,
@@ -217,6 +218,10 @@ export class TauriDesktopBridge implements DesktopBridge {
   async listLocalModels(): Promise<LocalModelDescriptor[]> {
     await this.ensureNativeListeners();
     return invoke<LocalModelDescriptor[]>('list_local_models');
+  }
+
+  async openModelDirectory(modelId: ModelId): Promise<void> {
+    await invoke('open_model_directory', { modelId });
   }
 
   async getHardwareCapabilities() {

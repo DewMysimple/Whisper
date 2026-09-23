@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Check, Cpu, RefreshCw, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Check, Cpu, FolderOpen, RefreshCw, RotateCcw } from 'lucide-react';
 import { desktopBridge } from '../bridge';
 import type { LocalModelDescriptor } from '../contracts/desktop';
 import { PRESETS, getPreset } from '../data/presets';
@@ -7,7 +7,7 @@ import { getModelLabel } from '../data/models';
 import { PARAMETER_GROUPS } from '../data/parameterPresentation';
 import { errorMessage } from '../state/workspaceDraft';
 import { useWorkspace } from '../state/workspace';
-import { Button } from './Button';
+import { Button, IconButton } from './Button';
 import { CardButton } from './CardButton';
 import { ParameterField } from './ParameterField';
 import { RoundedSelect } from './RoundedSelect';
@@ -22,6 +22,26 @@ function LocalModels() {
   const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [openingModelId, setOpeningModelId] = useState<string | null>(null);
+  const [pathNotice, setPathNotice] = useState('');
+  async function openModelDirectory(model: LocalModelDescriptor) {
+    setOpeningModelId(model.id);
+    setPathNotice('');
+    try {
+      await desktopBridge.openModelDirectory(model.id);
+      setPathNotice(
+        desktopBridge.mode === 'mock'
+          ? '浏览器预览无法打开资源管理器；请在桌面开发版中使用此入口。'
+          : model.installed
+            ? `已打开 ${model.label} 的模型目录。`
+            : `已打开模型存放目录；将模型文件放入“${model.id}”子文件夹后刷新模型。`,
+      );
+    } catch (reason: unknown) {
+      setPathNotice(`打开模型目录失败：${errorMessage(reason)}`);
+    } finally {
+      setOpeningModelId(null);
+    }
+  }
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -51,7 +71,13 @@ function LocalModels() {
             选择下一次任务使用的模型，启动任务时加载。未安装的模型暂不可选。
           </p>
         </div>
-        <Button disabled={loading} onClick={() => setRevision((n) => n + 1)}>
+        <Button
+          disabled={loading}
+          onClick={() => {
+            setPathNotice('');
+            setRevision((n) => n + 1);
+          }}
+        >
           <RefreshCw size={15} />
           刷新模型
         </Button>
@@ -60,40 +86,62 @@ function LocalModels() {
       {error && <p role="alert">{error}</p>}
       <div className="config-model-grid">
         {models.map((model) => (
-          <CardButton
+          <article
             className={`config-model ${selectedModelId === model.id ? 'is-selected' : ''}`}
             key={model.id}
-            selected={selectedModelId === model.id}
-            disabled={!model.installed || loading || Boolean(error)}
-            onClick={() => selectModel(model.id)}
           >
-            <div className="config-model-heading">
-              <Cpu size={20} />
-              <strong>{model.label}</strong>
-              {selectedModelId === model.id && <Check size={18} />}
-            </div>
-            <p>
-              {model.id === 'large-v3-turbo'
-                ? '速度优先 · 原声转录'
-                : model.id === 'large-v3'
-                  ? '精度优先 · 支持翻译为英语'
-                  : '较低资源占用 · 支持翻译为英语'}
-            </p>
-            <div className="config-model-facts">
-              <span className={model.installed ? 'is-available' : ''}>
+            <CardButton
+              className="config-model-choice"
+              selected={selectedModelId === model.id}
+              disabled={!model.installed || loading || Boolean(error)}
+              onClick={() => selectModel(model.id)}
+              aria-label={`选择 ${model.label} 模型${model.installed ? '' : '，未安装'}`}
+            >
+              <span className="config-model-heading">
+                <span className="config-model-icon" aria-hidden="true">
+                  <Cpu size={19} />
+                </span>
+                <strong>{model.label}</strong>
+                {selectedModelId === model.id && (
+                  <Check className="config-model-check" size={17} aria-hidden="true" />
+                )}
+              </span>
+              <span className="config-model-description">
+                {model.id === 'large-v3-turbo'
+                  ? '速度优先 · 原声转录'
+                  : model.id === 'large-v3'
+                    ? '精度优先 · 支持翻译为英语'
+                    : '较低资源占用 · 支持翻译为英语'}
+              </span>
+            </CardButton>
+            <div className="config-model-footer">
+              <span className={`config-model-status ${model.installed ? 'is-available' : ''}`}>
+                <span aria-hidden="true" />
                 {model.installed ? '本地可用' : '未安装'}
               </span>
-              <span>
-                {model.sizeBytes ? `${(model.sizeBytes / 1024 ** 3).toFixed(2)} GB` : '—'}
-              </span>
+              {model.sizeBytes && (
+                <span className="config-model-size">
+                  {(model.sizeBytes / 1024 ** 3).toFixed(2)} GB
+                </span>
+              )}
+              <IconButton
+                className="config-model-folder"
+                label={`打开 ${model.label} 模型目录`}
+                title={model.installed ? '打开模型所在文件夹' : '打开模型存放目录'}
+                disabled={openingModelId !== null}
+                onClick={() => void openModelDirectory(model)}
+              >
+                <FolderOpen size={17} />
+              </IconButton>
             </div>
-            <div className="config-model-location">
-              <small>{model.detail}</small>
-              {model.path && <code>{model.path}</code>}
-            </div>
-          </CardButton>
+          </article>
         ))}
       </div>
+      {pathNotice && (
+        <p className="config-description config-path-notice" role="status">
+          {pathNotice}
+        </p>
+      )}
       <p className="config-description config-note">
         {current.state === 'ready' && current.modelId
           ? `当前驻留：${getModelLabel(current.modelId)}。`

@@ -649,6 +649,14 @@ describe('TauriDesktopBridge', () => {
     });
   });
 
+  it('opens a catalog model directory by model id without accepting a UI path', async () => {
+    const bridge = new TauriDesktopBridge();
+    await bridge.openModelDirectory('large-v3-turbo');
+    expect(native.invoke).toHaveBeenCalledWith('open_model_directory', {
+      modelId: 'large-v3-turbo',
+    });
+  });
+
   it('owns native task and power notifications behind the bridge boundary', async () => {
     const bridge = new TauriDesktopBridge();
 

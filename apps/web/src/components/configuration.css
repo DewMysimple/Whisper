@@ -92,35 +92,59 @@
 .config-model {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 14px;
   min-width: 0;
   height: 100%;
-  padding: 18px;
+  padding: 16px 17px 10px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface-raised);
   color: var(--text);
-  text-align: left;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
 }
 .config-model.is-selected {
-  border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
-  box-shadow: inset 0 3px var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface-raised));
 }
-.config-model:disabled {
+.config-model:not(.is-selected):has(.config-model-choice:not(:disabled):hover) {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+}
+.config-model-choice {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  flex: 1;
+  width: 100%;
+  min-height: 96px;
+  padding: 0 0 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.config-model-choice.card-button:not(:disabled):is(:hover, :active) {
+  box-shadow: none;
+}
+.config-model-choice:disabled {
   opacity: 1;
-  color: var(--text-muted);
-  cursor: not-allowed;
+  color: inherit;
 }
 .config-model-heading {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 28px;
+  gap: 11px;
+  min-height: 36px;
 }
-.config-model-heading svg {
+.config-model-icon {
+  display: inline-grid;
   flex-shrink: 0;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 10px;
+  background: var(--surface-soft);
   color: var(--text-muted);
 }
 .config-model-heading strong {
@@ -129,46 +153,75 @@
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
-.config-model.is-selected .config-model-heading svg {
+.config-model.is-selected .config-model-icon {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: var(--accent-soft);
   color: var(--accent);
 }
 .config-model.is-selected .config-model-heading strong {
   color: var(--accent);
 }
-.config-model p {
-  margin: 0;
+.config-model-check {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.config-model-description {
   color: var(--text-muted);
-  line-height: 1.6;
+  line-height: 1.5;
   font-size: max(12px, calc(var(--workspace-font-size) - 1px));
 }
-.config-model-facts {
+.config-model-footer {
   display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 0;
-  margin-top: auto;
-  border-block: 1px solid var(--border);
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  border-top: 1px solid var(--border);
   color: var(--text-muted);
   font-size: max(12px, calc(var(--workspace-font-size) - 1px));
   font-variant-numeric: tabular-nums;
 }
-.config-model-facts .is-available {
+.config-model-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.config-model-status > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.config-model-status.is-available > span {
+  background: var(--green);
+}
+.config-model-status.is-available {
   color: var(--green);
 }
-.config-model-location {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
+.config-model-size {
+  margin-left: auto;
+  white-space: nowrap;
 }
-.config-model-location :is(small, code) {
-  color: var(--text-muted);
-  font-size: max(12px, calc(var(--workspace-font-size) - 2px));
-  line-height: 1.6;
-  overflow-wrap: anywhere;
+.config-model-folder.icon-action {
+  width: 34px;
+  height: 34px;
+  margin-left: auto;
+  border: 1px solid transparent;
+  border-radius: 9px;
 }
-.config-model-location code {
-  font-family: var(--mono);
+.config-model-size + .config-model-folder.icon-action {
+  margin-left: 0;
+}
+.config-model-folder.icon-action:hover {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+.config-path-notice {
+  margin-top: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .config-model {
+    transition: none;
+  }
 }
 .config-note {
   margin-top: 18px;

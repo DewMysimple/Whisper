@@ -372,6 +372,26 @@ fn list_local_models(state: State<'_, HostState>) -> Vec<LocalModelDescriptor> {
 }
 
 #[tauri::command]
+fn open_model_directory(model_id: String, state: State<'_, HostState>) -> Result<(), HostError> {
+    let directory = state
+        .0
+        .model_directory_target(&model_id)
+        .ok_or_else(|| HostError::new("host.model_unknown", "model is not in the local catalog"))?;
+    std::fs::create_dir_all(&directory)
+        .map_err(|error| HostError::new("host.model_directory_failed", error.to_string()))?;
+    let canonical = std::fs::canonicalize(directory)
+        .map_err(|error| HostError::new("host.model_directory_failed", error.to_string()))?;
+    let mut command = Command::new("explorer.exe");
+    command.arg(canonical);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| HostError::new("host.model_directory_failed", error.to_string()))
+}
+
+#[tauri::command]
 async fn start_transcription(
     state: State<'_, HostState>,
     power_state: State<'_, PowerState>,
@@ -453,6 +473,7 @@ pub fn run() {
             worker_health,
             worker_metrics,
             list_local_models,
+            open_model_directory,
             start_transcription,
             cancel_transcription,
         ])

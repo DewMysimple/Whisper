@@ -34,7 +34,7 @@ mod option_validation;
 use self::logs::{worker_log_summary, worker_quality_diagnostic_log_lines};
 pub use self::media::{apply_media_inspections, inspect_input_paths};
 use self::model_catalog::DEFAULT_MODEL_ID;
-use self::models::{inspect_local_models, packaged_worker_environment};
+use self::models::{inspect_local_models, model_directory_target, packaged_worker_environment};
 
 pub type EventSink = Arc<dyn Fn(&str, Value) + Send + Sync + 'static>;
 type PendingResult = Result<Value, HostError>;
@@ -445,6 +445,10 @@ impl WorkerManager {
 
     pub fn local_models(&self) -> Vec<LocalModelDescriptor> {
         inspect_local_models(&self.model_root())
+    }
+
+    pub fn model_directory_target(&self, model_id: &str) -> Option<PathBuf> {
+        model_directory_target(&self.model_root(), model_id)
     }
 
     pub fn start_transcription(&self, draft: StartDraft) -> Result<StartResult, HostError> {
@@ -1009,8 +1013,9 @@ mod tests {
         BridgeInputSource, BridgeOutputPolicy, BridgeSubtitleParameters, MediaInspectionItem,
         StartDraft, WORKER_LOGS_CLEARED_EVENT, WORKER_MESSAGE_EVENT, WorkerManager,
         apply_media_inspections, draft_to_protocol_params, inspect_input_paths,
-        inspect_local_models, packaged_runtime_root, packaged_worker_environment,
-        validate_start_draft, worker_log_summary, worker_quality_diagnostic_log_lines,
+        inspect_local_models, model_directory_target, packaged_runtime_root,
+        packaged_worker_environment, validate_start_draft, worker_log_summary,
+        worker_quality_diagnostic_log_lines,
     };
 
     fn subtitle_parameters() -> BridgeSubtitleParameters {
@@ -1406,6 +1411,12 @@ mod tests {
 
         let models = inspect_local_models(&root);
         assert_eq!(models.len(), 6);
+        assert_eq!(
+            model_directory_target(&root, "medium"),
+            Some(medium.clone())
+        );
+        assert_eq!(model_directory_target(&root, "tiny"), Some(root.clone()));
+        assert_eq!(model_directory_target(&root, "..\\other"), None);
         assert!(
             models
                 .iter()

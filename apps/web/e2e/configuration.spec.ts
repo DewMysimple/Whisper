@@ -35,10 +35,8 @@ test('configures models and parameters through the shared entry, persists them a
     .getByLabel('模型与参数功能')
     .getByRole('button', { name: /模型切换/ })
     .click();
-  await expect(
-    page.locator('.config-model').filter({ hasText: 'Large V3' }).filter({ hasText: '精度优先' }),
-  ).toBeDisabled();
-  await page.locator('.config-model').filter({ hasText: 'Medium' }).click();
+  await expect(page.getByRole('button', { name: '选择 Large V3 模型，未安装' })).toBeDisabled();
+  await page.getByRole('button', { name: '选择 Medium 模型' }).click();
   await page
     .getByLabel('模型与参数功能')
     .getByRole('button', { name: /参数调节/ })
@@ -48,7 +46,7 @@ test('configures models and parameters through the shared entry, persists them a
     .getByLabel('模型与参数功能')
     .getByRole('button', { name: /模型切换/ })
     .click();
-  await page.locator('.config-model').filter({ hasText: 'Large V3 Turbo' }).click();
+  await page.getByRole('button', { name: '选择 Large V3 Turbo 模型' }).click();
   await page
     .getByLabel('模型与参数功能')
     .getByRole('button', { name: /参数调节/ })
@@ -84,6 +82,50 @@ test('configures models and parameters through the shared entry, persists them a
   expect(
     await page.evaluate(() => localStorage.getItem('whisper-subtitle.desktop-state.v1')),
   ).toBeNull();
+});
+
+test('model cards keep a stable hover surface and offer a separate directory action without exposing paths', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /模型与参数/ }).click();
+  const cards = page.locator('.config-model');
+  await expect(cards).toHaveCount(6);
+  await expect(page.locator('.config-model code')).toHaveCount(0);
+  await expect(page.locator('.config-model-grid')).not.toContainText('models\\');
+  await expect(page.locator('.config-model-choice.card-button')).toHaveCount(6);
+  const unavailable = page.getByRole('button', { name: '选择 Tiny 模型，未安装' });
+  await expect(unavailable).toBeDisabled();
+  const selected = page.getByRole('button', { name: '选择 Large V3 Turbo 模型' });
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: '打开 Tiny 模型目录' }).click();
+  await expect(page.getByRole('status')).toContainText('桌面开发版');
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+  const medium = page.getByRole('button', { name: '选择 Medium 模型' });
+  const before = await medium.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  });
+  await medium.hover();
+  await page.waitForTimeout(200);
+  const after = await medium.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      shadow: style.boxShadow,
+      transform: style.transform,
+      hovered: element.matches(':hover'),
+    };
+  });
+  expect(after.box).toEqual(before);
+  expect(after.shadow).toBe('none');
+  expect(after.transform).toBe('none');
+  expect(after.hovered).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('model-cards-light.png') });
+  await page.getByRole('button', { name: '切换为深色主题' }).click();
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: testInfo.outputPath('model-cards-dark.png') });
 });
 
 test('configuration renders in both themes and preserves accessible editable fields at narrow widths', async ({

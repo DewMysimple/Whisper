@@ -157,6 +157,10 @@ export class MockDesktopBridge implements DesktopBridge {
     }));
   }
 
+  async openModelDirectory(modelId: ModelId): Promise<void> {
+    void modelId;
+  }
+
   async getPowerCapabilities(): Promise<PowerCapabilities> {
     return { shutdown: true };
   }
