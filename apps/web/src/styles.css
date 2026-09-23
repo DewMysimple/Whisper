@@ -5954,7 +5954,8 @@ output,
   gap: var(--space-4);
 }
 
-.typography-settings-card {
+.typography-settings-card,
+.interface-size-settings-card {
   grid-column: 1 / -1;
 }
 
@@ -6074,24 +6075,9 @@ output,
   font-size: var(--font-caption) !important;
 }
 
-.interface-size-preset-heading {
-  display: grid;
-  gap: 3px;
-}
-
-.interface-size-preset-heading strong {
-  font-size: var(--font-body);
-}
-
-.interface-size-preset-heading small {
-  color: var(--text-muted);
-  font-size: var(--font-caption);
-  line-height: 1.45;
-}
-
 .interface-size-choice-grid {
   width: 100%;
-  max-width: 900px;
+  min-width: 0;
 }
 
 .interface-size-sample {
@@ -6278,7 +6264,8 @@ output,
     grid-template-columns: 1fr;
   }
 
-  .typography-settings-card {
+  .typography-settings-card,
+  .interface-size-settings-card {
     grid-column: auto;
   }
 

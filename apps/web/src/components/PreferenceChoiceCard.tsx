@@ -5,6 +5,7 @@ interface PreferenceChoiceCardProps {
   checked: boolean;
   children: ReactNode;
   className?: string;
+  description?: string;
   label: string;
   name: string;
   onChange(): void;
@@ -16,6 +17,7 @@ export function PreferenceChoiceCard({
   checked,
   children,
   className = '',
+  description,
   label,
   name,
   onChange,
@@ -34,6 +36,7 @@ export function PreferenceChoiceCard({
       {children}
       <span className="preference-choice-card-label">
         <strong>{label}</strong>
+        {description && <small>{description}</small>}
       </span>
     </label>
   );

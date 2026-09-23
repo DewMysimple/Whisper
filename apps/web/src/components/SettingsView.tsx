@@ -17,6 +17,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from
 import { useEffect, useRef, useState } from 'react';
 
 import {
+  INTERFACE_SIZE_PRESETS,
   LOG_FONT_SIZE_RANGE,
   currentInterfaceSizePreset,
   normalizeHexColor,
@@ -556,6 +557,7 @@ export function SettingsView() {
     uiFontSize,
     workspaceFontSize,
     logFontSize,
+    workspaceWidth,
   });
 
   useEffect(() => setAccentDraft(customAccentColor), [customAccentColor]);
@@ -790,35 +792,6 @@ export function SettingsView() {
               <span>字体家族全局统一；桌面框架、工作台内容与日志字号分别生效。</span>
             </div>
           </div>
-          <div className="interface-size-preset-heading">
-            <strong>整体界面大小</strong>
-            <small>同时调整框架、工作台内容和 Worker 日志字号；下方仍可分别微调。</small>
-          </div>
-          <fieldset className="interface-size-choice-grid">
-            <legend className="sr-only">整体界面大小</legend>
-            {INTERFACE_SIZE_CHOICES.map((option) => (
-              <PreferenceChoiceCard
-                checked={selectedInterfaceSize === option.id}
-                key={option.id}
-                label={option.label}
-                name="interface-size"
-                onChange={() => setInterfaceSizePreset(option.id)}
-                value={option.id}
-              >
-                <span className={`interface-size-sample is-${option.id}`} aria-hidden="true">
-                  <i />
-                  <span>
-                    <b />
-                    <em />
-                    <strong />
-                  </span>
-                  {option.id === 'balanced' && (
-                    <span className="interface-size-default-badge">默认</span>
-                  )}
-                </span>
-              </PreferenceChoiceCard>
-            ))}
-          </fieldset>
           <div className="font-family-grid">
             <div className="font-family-control">
               <span>
@@ -886,6 +859,44 @@ export function SettingsView() {
               />
             </div>
           </div>
+        </section>
+
+        <section className="panel settings-card settings-section-card interface-size-settings-card">
+          <div className="appearance-section-title">
+            <Maximize2 size={18} />
+            <div>
+              <h3>整体界面大小</h3>
+              <span>
+                同时调整框架、工作台内容、Worker 日志字号和工作台内容宽度；上方仍可分别微调。
+              </span>
+            </div>
+          </div>
+          <fieldset className="interface-size-choice-grid">
+            <legend className="sr-only">整体界面大小</legend>
+            {INTERFACE_SIZE_CHOICES.map((option) => (
+              <PreferenceChoiceCard
+                checked={selectedInterfaceSize === option.id}
+                description={`框架 ${INTERFACE_SIZE_PRESETS[option.id].uiFontSize} / 内容 ${INTERFACE_SIZE_PRESETS[option.id].workspaceFontSize} / 日志 ${INTERFACE_SIZE_PRESETS[option.id].logFontSize} px · 工作台宽度 ${INTERFACE_SIZE_PRESETS[option.id].workspaceWidth} px`}
+                key={option.id}
+                label={option.label}
+                name="interface-size"
+                onChange={() => setInterfaceSizePreset(option.id)}
+                value={option.id}
+              >
+                <span className={`interface-size-sample is-${option.id}`} aria-hidden="true">
+                  <i />
+                  <span>
+                    <b />
+                    <em />
+                    <strong />
+                  </span>
+                  {option.id === 'balanced' && (
+                    <span className="interface-size-default-badge">默认</span>
+                  )}
+                </span>
+              </PreferenceChoiceCard>
+            ))}
+          </fieldset>
         </section>
       </div>
 

@@ -20,6 +20,7 @@ it('applies the three interface-size presets together and reflects manual change
     uiFontSize: 14,
     workspaceFontSize: 14,
     logFontSize: 13,
+    workspaceWidth: 1540,
   });
   render(<SettingsView />);
 
@@ -35,6 +36,7 @@ it('applies the three interface-size presets together and reflects manual change
     uiFontSize: 12,
     workspaceFontSize: 12,
     logFontSize: 11,
+    workspaceWidth: 1360,
   });
   expect(screen.getByRole('radio', { name: '偏小' })).toBeChecked();
 
@@ -43,6 +45,7 @@ it('applies the three interface-size presets together and reflects manual change
     uiFontSize: 16,
     workspaceFontSize: 16,
     logFontSize: 15,
+    workspaceWidth: 1720,
   });
   act(() => useWorkspace.getState().setLogFontSize(16));
   expect(screen.getByRole('radio', { name: '偏大' })).not.toBeChecked();
@@ -55,6 +58,13 @@ it('applies the three interface-size presets together and reflects manual change
     uiFontSize: 14,
     workspaceFontSize: 14,
     logFontSize: 13,
+    workspaceWidth: 1540,
   });
+  expect(balanced).toBeChecked();
+
+  act(() => useWorkspace.getState().setWorkspaceWidth(1600));
+  expect(balanced).not.toBeChecked();
+  fireEvent.click(balanced);
+  expect(useWorkspace.getState().workspaceWidth).toBe(1540);
   expect(balanced).toBeChecked();
 });

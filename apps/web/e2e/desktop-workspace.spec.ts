@@ -3,6 +3,7 @@ import { expect, test, type Locator } from '@playwright/test';
 test('offers shared theme-style cards for three persistent interface-size presets', async ({
   page,
 }, testInfo) => {
+  await page.setViewportSize({ width: 2200, height: 1080 });
   await page.goto('/');
   await page.getByRole('button', { name: '偏好设置' }).click();
   const sizeChoices = page.getByRole('group', { name: '整体界面大小' });
@@ -10,6 +11,20 @@ test('offers shared theme-style cards for three persistent interface-size preset
   await expect(sizeChoices.getByRole('radio', { name: '平衡' })).toBeChecked();
   await expect(page.locator('.theme-choice-grid .preference-choice-card')).toHaveCount(3);
   await expect(sizeChoices.locator('.preference-choice-card')).toHaveCount(3);
+  await expect(
+    page.locator('.interface-size-settings-card').evaluate((element) => {
+      const panel = element.getBoundingClientRect();
+      const typography = document
+        .querySelector('.typography-settings-card')!
+        .getBoundingClientRect();
+      const choices = element.querySelector('.interface-size-choice-grid')!.getBoundingClientRect();
+      const rightPadding = Number.parseFloat(getComputedStyle(element).paddingRight);
+      return {
+        belowTypography: panel.top >= typography.bottom,
+        fillsWidth: Math.abs(panel.right - rightPadding - choices.right) <= 1,
+      };
+    }),
+  ).resolves.toEqual({ belowTypography: true, fillsWidth: true });
 
   await sizeChoices.getByText('偏小').click();
   await expect(sizeChoices.getByRole('radio', { name: '偏小' })).toBeChecked();
@@ -20,18 +35,27 @@ test('offers shared theme-style cards for three persistent interface-size preset
         element.style.getPropertyValue('--ui-font-size'),
         element.style.getPropertyValue('--workspace-font-size'),
         element.style.getPropertyValue('--log-font-size'),
+        element.style.getPropertyValue('--workspace-max'),
       ]),
-  ).resolves.toEqual(['12px', '12px', '11px']);
+  ).resolves.toEqual(['12px', '12px', '11px', '1360px']);
+  const smallSettingsWidth = await page
+    .locator('.settings-workspace')
+    .evaluate((element) => element.getBoundingClientRect().width);
   await expect
     .poll(async () =>
       page.evaluate(() => {
         const saved = localStorage.getItem('whisper-subtitle.preview-state.v1');
         if (!saved) return null;
         const preferences = JSON.parse(saved).preferences;
-        return [preferences.uiFontSize, preferences.workspaceFontSize, preferences.logFontSize];
+        return [
+          preferences.uiFontSize,
+          preferences.workspaceFontSize,
+          preferences.logFontSize,
+          preferences.workspaceWidth,
+        ];
       }),
     )
-    .toEqual([12, 12, 11]);
+    .toEqual([12, 12, 11, 1360]);
 
   await page.reload();
   await page.getByRole('button', { name: '偏好设置' }).click();
@@ -42,6 +66,11 @@ test('offers shared theme-style cards for three persistent interface-size preset
   await expect(page.getByRole('spinbutton', { name: '界面框架字号数值' })).toHaveValue('16');
   await expect(page.getByRole('spinbutton', { name: '工作台内容字号数值' })).toHaveValue('16');
   await expect(page.getByRole('spinbutton', { name: 'Worker 日志字号数值' })).toHaveValue('15');
+  await expect(page.getByRole('spinbutton', { name: '工作台内容宽度数值' })).toHaveValue('1720');
+  const largeSettingsWidth = await page
+    .locator('.settings-workspace')
+    .evaluate((element) => element.getBoundingClientRect().width);
+  expect(largeSettingsWidth).toBeGreaterThan(smallSettingsWidth + 300);
 
   await page.getByRole('button', { name: '增大Worker 日志字号' }).click();
   await expect(
@@ -51,6 +80,12 @@ test('offers shared theme-style cards for three persistent interface-size preset
   await expect(
     page.getByRole('group', { name: '整体界面大小' }).getByRole('radio', { name: '平衡' }),
   ).toBeChecked();
+  await page.getByRole('spinbutton', { name: '工作台内容宽度数值' }).fill('1600');
+  await expect(
+    page.getByRole('group', { name: '整体界面大小' }).getByRole('radio', { checked: true }),
+  ).toHaveCount(0);
+  await page.getByRole('group', { name: '整体界面大小' }).getByText('平衡').click();
+  await expect(page.getByRole('spinbutton', { name: '工作台内容宽度数值' })).toHaveValue('1540');
 
   for (const theme of ['浅色', '深色']) {
     await page.getByRole('radio', { name: theme }).locator('..').click();
@@ -58,7 +93,7 @@ test('offers shared theme-style cards for three persistent interface-size preset
       animations: 'disabled',
       path: testInfo.outputPath(`theme-cards-${theme === '浅色' ? 'light' : 'dark'}.png`),
     });
-    await page.locator('.typography-settings-card').screenshot({
+    await page.locator('.interface-size-settings-card').screenshot({
       animations: 'disabled',
       path: testInfo.outputPath(`interface-size-cards-${theme === '浅色' ? 'light' : 'dark'}.png`),
     });

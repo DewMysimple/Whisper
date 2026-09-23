@@ -20,9 +20,9 @@ export interface AppearancePreferences {
 }
 
 export const INTERFACE_SIZE_PRESETS = {
-  small: { uiFontSize: 12, workspaceFontSize: 12, logFontSize: 11 },
-  balanced: { uiFontSize: 14, workspaceFontSize: 14, logFontSize: 13 },
-  large: { uiFontSize: 16, workspaceFontSize: 16, logFontSize: 15 },
+  small: { uiFontSize: 12, workspaceFontSize: 12, logFontSize: 11, workspaceWidth: 1360 },
+  balanced: { uiFontSize: 14, workspaceFontSize: 14, logFontSize: 13, workspaceWidth: 1540 },
+  large: { uiFontSize: 16, workspaceFontSize: 16, logFontSize: 15, workspaceWidth: 1720 },
 } as const;
 export type InterfaceSizePreset = keyof typeof INTERFACE_SIZE_PRESETS;
 
@@ -34,7 +34,6 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   uiFontFamily: 'system',
   monoFontFamily: 'cascadia-mono',
   sidebarWidth: 304,
-  workspaceWidth: 1540,
   topbarHeight: 116,
   topbarCollapsed: false,
 };
@@ -43,13 +42,17 @@ export const UI_FONT_SIZE_RANGE = { minimum: 12, maximum: 18 } as const;
 export const WORKSPACE_FONT_SIZE_RANGE = { minimum: 12, maximum: 18 } as const;
 export const LOG_FONT_SIZE_RANGE = { minimum: 10, maximum: 16 } as const;
 export function currentInterfaceSizePreset(
-  preferences: Pick<AppearancePreferences, 'uiFontSize' | 'workspaceFontSize' | 'logFontSize'>,
+  preferences: Pick<
+    AppearancePreferences,
+    'uiFontSize' | 'workspaceFontSize' | 'logFontSize' | 'workspaceWidth'
+  >,
 ): InterfaceSizePreset | null {
   for (const [id, sizes] of Object.entries(INTERFACE_SIZE_PRESETS)) {
     if (
       preferences.uiFontSize === sizes.uiFontSize &&
       preferences.workspaceFontSize === sizes.workspaceFontSize &&
-      preferences.logFontSize === sizes.logFontSize
+      preferences.logFontSize === sizes.logFontSize &&
+      preferences.workspaceWidth === sizes.workspaceWidth
     ) {
       return id as InterfaceSizePreset;
     }
