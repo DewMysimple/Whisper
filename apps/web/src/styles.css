@@ -6367,7 +6367,7 @@ body.sidebar-resizing .app-shell {
   line-height: 1.35;
 }
 
-/* Rounded, theme-aware font listboxes replace the platform's square menu. */
+/* The shared RoundedSelect supplies the themed listbox to every workbench. */
 .font-family-grid > .font-family-control {
   display: grid;
   min-width: 0;
@@ -6396,80 +6396,6 @@ body.sidebar-resizing .app-shell {
   font-size: var(--font-caption);
   font-weight: 450;
   line-height: 1.4;
-}
-
-.rounded-select {
-  position: relative;
-  min-width: 0;
-}
-
-.rounded-select-trigger {
-  display: grid;
-  width: 100%;
-  min-height: 42px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 0 13px;
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
-  background: var(--surface-raised);
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  box-shadow: inset 0 1px color-mix(in srgb, white 52%, transparent);
-}
-
-.rounded-select-trigger svg {
-  color: var(--text-muted);
-  transition: transform 160ms ease;
-}
-
-.rounded-select.is-open .rounded-select-trigger {
-  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
-}
-
-.rounded-select.is-open .rounded-select-trigger svg {
-  transform: rotate(180deg);
-}
-
-.rounded-select-list {
-  position: absolute;
-  z-index: 60;
-  top: calc(100% + 8px);
-  right: 0;
-  left: 0;
-  display: grid;
-  gap: 3px;
-  padding: 6px;
-  overflow: hidden;
-  border: 1px solid var(--border-strong);
-  border-radius: 14px;
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-float);
-}
-
-.rounded-select-list > button {
-  display: grid;
-  width: 100%;
-  min-height: 38px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 9px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-}
-
-.rounded-select-list > button:hover,
-.rounded-select-list > button[aria-selected='true'] {
-  background: var(--accent-soft);
-  color: var(--accent);
 }
 
 /* Custom color editing uses an in-app rounded popover instead of the square native dialog. */

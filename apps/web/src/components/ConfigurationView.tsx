@@ -10,6 +10,7 @@ import { useWorkspace } from '../state/workspace';
 import { Button } from './Button';
 import { CardButton } from './CardButton';
 import { ParameterField } from './ParameterField';
+import { RoundedSelect } from './RoundedSelect';
 import { SegmentedCard } from './SegmentedCard';
 import './configuration.css';
 
@@ -44,6 +45,7 @@ function LocalModels() {
     <section className="config-models" aria-labelledby="local-model-title">
       <header className="config-section-heading">
         <div>
+          <p className="step-label">LOCAL MODELS</p>
           <h2 id="local-model-title">本地模型</h2>
           <p className="config-description">
             选择下一次任务使用的模型，启动任务时加载。未安装的模型暂不可选。
@@ -144,20 +146,15 @@ export function ConfigurationView() {
           <LocalModels />
         ) : (
           <div className="config-parameter-toolbar">
-            <label>
-              当前识别模式
-              <select
-                aria-label="参数所属识别模式"
+            <div className="config-profile-select">
+              <span>当前识别模式</span>
+              <RoundedSelect
+                label="参数所属识别模式"
                 value={presetId}
-                onChange={(e) => selectProfile(profileMode, e.target.value as typeof presetId)}
-              >
-                {PRESETS.map((preset) => (
-                  <option key={preset.id} value={preset.id}>
-                    {preset.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={(value) => selectProfile(profileMode, value)}
+                options={PRESETS.map((preset) => ({ id: preset.id, label: preset.label }))}
+              />
+            </div>
             <p className="config-description">
               修改后移出输入框即保存；“恢复默认”重新采用当前模型的校准值。
             </p>
@@ -178,6 +175,7 @@ export function ConfigurationView() {
             >
               <header className="config-section-heading">
                 <div>
+                  <p className="step-label">INFERENCE PARAMETERS</p>
                   <h2>{group.title}</h2>
                   <p className="config-description">{group.description}</p>
                 </div>

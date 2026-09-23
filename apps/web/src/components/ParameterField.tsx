@@ -6,6 +6,7 @@ import { isParameterValue, PARAMETER_RULES } from '../state/parameterValidation'
 import { useWorkspace } from '../state/workspace';
 import { translationTaskSupported } from '../state/parameterProfiles';
 import { IconButton } from './Button';
+import { RoundedSelect } from './RoundedSelect';
 
 function inputValue(value: unknown): string {
   if (value === null) return '';
@@ -102,11 +103,11 @@ export function ParameterField({ name }: { name: ParameterKey }) {
       </div>
       <code>{name}</code>
       {schema.anyOf && (
-        <select
-          aria-label={`${copy.label}模式`}
+        <RoundedSelect
+          label={`${copy.label}模式`}
           value={value === null && !editingEmpty ? 'auto' : 'manual'}
-          onChange={(event) => {
-            if (event.target.value === 'auto') {
+          onChange={(mode) => {
+            if (mode === 'auto') {
               setEditingEmpty(false);
               setParameter(name, null as EditableParameters[ParameterKey]);
             } else if (isText) {
@@ -117,22 +118,28 @@ export function ParameterField({ name }: { name: ParameterKey }) {
               setParameter(name, initial as EditableParameters[ParameterKey]);
             }
           }}
-        >
-          <option value="auto">{copy.nullLabel ?? '自动'}</option>
-          <option value="manual">手动设置</option>
-        </select>
+          options={[
+            { id: 'auto', label: copy.nullLabel ?? '自动' },
+            { id: 'manual', label: '手动设置' },
+          ]}
+        />
       )}
       {name === 'task' ? (
-        <select
-          {...shared}
+        <RoundedSelect
+          label={copy.label}
+          id={id}
+          describedBy={`${id}-help`}
           value={String(value)}
-          onChange={(e) => setParameter('task', e.target.value as 'transcribe' | 'translate')}
-        >
-          <option value="transcribe">原声转录</option>
-          <option disabled={!canTranslate} value="translate">
-            翻译为英语{!canTranslate ? '（当前组合不支持）' : ''}
-          </option>
-        </select>
+          onChange={(task) => setParameter('task', task as 'transcribe' | 'translate')}
+          options={[
+            { id: 'transcribe', label: '原声转录' },
+            {
+              id: 'translate',
+              label: `翻译为英语${!canTranslate ? '（当前组合不支持）' : ''}`,
+              disabled: !canTranslate,
+            },
+          ]}
+        />
       ) : rule.type === 'boolean' ? (
         <label className="config-toggle">
           <input

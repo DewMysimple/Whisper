@@ -3,7 +3,7 @@ type: moc
 status: active
 kind: process
 importance: high
-updated: 2026-09-20
+updated: 2026-09-23
 topic: work-log-index
 source_logs: []
 supersedes: null
@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-23 | ui | - | archived | shared-workbench-selects-2026-09-23 | [[日志/2026-09-23-统一工作台下拉菜单与强调色.md|统一工作台下拉菜单与强调色]] |
 | 2026-09-20 | maintenance | - | archived | readable-diagnostics-shared-presentation-2026-09-20 | [[日志/2026-09-20-统一监控诊断字体与公共展示组件.md|统一监控诊断字体与公共展示组件]] |
 | 2026-09-20 | ui | - | archived | history-type-and-preview-motion-2026-09-20 | [[日志/2026-09-20-精简历史标题时间与外观按钮动效.md|精简历史标题时间与外观按钮动效]] |
 | 2026-09-20 | feature | - | archived | hardware-workbench-release-2026-09-20 | [[日志/2026-09-20-硬件优化与工作台统一及便携版更新.md|硬件优化与工作台统一及便携版更新]] |

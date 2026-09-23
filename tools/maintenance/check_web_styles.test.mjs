@@ -112,3 +112,13 @@ test('hardware optimization styles retain an independent owner', () => {
   assert.equal(result.problems.length, 3);
   assert.match(result.problems.join('\n'), /components\/hardware-optimization.css/);
 });
+
+test('shared dropdown behavior has one style owner', () => {
+  const result = inspectStyles([
+    ['styles.css', '.rounded-select-trigger { border: 0 }'],
+    ['components/configuration.css', '.rounded-select-list { background: red }'],
+    ['components/rounded-select.css', '.rounded-select-trigger { border: 1px solid }'],
+  ]);
+  assert.equal(result.problems.length, 2);
+  assert.match(result.problems.join('\n'), /components\/rounded-select.css/);
+});

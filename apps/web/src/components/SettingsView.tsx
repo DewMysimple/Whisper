@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   Check,
-  ChevronDown,
   Download,
   Maximize2,
   Minus,
@@ -15,7 +14,7 @@ import {
   Upload,
 } from 'lucide-react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   LOG_FONT_SIZE_RANGE,
@@ -31,6 +30,7 @@ import {
 } from '../state/persistence';
 import { useWorkspace } from '../state/workspace';
 import { Button } from './Button';
+import { RoundedSelect } from './RoundedSelect';
 
 const ACCENT_PALETTE: Array<{
   id: string;
@@ -76,84 +76,6 @@ const THEMES = [
     label: '深色',
   },
 ] as const;
-
-function RoundedSelect<T extends string>({
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  label: string;
-  onChange(value: T): void;
-  options: Array<{ id: T; label: string }>;
-  value: T;
-}) {
-  const [open, setOpen] = useState(false);
-  const listboxId = useId();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const selected = options.find((option) => option.id === value) ?? options[0];
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && !containerRef.current?.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', closeOnOutsidePointer, true);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeOnOutsidePointer, true);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [open]);
-
-  return (
-    <div className={`rounded-select ${open ? 'is-open' : ''}`} ref={containerRef}>
-      <button
-        aria-controls={listboxId}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-label={label}
-        className="rounded-select-trigger"
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault();
-            setOpen(true);
-          }
-        }}
-        role="combobox"
-        type="button"
-      >
-        <span>{selected?.label}</span>
-        <ChevronDown size={15} />
-      </button>
-      {open && (
-        <div className="rounded-select-list" id={listboxId} role="listbox">
-          {options.map((option) => (
-            <button
-              aria-selected={option.id === value}
-              key={option.id}
-              onClick={() => {
-                onChange(option.id);
-                setOpen(false);
-              }}
-              role="option"
-              type="button"
-            >
-              <span>{option.label}</span>
-              {option.id === value && <Check size={15} />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function hexToRgb(hex: string): [number, number, number] {
   return [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)].map((part) =>

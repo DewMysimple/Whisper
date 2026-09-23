@@ -11,17 +11,20 @@ test('configures models and parameters through the shared entry, persists them a
   );
   await entry.click();
   await expect(page.getByRole('heading', { name: '解码与采样' })).toBeVisible();
-  await page.getByLabel('参数所属识别模式').selectOption('cn2');
+  await page.getByRole('combobox', { name: '参数所属识别模式' }).click();
+  await page.getByRole('option', { name: '中文防幻觉' }).click();
   await page.getByLabel('束搜索宽度', { exact: true }).fill('7');
   await page.getByLabel('束搜索宽度', { exact: true }).press('Tab');
   await page.getByLabel('温度与回退序列', { exact: true }).fill('0, 0.3, 0.6');
   await page.getByLabel('温度与回退序列', { exact: true }).press('Tab');
   await page.getByLabel('语音起点阈值', { exact: true }).fill('0.65');
   await page.getByLabel('语音起点阈值', { exact: true }).press('Tab');
-  await page.getByLabel('初始提示词模式').selectOption('manual');
+  await page.getByRole('combobox', { name: '初始提示词模式' }).click();
+  await page.getByRole('option', { name: '手动设置' }).click();
   await page.getByLabel('初始提示词', { exact: true }).fill('Whisper\n中文术语');
   await page.getByLabel('初始提示词', { exact: true }).press('Tab');
-  await page.getByLabel('平均对数概率阈值模式').selectOption('auto');
+  await page.getByRole('combobox', { name: '平均对数概率阈值模式' }).click();
+  await page.getByRole('option', { name: '关闭检查' }).click();
   await page.getByLabel('束搜索宽度', { exact: true }).fill('0');
   await page.getByLabel('束搜索宽度', { exact: true }).press('Tab');
   await expect(page.getByRole('alert')).toContainText('尚未应用');
@@ -85,7 +88,7 @@ test('configures models and parameters through the shared entry, persists them a
 
 test('configuration renders in both themes and preserves accessible editable fields at narrow widths', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto('/');
   await page.getByRole('button', { name: '前往参数调节' }).click();
   for (const theme of ['light', 'dark']) {
@@ -95,6 +98,21 @@ test('configuration renders in both themes and preserves accessible editable fie
     if (await toggle.count()) await toggle.click();
     for (const width of [1728, 1080, 760]) {
       await page.setViewportSize({ width, height: 1000 });
+      if (width === 1728) {
+        await page.getByRole('combobox', { name: '任务类型' }).click();
+        const taskChoice = page.getByRole('option', { name: '原声转录' });
+        await expect(taskChoice).toBeVisible();
+        expect(
+          await taskChoice.evaluate((element) => {
+            const box = element.getBoundingClientRect();
+            return element.contains(
+              document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2),
+            );
+          }),
+        ).toBe(true);
+        await page.screenshot({ path: testInfo.outputPath(`configuration-menu-${theme}.png`) });
+        await page.getByRole('combobox', { name: '任务类型' }).press('Escape');
+      }
       expect(
         await page.locator('.configuration-view').evaluate((el) => el.scrollWidth - el.clientWidth),
       ).toBeLessThanOrEqual(1);

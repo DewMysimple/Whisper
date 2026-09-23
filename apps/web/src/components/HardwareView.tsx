@@ -7,6 +7,7 @@ import { formatResolvedHardware } from '../state/hardware';
 import { errorMessage } from '../state/workspaceDraft';
 import { useWorkspace } from '../state/workspace';
 import { Button } from './Button';
+import { RoundedSelect } from './RoundedSelect';
 import { SegmentedCard } from './SegmentedCard';
 import { SummaryText } from './SummaryText';
 import './hardware-optimization.css';
@@ -39,20 +40,19 @@ function ThreadControl({
   };
   return (
     <div className="optimization-thread-controls">
-      <select
-        aria-label="CPU 线程策略"
+      <RoundedSelect
+        label="CPU 线程策略"
         value={value === undefined ? 'default' : value === 0 ? 'auto' : 'manual'}
-        onChange={(event) => {
+        onChange={(strategy) => {
           setInvalid(false);
-          onChange(
-            event.target.value === 'default' ? undefined : event.target.value === 'auto' ? 0 : 4,
-          );
+          onChange(strategy === 'default' ? undefined : strategy === 'auto' ? 0 : 4);
         }}
-      >
-        <option value="default">沿用默认</option>
-        <option value="auto">运行时自动</option>
-        <option value="manual">手动指定</option>
-      </select>
+        options={[
+          { id: 'default', label: '沿用默认' },
+          { id: 'auto', label: '运行时自动' },
+          { id: 'manual', label: '手动指定' },
+        ]}
+      />
       {value !== undefined && value > 0 && (
         <input
           aria-label="CPU 推理线程数"
@@ -238,82 +238,75 @@ export function HardwareView() {
             </div>
             <MonitorCog size={21} />
           </header>
-          <label className="optimization-field">
+          <div className="optimization-field">
             <span>执行设备</span>
-            <select
-              aria-label="执行设备"
+            <RoundedSelect
+              label="执行设备"
               value={options.device ?? 'auto'}
               disabled={!capabilities || loading}
-              onChange={(event) => setDevice(event.target.value as ExecutionOptions['device'])}
-            >
-              <option value="auto">自动选择</option>
-              <option value="cuda" disabled={gpuDevices.length === 0}>
-                NVIDIA GPU / CUDA
-              </option>
-              <option value="cpu">CPU</option>
-            </select>
+              onChange={(device) => setDevice(device as ExecutionOptions['device'])}
+              options={[
+                { id: 'auto', label: '自动选择' },
+                { id: 'cuda', label: 'NVIDIA GPU / CUDA', disabled: gpuDevices.length === 0 },
+                { id: 'cpu', label: 'CPU' },
+              ]}
+            />
             <small>自动模式优先使用可用的 CUDA GPU；无 GPU 时使用 CPU。</small>
-          </label>
-          <label className="optimization-field">
+          </div>
+          <div className="optimization-field">
             <span>GPU 设备</span>
-            <select
-              aria-label="GPU 设备"
-              value={options.device_index ?? 0}
+            <RoundedSelect
+              label="GPU 设备"
+              value={String(options.device_index ?? 0)}
               disabled={
                 !capabilities || loading || options.device === 'cpu' || gpuDevices.length === 0
               }
-              onChange={(event) =>
+              onChange={(deviceIndex) =>
                 apply({
                   ...options,
                   device: 'cuda',
-                  device_index: Number(event.target.value),
+                  device_index: Number(deviceIndex),
                   compute_type: 'auto',
                 })
               }
-            >
-              {gpuDevices.length === 0 ? (
-                <option value={0}>无可用 CUDA GPU</option>
-              ) : (
-                gpuDevices.map((device) => (
-                  <option key={device.deviceIndex} value={device.deviceIndex}>
-                    GPU {device.deviceIndex} · {device.name}
-                  </option>
-                ))
-              )}
-            </select>
+              options={
+                gpuDevices.length === 0
+                  ? [{ id: '0', label: '无可用 CUDA GPU' }]
+                  : gpuDevices.map((device) => ({
+                      id: String(device.deviceIndex),
+                      label: `GPU ${device.deviceIndex} · ${device.name}`,
+                    }))
+              }
+            />
             <small>一次任务使用一张 GPU，按设备编号选择。</small>
-          </label>
-          <label className="optimization-field">
+          </div>
+          <div className="optimization-field">
             <span>计算精度</span>
-            <select
-              aria-label="计算精度"
+            <RoundedSelect
+              label="计算精度"
               value={computeType}
               disabled={!selectedDevice || loading}
-              onChange={(event) =>
+              onChange={(precision) =>
                 apply({
                   ...options,
-                  compute_type: event.target.value as ExecutionOptions['compute_type'],
+                  compute_type: precision as ExecutionOptions['compute_type'],
                 })
               }
-            >
-              <option value="auto">自动选择</option>
-              {EXECUTION_RULES.compute_type.enum
-                ?.filter((value) => value !== 'auto')
-                .map((value) => (
-                  <option
-                    key={value}
-                    value={value}
-                    disabled={!selectedDevice?.computeTypes.includes(value)}
-                  >
-                    {value.toUpperCase()}
-                    {!selectedDevice?.computeTypes.includes(value) ? ' · 当前设备不支持' : ''}
-                  </option>
-                ))}
-            </select>
+              options={[
+                { id: 'auto', label: '自动选择' },
+                ...(EXECUTION_RULES.compute_type.enum
+                  ?.filter((value) => value !== 'auto')
+                  .map((value) => ({
+                    id: value,
+                    label: `${value.toUpperCase()}${!selectedDevice?.computeTypes.includes(value) ? ' · 当前设备不支持' : ''}`,
+                    disabled: !selectedDevice?.computeTypes.includes(value),
+                  })) ?? []),
+              ]}
+            />
             <small>
               FP16 适用于支持半精度的 GPU；INT8 混合精度可降低内存或显存需求，识别结果可能略有差异。
             </small>
-          </label>
+          </div>
         </section>
         <section
           className="optimization-panel optimization-section"
