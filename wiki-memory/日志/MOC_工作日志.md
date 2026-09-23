@@ -17,6 +17,7 @@ supersedes: null
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-23 | ui | - | archived | shared-workbench-selects-2026-09-23 | [[日志/2026-09-23-统一工作台下拉菜单与强调色.md|统一工作台下拉菜单与强调色]] |
 | 2026-09-23 | ui | - | archived | interface-size-presets-2026-09-23 | [[日志/2026-09-23-偏好设置整体界面大小预设.md|偏好设置整体界面大小预设]] |
+| 2026-09-23 | bug | - | archived | root-browser-preview-launcher-2026-09-23 | [[日志/2026-09-23-修复根目录浏览器预览启动脚本.md|修复根目录浏览器预览启动脚本]] |
 | 2026-09-20 | maintenance | - | archived | readable-diagnostics-shared-presentation-2026-09-20 | [[日志/2026-09-20-统一监控诊断字体与公共展示组件.md|统一监控诊断字体与公共展示组件]] |
 | 2026-09-20 | ui | - | archived | history-type-and-preview-motion-2026-09-20 | [[日志/2026-09-20-精简历史标题时间与外观按钮动效.md|精简历史标题时间与外观按钮动效]] |
 | 2026-09-20 | feature | - | archived | hardware-workbench-release-2026-09-20 | [[日志/2026-09-20-硬件优化与工作台统一及便携版更新.md|硬件优化与工作台统一及便携版更新]] |
