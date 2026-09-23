@@ -144,6 +144,8 @@ Useful commands from the repository root:
 ```powershell
 # Browser/mock UI with Vite HMR on http://127.0.0.1:1420
 corepack pnpm web:dev
+# Windows shortcut that also opens the browser
+.\runStart.cmd
 
 # Real Tauri desktop + Worker with the same Vite HMR server
 corepack pnpm desktop:dev
