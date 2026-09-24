@@ -147,12 +147,7 @@ export function OutputPanel() {
               </label>
             ))}
           </div>
-          <div className="output-format-guidance">
-            <p className="output-format-required">至少选择一种需要生成的文件格式。</p>
-            <p className="output-format-description">
-              可多选；转录文本支持 TXT / Markdown，字幕任务支持 SRT / TXT。
-            </p>
-          </div>
+          <p className="output-format-required">至少选择一种需要生成的文件格式。</p>
         </section>
 
         <section

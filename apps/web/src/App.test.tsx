@@ -277,9 +277,7 @@ describe('desktop workspace', () => {
     await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
     await user.click(screen.getByRole('button', { name: '清除任务清单中的 2 个媒体文件' }));
     expect(useWorkspace.getState().inputs).toHaveLength(0);
-    expect(
-      screen.queryByRole('button', { name: /查看 \d+ 个媒体文件进度/ }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '查看 0 个媒体文件进度' })).toBeDisabled();
   });
 
   it('routes Ctrl+Enter through the standard preset confirmation', async () => {

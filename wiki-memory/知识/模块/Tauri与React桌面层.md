@@ -6,6 +6,7 @@ importance: high
 updated: 2026-09-24
 topic: tauri-react-desktop
 source_logs:
+  - "[[日志/2026-09-24-文件输出提示与转录操作区稳定化]]"
   - "[[日志/2026-09-24-简化开始转录按钮与下置执行提示]]"
   - "[[日志/2026-09-24-文件格式提示常驻于选项下方]]"
   - "[[日志/2026-09-24-精致化开始本地转录按钮外观]]"
@@ -60,7 +61,7 @@ supersedes: null
 - `state/inputTaskPreview.ts` 把当前文件／目录选择投影为非持久化待执行输入列表；目录仅保留路径、媒体数、汇总时长与未知数，不推导子路径或逐文件时长，供执行前清单和任务监控共同读取；两个界面都通过 store 的 `clearInputs` 清空选择，不直接处理源文件。正式任务启动后仍以 Worker 事件为进度事实源。
 - `components/tasks/TasksView.tsx` 是任务工作台唯一入口；`TaskHistory` 管理搜索、筛选与动作，`TaskHistoryCard` 只接收快照和回调，`TaskMonitor` 组合主监控、`TaskMediaList` 和 `TaskProcessChain`。旧 compact／expanded 双分支已移除。组件与四个责任 CSS 的修改定位见 `apps/web/src/components/tasks/README.md`；当前视觉约定见 [[当前状态/项目概览]]。
 - `bridge/tauriWorkerDecoder.ts` 保存 Worker 消息解码、错误归一化和展示标签；`tauriWorkerEvents.ts` 负责消息到桌面任务事件的归并；`tauriDesktopBridge.ts` 负责 Tauri invoke、事件订阅、轮询和 DesktopBridge 生命周期。
-- `Button.tsx` 的 `Button`／`IconButton` 集中通用动作的原生键盘、disabled、ref、焦点与危险状态展示；图标动作必须有可访问名称。`button.css` 是主次按钮和轻量图标按钮的样式入口，hover／active 不移动命中区域，渐变与背景色分层以避免悬停突变。可选 `motion` 启用内部内容的悬停／按压过渡与表面渐亮，按钮本身边界不变；桌面外观预览已复用，减弱动画时禁用内容位移与过渡。开始转录使用 `surface="flat"` 纯色主按钮，禁用时使用中性表面，始终无渐变和投影；轻量描边圆角勾勒边缘，播放图标与快捷键各自有低对比度小底框，保持原按钮命中区域。执行条件说明放在按钮下方，预留两行空间，空状态从可访问性树隐藏；清单状态徽标保留四字宽度，防止状态切换引发标题换行和按钮位移。页面只负责布局；相关职责与复用说明见 `components/README.md`。
+- `Button.tsx` 的 `Button`／`IconButton` 集中通用动作的原生键盘、disabled、ref、焦点与危险状态展示；图标动作必须有可访问名称。`button.css` 是主次按钮和轻量图标按钮的样式入口，hover／active 不移动命中区域，渐变与背景色分层以避免悬停突变。可选 `motion` 启用内部内容的悬停／按压过渡与表面渐亮，按钮本身边界不变；桌面外观预览已复用，减弱动画时禁用内容位移与过渡。开始转录使用 `surface="flat"` 纯色主按钮，禁用时使用中性表面，始终无渐变和投影；轻量描边圆角勾勒边缘，播放图标与快捷键各自有低对比度小底框，保持原按钮命中区域。媒体进度入口与转录主按钮处于固定操作区；无媒体时入口禁用但仍占位。清单标题独占状态行之后的完整一行，清单状态变化不改变操作区几何位置。执行条件说明放在操作区下方，预留两行空间，空状态从可访问性树隐藏。页面只负责布局；相关职责与复用说明见 `components/README.md`。
 - `CardButton.tsx` 与 `card-button.css` 统一动作卡片的原生交互，供执行前清单、媒体卡、历史主卡、日志状态卡使用；`SegmentedCard` 与其样式统一任务页两项导航和四项筛选。动作卡不携带 `aria-pressed`，只有选择控件显式传入选中状态。公共动作卡按下只改变表面阴影，不缩放连续分段；已有 `selection-card` 继续保留其独立的选择交互。
 - `RoundedSelect.tsx` 从字体设置抽成公共菜单，`rounded-select.css` 是唯一基础样式入口；偏好设置、参数字段／preset 与硬件设备／精度／线程策略共用。支持禁用选项、方向键／Home／End／Enter、Esc 和外部点击关闭。卡片页必须允许弹层溢出并处理打开时的层级；业务状态由各页持有。
 - `PreferenceChoiceCard.tsx` 与对应 CSS 是偏好设置中主题卡和整体界面大小卡的公共入口，使用原生 radio 保留单选键盘语义；大小卡另显示具体参数。整体大小面板位于字体设置块下方，三卡均分面板宽度。`appearancePreferences.ts` 定义偏小／平衡／偏大三组框架、内容、日志字号及工作台内容宽度；默认值引用平衡。`workspace.ts` 原子更新已有四项字段；卡片由四项实际值推导选中态，微调后为自定义组合，无新增持久化字段。
@@ -86,7 +87,7 @@ supersedes: null
 - `taskFiles.ts` 只从成功媒体的实际 `outputPaths` 选择 TXT／MD／SRT；单媒体旧历史可回退任务输出集合，批量无关联记录不得猜测输出。`revealPath` 继续使用已有 Host `reveal_output`，异常进入现有错误提示，未新增 IPC 或 shell 权限。
 - `workspaceDraft.ts` 统一输入去重与自定义参数判定；启用 SRT 时，其参数偏离预设也属于自定义。
 - 浏览器 Mock 对新提交任务串行模拟逐媒体完成，按实际选中的 TXT/MD/SRT 组合及保存策略产生模拟路径；原生正式页面仍只接收 Host/Worker 数据。
-- `OutputPanel` 的四个设置分区使用细分隔线，保存策略、同名冲突和完成动作共用连体按钮样式，格式选项使用原生 checkbox 与可见勾选标记；“至少选择一种需要生成的文件格式。”常驻在格式选项下方，支持格式与多选说明紧接其后，不依赖选中状态显隐。外观仅在 `output-panel.css` 维护，原位说明行用 `white-space: nowrap`／`text-overflow: ellipsis` 保持单行。自定义始终通过 typed bridge 打开原生目录选择器，不增加路径输入区或副本区；浏览器 Mock 继续返回示例目录。执行前清单入口聚焦当前选中的策略。1400px 以下必须同时切换网格轨道与命名区域，避免隐式列挤压。
+- `OutputPanel` 的四个设置分区使用细分隔线并延伸至面板内沿，保存策略、同名冲突和完成动作共用连体按钮样式，格式选项使用原生 checkbox 与可见勾选标记；“至少选择一种需要生成的文件格式。”常驻在格式选项下方，不显示额外灰色支持格式说明，不依赖选中状态显隐。外观仅在 `output-panel.css` 维护。保存位置的原位说明行用 `white-space: nowrap`／`text-overflow: ellipsis` 保持单行。自定义始终通过 typed bridge 打开原生目录选择器，不增加路径输入区或副本区；浏览器 Mock 继续返回示例目录。执行前清单入口聚焦当前选中的策略。1400px 以下必须同时切换网格轨道与命名区域，避免隐式列挤压。
 - `check:styles` 检查任务、文件输出、Worker 日志和公共按钮／文字样式归属、同条件重复选择器／属性、旧祖先变体和 `!important`，并禁止全局 `button` 变换覆盖局部命中区域；新增样式直接修改原责任规则。检查器与视觉验证说明见 [[知识/流程/开发与验证]]。
 
 模型与参数控制、生成目录和新旧 Worker 配套关系见 [[决策/ADR-004-模型与参数工作台]]。`ParameterField` 使用生成规则校验，页面不复制数值范围；`WorkspaceEntryCard` 集中路径输入与参数跳转的相同表面。预览使用独立 `preview-state.v1` 存储，正式 `desktop-state.v1` 保持原 key；两者不能互读模拟任务。

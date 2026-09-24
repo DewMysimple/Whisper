@@ -31,7 +31,8 @@
 
 .output-sheet-section {
   min-width: 0;
-  padding: 22px 0;
+  margin-inline: -22px;
+  padding: 22px;
   border-top: 1px solid var(--border);
 }
 
@@ -235,21 +236,8 @@
 }
 
 .output-format-required {
-  margin: 0;
+  margin: 10px 0 0;
   color: var(--accent);
-  font-size: var(--font-caption);
-  line-height: 1.5;
-}
-
-.output-format-guidance {
-  display: grid;
-  gap: 3px;
-  margin-top: 10px;
-}
-
-.output-format-description {
-  margin: 0;
-  color: var(--text-faint);
   font-size: var(--font-caption);
   line-height: 1.5;
 }

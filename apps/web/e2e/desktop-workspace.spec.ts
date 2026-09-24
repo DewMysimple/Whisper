@@ -333,7 +333,7 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   const subtitle = await measure();
   expect(subtitle.source.height).toBeCloseTo(subtitle.output.height, 1);
   expect(subtitle.preset.height).toBeCloseTo(subtitle.launch.height, 1);
-  expect(subtitle.launch.height).toBeGreaterThan(transcript.launch.height);
+  expect(subtitle.launch.height).toBeCloseTo(transcript.launch.height, 1);
   await expect(
     page.locator('.subtitle-parameter-field > .parameter-field-label').first(),
   ).toHaveCSS('display', 'flex');
@@ -456,7 +456,7 @@ test('keeps the selected-media preview synchronized and clearable from both work
   await expect(page.getByRole('button', { name: '清除任务清单中的 2 个媒体文件' })).toBeVisible();
 
   await page.getByRole('button', { name: '清除任务清单中的 2 个媒体文件' }).click();
-  await expect(page.getByRole('button', { name: /查看 \d+ 个媒体文件进度/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '查看 0 个媒体文件进度' })).toBeDisabled();
 
   await page.getByRole('button', { name: '选择媒体文件' }).click();
   await page.getByRole('button', { name: '查看 2 个媒体文件进度' }).click();

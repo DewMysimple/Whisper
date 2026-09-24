@@ -175,10 +175,7 @@ export function LaunchCard() {
     <section className="launch-card" aria-labelledby="launch-title">
       <div className="launch-unified">
         <div className="panel-heading launch-heading">
-          <div>
-            <p className="step-label">PRE-FLIGHT CHECKLIST</p>
-            <h2 id="launch-title">{inputs.length > 0 ? '任务清单已就绪' : '等待输入来源'}</h2>
-          </div>
+          <p className="step-label">PRE-FLIGHT</p>
           <div className="launch-heading-actions">
             {inputs.length > 0 && (
               <button
@@ -196,6 +193,7 @@ export function LaunchCard() {
               {checklistStatus}
             </span>
           </div>
+          <h2 id="launch-title">{inputs.length > 0 ? '任务清单已就绪' : '等待输入来源'}</h2>
         </div>
         <div aria-label="执行前清单" className="preflight-list">
           <CardButton
@@ -292,41 +290,45 @@ export function LaunchCard() {
           </CardButton>
         </div>
 
-        {inputs.length > 0 && (
+        <div className="launch-action-dock" role="group" aria-label="媒体进度与转录操作">
           <button
             aria-label={`查看 ${mediaCount} 个媒体文件进度`}
             className="preflight-sources-link"
+            disabled={inputs.length === 0}
             onClick={openInputMonitor}
             type="button"
           >
-            <span>查看媒体文件进度</span>
+            <span className="preflight-sources-copy">
+              <Files aria-hidden="true" size={15} />
+              <span>查看媒体文件进度</span>
+            </span>
             <ChevronRight aria-hidden="true" size={16} />
           </button>
-        )}
 
-        <Button
-          variant="primary"
-          surface="flat"
-          className="launch-submit"
-          aria-describedby={readinessMessage ? 'launch-readiness' : undefined}
-          disabled={!canStart}
-          onClick={requestStart}
-          type="button"
-        >
-          <span className="launch-submit-label">
-            <span className="launch-submit-icon" aria-hidden="true">
-              <Play fill="currentColor" size={15} />
+          <Button
+            variant="primary"
+            surface="flat"
+            className="launch-submit"
+            aria-describedby={readinessMessage ? 'launch-readiness' : undefined}
+            disabled={!canStart}
+            onClick={requestStart}
+            type="button"
+          >
+            <span className="launch-submit-label">
+              <span className="launch-submit-icon" aria-hidden="true">
+                <Play fill="currentColor" size={15} />
+              </span>
+              {startingTask
+                ? '正在准备本地模型…'
+                : profileMode === 'subtitle'
+                  ? `开始生成 ${outputSummary}`
+                  : '开始本地转录'}
             </span>
-            {startingTask
-              ? '正在准备本地模型…'
-              : profileMode === 'subtitle'
-                ? `开始生成 ${outputSummary}`
-                : '开始本地转录'}
-          </span>
-          <kbd aria-hidden="true" className="launch-shortcut">
-            CTRL + ENTER
-          </kbd>
-        </Button>
+            <kbd aria-hidden="true" className="launch-shortcut">
+              CTRL + ENTER
+            </kbd>
+          </Button>
+        </div>
         <p
           className="launch-summary"
           id="launch-readiness"

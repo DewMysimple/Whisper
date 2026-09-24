@@ -104,25 +104,36 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
   }, testInfo) => {
     await page.emulateMedia({ reducedMotion });
     await page.goto('/');
-    await page.getByRole('button', { name: '选择媒体文件', exact: true }).click();
     const launch = page.locator('.launch-submit');
     const summary = page.locator('.launch-summary');
+    const sourceProgress = page.locator('.preflight-sources-link');
+    const actionDock = page.locator('.launch-action-dock');
     const txt = page.getByRole('checkbox', { name: '生成 TXT 格式' });
     const readLayout = () =>
       launch.evaluate((element) => {
         const card = element.closest('.launch-card')!.getBoundingClientRect();
         const button = element.getBoundingClientRect();
+        const dock = element.closest('.launch-action-dock')!.getBoundingClientRect();
         const hint = document.querySelector('.launch-summary')!.getBoundingClientRect();
         const pixels = (value: number) => Math.round(value * 100) / 100;
         return {
           cardHeight: pixels(card.height),
           buttonTop: pixels(button.top - card.top),
           buttonHeight: pixels(button.height),
+          dockTop: pixels(dock.top - card.top),
+          dockHeight: pixels(dock.height),
           hintTop: pixels(hint.top - card.top),
           hintHeight: pixels(hint.height),
         };
       });
+    await expect(sourceProgress).toBeVisible();
+    await expect(sourceProgress).toBeDisabled();
+    await expect(launch).toBeDisabled();
+    const emptyInputLayout = await readLayout();
+    await page.getByRole('button', { name: '选择媒体文件', exact: true }).click();
+    await expect(sourceProgress).toBeEnabled();
     await expect(launch).toBeEnabled();
+    expect(await readLayout()).toEqual(emptyInputLayout);
     await launch.scrollIntoViewIfNeeded();
     const iconFrame = launch.locator('.launch-submit-icon');
     const shortcut = launch.locator('.launch-shortcut');
@@ -139,9 +150,9 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
       await expect(shortcut).toHaveCSS('border-radius', '7px');
       await expect(shortcut).toHaveCSS('border-width', '1px');
       await expect(shortcut).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-      await launch.screenshot({
+      await actionDock.screenshot({
         animations: 'disabled',
-        path: testInfo.outputPath(`launch-frame-${theme}-${reducedMotion}.png`),
+        path: testInfo.outputPath(`launch-actions-${theme}-${reducedMotion}.png`),
       });
       const readyLayout = await readLayout();
       await txt.uncheck();
@@ -188,6 +199,10 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
       await expect(launch).toBeFocused();
       await expect(launch).toHaveCSS('outline-style', 'solid');
     }
+    await page.getByRole('button', { name: /^清除任务清单中的 \d+ 个媒体文件$/ }).click();
+    await expect(sourceProgress).toBeDisabled();
+    await expect(launch).toBeDisabled();
+    expect(await readLayout()).toEqual(emptyInputLayout);
   });
 }
 
