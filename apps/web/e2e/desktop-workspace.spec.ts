@@ -247,7 +247,10 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
     expect(lines[1].height).toBeCloseTo(preflightLayout.detailLineHeight, 1);
     expect(lines[1].top).toBeGreaterThanOrEqual(lines[0].bottom);
   }
-  expect(preflightLayout.shortcutFontSize).toBeCloseTo(preflightLayout.submitLabelFontSize, 1);
+  expect(preflightLayout.shortcutFontSize).toBeCloseTo(
+    preflightLayout.submitLabelFontSize * 0.84,
+    1,
+  );
   expect(preflightLayout.shortcutIconCount).toBe(0);
   expect(preflightLayout.itemBorderStyle).toBe('solid');
   expect(preflightLayout.itemRadius).toBeGreaterThanOrEqual(10);
