@@ -111,13 +111,11 @@ export function LaunchCard() {
     ? '还需选择真实输出目录，完成后即可执行。'
     : hasInvalidInput
       ? '输入中存在无效路径，请先在清单中处理。'
-      : !hasOutputTarget
-        ? '还需启用至少一种输出格式，完成后即可执行。'
-        : inputs.length === 0
-          ? null
-          : hostStatus.state !== 'ready'
-            ? `${HOST_STATUS_LABEL[hostStatus.state]}，暂时无法执行任务。`
-            : null;
+      : inputs.length === 0
+        ? null
+        : hostStatus.state !== 'ready'
+          ? `${HOST_STATUS_LABEL[hostStatus.state]}，暂时无法执行任务。`
+          : null;
 
   const requestStart = useCallback(() => {
     if (!canStart) return;
@@ -299,10 +297,14 @@ export function LaunchCard() {
             type="button"
           >
             <span className="preflight-sources-copy">
-              <Files aria-hidden="true" size={15} />
-              <span>查看媒体文件进度</span>
+              <span className="preflight-sources-icon" aria-hidden="true">
+                <Files size={15} />
+              </span>
+              <span className="preflight-sources-label">
+                <span>查看媒体进度</span>
+                <ChevronRight aria-hidden="true" size={15} />
+              </span>
             </span>
-            <ChevronRight aria-hidden="true" size={16} />
           </button>
 
           <Button
@@ -328,15 +330,15 @@ export function LaunchCard() {
               CTRL + ENTER
             </kbd>
           </Button>
+          <p
+            className="launch-summary"
+            id="launch-readiness"
+            role="status"
+            aria-hidden={readinessMessage === null}
+          >
+            {readinessMessage}
+          </p>
         </div>
-        <p
-          className="launch-summary"
-          id="launch-readiness"
-          role="status"
-          aria-hidden={readinessMessage === null}
-        >
-          {readinessMessage}
-        </p>
       </div>
       <ConfirmDialog
         confirmLabel="继续转录"

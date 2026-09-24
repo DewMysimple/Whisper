@@ -4820,6 +4820,7 @@ output,
   display: flex;
   min-height: 100%;
   flex-direction: column;
+  container-type: inline-size;
   padding: calc(22px + var(--content-space-bump));
   overflow-x: hidden;
   overflow-y: auto;
@@ -4859,11 +4860,16 @@ output,
 }
 
 .launch-summary {
-  min-height: 3em;
-  margin: 10px 0 0;
+  grid-column: 1 / -1;
+  margin: 0;
   color: var(--text-muted);
   font-size: var(--font-caption);
-  line-height: 1.5;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.launch-summary[aria-hidden='true'] {
+  display: none;
 }
 
 .preflight-status {
@@ -4994,29 +5000,35 @@ output,
 .launch-action-dock {
   display: grid;
   min-width: 0;
-  gap: 5px;
-  margin-top: 22px;
-  padding: 5px;
+  min-height: 142px;
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.38fr);
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px;
   border: 1px solid var(--border);
-  border-radius: 15px;
-  background: color-mix(in srgb, var(--surface) 72%, var(--surface-raised));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 78%, var(--surface-raised));
 }
 
 .preflight-sources-link {
-  display: flex;
+  display: grid;
   width: 100%;
+  height: 100%;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  min-height: 0;
+  grid-template-rows: min-content min-content;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
   margin: 0;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  background: transparent;
+  padding: 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface);
   color: inherit;
   font: inherit;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition:
     border-color 160ms ease,
@@ -5025,46 +5037,68 @@ output,
 }
 
 .preflight-sources-copy {
-  display: inline-flex;
-  flex: 1 1 auto;
+  display: grid;
   min-width: 0;
-  align-items: center;
+  justify-items: center;
   gap: 8px;
 }
 
-.preflight-sources-copy > span {
+.preflight-sources-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.preflight-sources-label {
+  display: inline-flex;
   min-width: 0;
-  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   color: var(--text);
   font-size: var(--font-caption);
   font-weight: 680;
+  line-height: 1.35;
+}
+
+.preflight-sources-label > span {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.preflight-sources-link > svg {
+.preflight-sources-label > svg {
   flex: 0 0 auto;
-  color: var(--accent);
+  color: var(--text-muted);
 }
 
 .preflight-sources-link:not(:disabled):hover,
 .preflight-sources-link:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  background: color-mix(in srgb, var(--accent) 5%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
 }
 
 .preflight-sources-link:disabled {
-  color: var(--text-faint);
   cursor: not-allowed;
 }
 
-.preflight-sources-link:disabled .preflight-sources-copy > span {
-  color: var(--text-faint);
+.preflight-sources-link:disabled .preflight-sources-label {
+  color: var(--text-muted);
 }
 
-.preflight-sources-link:disabled > svg,
-.preflight-sources-link:disabled .preflight-sources-copy > svg {
-  color: var(--text-faint);
+.preflight-sources-link:disabled .preflight-sources-icon {
+  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+  color: var(--text-muted);
+}
+
+.preflight-sources-link:disabled .preflight-sources-label > svg {
+  color: var(--text-muted);
 }
 
 .preflight-sources-link:focus-visible {
@@ -5073,31 +5107,57 @@ output,
 }
 
 .launch-submit {
-  display: inline-flex;
+  display: grid;
   width: 100%;
-  min-height: 46px;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: center;
+  justify-items: center;
   margin-top: 0;
-  gap: 12px;
-  padding: 0 16px;
-  justify-content: space-between;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: 13px;
 }
 
 .launch-submit-label {
-  display: inline-flex;
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  white-space: nowrap;
+  gap: 7px;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+}
+
+@container (max-width: 300px) {
+  .launch-action-dock {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .launch-action-dock .preflight-sources-link {
+    gap: 6px;
+    padding-inline: 4px;
+  }
+
+  .launch-action-dock .launch-shortcut {
+    display: none;
+  }
 }
 
 .launch-submit-icon {
   display: inline-grid;
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
-  border-radius: 8px;
+  border-radius: 11px;
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 

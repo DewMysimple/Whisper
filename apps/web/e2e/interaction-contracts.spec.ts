@@ -99,7 +99,7 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     await expect(page.getByLabel('执行前清单')).toBeVisible();
   });
 
-  test(`launch stays flat with a refined frame and stable readiness feedback (${reducedMotion})`, async ({
+  test(`launch action tiles align with the model card without duplicate format feedback (${reducedMotion})`, async ({
     page,
   }, testInfo) => {
     await page.emulateMedia({ reducedMotion });
@@ -114,7 +114,6 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
         const card = element.closest('.launch-card')!.getBoundingClientRect();
         const button = element.getBoundingClientRect();
         const dock = element.closest('.launch-action-dock')!.getBoundingClientRect();
-        const hint = document.querySelector('.launch-summary')!.getBoundingClientRect();
         const pixels = (value: number) => Math.round(value * 100) / 100;
         return {
           cardHeight: pixels(card.height),
@@ -122,13 +121,36 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
           buttonHeight: pixels(button.height),
           dockTop: pixels(dock.top - card.top),
           dockHeight: pixels(dock.height),
-          hintTop: pixels(hint.top - card.top),
-          hintHeight: pixels(hint.height),
+        };
+      });
+    const readActionAlignment = () =>
+      actionDock.evaluate((dock) => {
+        const modelEntry = document.querySelector('.preset-panel .workspace-entry-card');
+        if (modelEntry === null) throw new Error('Model and parameters entry card was not found');
+        const actionRect = dock.getBoundingClientRect();
+        const modelRect = modelEntry.getBoundingClientRect();
+        const progressRect = dock.querySelector('.preflight-sources-link')!.getBoundingClientRect();
+        const submitRect = dock.querySelector('.launch-submit')!.getBoundingClientRect();
+        const border = getComputedStyle(dock);
+        return {
+          topDelta: Math.abs(actionRect.top - modelRect.top),
+          heightDelta: Math.abs(actionRect.height - modelRect.height),
+          actionsSideBySide:
+            Math.abs(progressRect.top - submitRect.top) < 1 && progressRect.left < submitRect.left,
+          actionsShareHeight: Math.abs(progressRect.height - submitRect.height) < 1,
+          hasOuterFrame: border.borderTopStyle === 'solid' && parseFloat(border.borderTopWidth) > 0,
         };
       });
     await expect(sourceProgress).toBeVisible();
     await expect(sourceProgress).toBeDisabled();
     await expect(launch).toBeDisabled();
+    expect(await readActionAlignment()).toEqual({
+      topDelta: 0,
+      heightDelta: 0,
+      actionsSideBySide: true,
+      actionsShareHeight: true,
+      hasOuterFrame: true,
+    });
     const emptyInputLayout = await readLayout();
     await page.getByRole('button', { name: '选择媒体文件', exact: true }).click();
     await expect(sourceProgress).toBeEnabled();
@@ -144,9 +166,9 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
       if (await toggle.count()) await toggle.click();
       await launch.scrollIntoViewIfNeeded();
       await expect(launch).toHaveCSS('border-radius', '12px');
-      await expect(iconFrame).toHaveCSS('width', '26px');
-      await expect(iconFrame).toHaveCSS('height', '26px');
-      await expect(iconFrame).toHaveCSS('border-radius', '8px');
+      await expect(iconFrame).toHaveCSS('width', '34px');
+      await expect(iconFrame).toHaveCSS('height', '34px');
+      await expect(iconFrame).toHaveCSS('border-radius', '11px');
       await expect(shortcut).toHaveCSS('border-radius', '7px');
       await expect(shortcut).toHaveCSS('border-width', '1px');
       await expect(shortcut).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
@@ -160,10 +182,12 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
       await expect(launch).toHaveCSS('opacity', '1');
       await expect(launch).toHaveCSS('background-image', 'none');
       await expect(launch).toHaveCSS('box-shadow', 'none');
-      await expect(summary).toHaveText('还需启用至少一种输出格式，完成后即可执行。');
-      await expect(summary).toHaveAttribute('aria-hidden', 'false');
+      await expect(summary).toBeEmpty();
+      await expect(summary).toHaveAttribute('aria-hidden', 'true');
+      await expect(summary).not.toBeVisible();
+      await expect(launch).not.toHaveAttribute('aria-describedby', 'launch-readiness');
+      await expect(page.getByText('至少选择一种需要生成的文件格式。')).toBeVisible();
       expect(await readLayout()).toEqual(readyLayout);
-      expect(readyLayout.hintTop).toBeGreaterThan(readyLayout.buttonTop + readyLayout.buttonHeight);
       await txt.check();
       await expect(launch).toBeEnabled();
       await expect(summary).toBeEmpty();

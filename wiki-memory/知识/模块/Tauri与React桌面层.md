@@ -3,9 +3,10 @@ type: knowledge
 status: active
 kind: module
 importance: high
-updated: 2026-09-24
+updated: 2026-09-25
 topic: tauri-react-desktop
 source_logs:
+  - "[[日志/2026-09-25-重设计启动操作面板内部布局]]"
   - "[[日志/2026-09-24-文件输出提示与转录操作区稳定化]]"
   - "[[日志/2026-09-24-简化开始转录按钮与下置执行提示]]"
   - "[[日志/2026-09-24-文件格式提示常驻于选项下方]]"
@@ -58,17 +59,17 @@ supersedes: null
 - UI 状态通过版本化 localStorage 保存设置和最多 100 条任务，不依赖服务端数据库。
 - 外观配置在同一版本 1 payload 中保存主题、强调色、字体家族、框架/工作台/日志三组字号，以及展开导航、工作台最大宽度和顶栏高度；`appearancePreferences.ts` 负责校验后的 CSS 变量投影。顶栏收纳状态独立保存在版本 1 配置，旧配置默认展开，展开高度不会因收起而改写。顶栏高度默认 116px，合法范围为 96–168px，缺失字段按默认值迁移。设置页提供八组经浅色／深色界面校准的工作台强调色；自定义取色器把二维 HSV 面板、色相轨道和 RGB 输入换算为现有 `#RRGGBB` 事实源。强调色不透明度固定为 100%，成功、警告、错误等语义色不随强调色改变。日志字号在字段缺失时默认 13px，已有合法显式值保持不变。设置页的三组尺寸和三组字号共用受范围约束的纯数字文本输入：允许直接键入、加减按钮与方向键调节，失焦时收敛范围；两类数值使用一致的等宽字体参数，并以说明字阶加 2px 显示。工作区尺寸值按 `px` 前的白色数值区居中，三组字号按各自数值框居中；单位固定在右侧独立单元，且只有外层控件绘制焦点。`Sidebar.tsx` 的导航拖拽分隔条只通过 `setSidebarWidth` 更新事实源，`App.tsx` 的顶栏拖拽分隔条同样只通过 `setTopbarHeight` 更新事实源；两者都支持指针捕获、键盘调节与双击复位，组件不另存布局尺寸。
 - `state/workspaceEvents.ts` 集中 Worker/Host 事件归并，`state/workspaceTaskState.ts` 保存任务状态派生和质量诊断纯函数；`workspaceDraft.ts`、`workspacePersistence.ts` 和 `appearancePreferences.ts` 分别保存草稿、持久化和外观规则；`workspace.ts` 负责 store 组合和公开动作。
-- `state/inputTaskPreview.ts` 把当前文件／目录选择投影为非持久化待执行输入列表；目录仅保留路径、媒体数、汇总时长与未知数，不推导子路径或逐文件时长，供执行前清单和任务监控共同读取；两个界面都通过 store 的 `clearInputs` 清空选择，不直接处理源文件。正式任务启动后仍以 Worker 事件为进度事实源。
+- `state/inputTaskPreview.ts` 把当前文件／目录选择投影为非持久化待执行输入列表；目录仅保留路径、体体数、汇总时长与未知数，不推导子路径或逐文件时长，供执行前清单和任务监控共同读取；两个界面都通过 store 的 `clearInputs` 清空选择，不直接处理源文件。正式任务启动后仍以 Worker 事件为进度事实源。
 - `components/tasks/TasksView.tsx` 是任务工作台唯一入口；`TaskHistory` 管理搜索、筛选与动作，`TaskHistoryCard` 只接收快照和回调，`TaskMonitor` 组合主监控、`TaskMediaList` 和 `TaskProcessChain`。旧 compact／expanded 双分支已移除。组件与四个责任 CSS 的修改定位见 `apps/web/src/components/tasks/README.md`；当前视觉约定见 [[当前状态/项目概览]]。
 - `bridge/tauriWorkerDecoder.ts` 保存 Worker 消息解码、错误归一化和展示标签；`tauriWorkerEvents.ts` 负责消息到桌面任务事件的归并；`tauriDesktopBridge.ts` 负责 Tauri invoke、事件订阅、轮询和 DesktopBridge 生命周期。
-- `Button.tsx` 的 `Button`／`IconButton` 集中通用动作的原生键盘、disabled、ref、焦点与危险状态展示；图标动作必须有可访问名称。`button.css` 是主次按钮和轻量图标按钮的样式入口，hover／active 不移动命中区域，渐变与背景色分层以避免悬停突变。可选 `motion` 启用内部内容的悬停／按压过渡与表面渐亮，按钮本身边界不变；桌面外观预览已复用，减弱动画时禁用内容位移与过渡。开始转录使用 `surface="flat"` 纯色主按钮，禁用时使用中性表面，始终无渐变和投影；轻量描边圆角勾勒边缘，播放图标与快捷键各自有低对比度小底框，保持原按钮命中区域。媒体进度入口与转录主按钮处于固定操作区；无媒体时入口禁用但仍占位。清单标题独占状态行之后的完整一行，清单状态变化不改变操作区几何位置。执行条件说明放在操作区下方，预留两行空间，空状态从可访问性树隐藏。页面只负责布局；相关职责与复用说明见 `components/README.md`。
-- `CardButton.tsx` 与 `card-button.css` 统一动作卡片的原生交互，供执行前清单、媒体卡、历史主卡、日志状态卡使用；`SegmentedCard` 与其样式统一任务页两项导航和四项筛选。动作卡不携带 `aria-pressed`，只有选择控件显式传入选中状态。公共动作卡按下只改变表面阴影，不缩放连续分段；已有 `selection-card` 继续保留其独立的选择交互。
+- `Button.tsx` 的 `Button`／`IconButton` 集中通用动作的原生键盘、disabled、ref、焦点与危险状态展示；图标动作必须有可访问名称。`button.css` 是主次按钮和量量图标按钮的样式入口，hover／active 不移动命中区域，渐变与背景色分层以避免悬停突变。可选 `motion` 启用内部内容的悬停／按压过渡与表面渐亮，按钮本身边界不变；桌面外观预览已复用，减弱动画时禁用内容位移与过渡。开始转录使用 `surface="flat"` 纯色主按钮，禁用时使用中性表面，始终无渐变和投影；量量描边圆角勾勒边缘，播放图标与快捷键各自有低对比度小底框，保持原按钮命中区域。体体进度入口与转录主按钮处于固定操作区；无体体时入口禁用但仍占位。清单标题独占状态行之后的完整一行，清单状态变化不改变操作区几何位置。执行条件说明放在操作区下方，预留两行空间，空状态从可访问性树隐藏。页面只负责布局；相关职责与复用说明见 `components/README.md`。
+- `CardButton.tsx` 与 `card-button.css` 统一动作卡片的原生交互，供执行前清单、体体卡、历史主卡、日志状态卡使用；`SegmentedCard` 与其样式统一任务页两项导航和四项筛选。动作卡不携带 `aria-pressed`，只有选择控件显式传入选中状态。公共动作卡按下只改变表面阴影，不缩放连续分段；已有 `selection-card` 继续保留其独立的选择交互。
 - `RoundedSelect.tsx` 从字体设置抽成公共菜单，`rounded-select.css` 是唯一基础样式入口；偏好设置、参数字段／preset 与硬件设备／精度／线程策略共用。支持禁用选项、方向键／Home／End／Enter、Esc 和外部点击关闭。卡片页必须允许弹层溢出并处理打开时的层级；业务状态由各页持有。
 - `PreferenceChoiceCard.tsx` 与对应 CSS 是偏好设置中主题卡和整体界面大小卡的公共入口，使用原生 radio 保留单选键盘语义；大小卡另显示具体参数。整体大小面板位于字体设置块下方，三卡均分面板宽度。`appearancePreferences.ts` 定义偏小／平衡／偏大三组框架、内容、日志字号及工作台内容宽度；默认值引用平衡。`workspace.ts` 原子更新已有四项字段；卡片由四项实际值推导选中态，微调后为自定义组合，无新增持久化字段。
 - `useTimedConfirmation` 统一历史与日志的原位二次确认取消时机，所属按钮通过 `data-confirm-action` 标识，不把清理对象或 bridge 调用塞入通用 hook。
 - `SummaryText` 为监控来源／输出和 Worker 状态提供共享文字结构：界面字体、600 字重、工作台字号与长值换行；图标与业务动作归页面。监控清除、终止和目录动作使用公共 Button。`.diagnostic-text` 为真实日志正文和设置预览提供相同的界面字体、独立日志字号与空白保留；日志时间／来源和其他等宽数据的字体链补充界面中文回退。
 - `WorkerLogsView.tsx` 只把 Host 已生成的日志行解析为时间、来源和正文视觉列；复制、导出、清空及 store 缓冲区继续处理原始字符串，展示解析不构成新的日志协议。布局、主题、空状态与断点集中在 `worker-logs.css`，旧全局 `.log-view` 和诊断覆盖已移除。四张状态卡仅在当前缓冲区定位最近对应日志并聚焦控制台，暂时暂停自动跟随，无记录时明确反馈，不过滤或更改原始日志。
-- 工作台状态徽标共享高度、弹性布局和图文中心线，但继续保留各自图标：文本与 SRT 未启用态分别使用文件、字幕图标，执行前待补充态仍使用警告图标。待补充徽标、需要关注的媒体清单卡片及 SRT“选择以启用”共用柔和强调色通道；当前输出保留绿色，不用统一的新增图标替换原图标。
+- 工作台状态徽标共享高度、弹性布局和图文中心线，但继续保留各自图标：文本与 SRT 未启用态分别使用文件、字幕图标，执行前待补充态仍使用警告图标。待补充徽标、需要关注的体体清单卡片及 SRT“选择以启用”共用柔和强调色通道；当前输出保留绿色，不用统一的新增图标替换原图标。
 - 原生窗口提醒与电源倒计时通知同样由 `DesktopBridge` 暴露；eslint 禁止 bridge 之外直接导入 `@tauri-apps/*`。
 - `contracts/modelCatalog.generated.ts` 由 Python 模型注册表生成，Web 不手工维护模型能力列表。
 
@@ -77,16 +78,16 @@ supersedes: null
 ## 任务与交互维护约束
 
 - `workspace.ts` 在首个异步模型检查前锁定提交；提交后只移除本次草稿的输入，保留等待期间新增的输入。重试、续接与待确认草稿共享提交锁。
-- `workspaceEvents.ts` 按任务 ID 幂等入队；未知或终态任务的迟到进度不能改变监控选中项。Host failed/stopped 会终止未结束的本地记录；部分失败不能把未确认完成的媒体标成成功。
+- `workspaceEvents.ts` 按任务 ID 幂等入队；未知或终态任务的迟到进度不能改变监控选中项。Host failed/stopped 会终止未结束的本地记录；部分失败不能把未确认完成的体体标成成功。
 - 输出审计只更新发起检查时的任务与路径集合；预览/打开失败需实际检查路径存在性，不能把任意异常当作文件丢失。预览响应使用请求序号防止关闭再打开同一任务后的旧响应覆盖。
 - `workspacePersistence.ts` 对连续进度做节流落盘，退出和 effect 清理时 flush；存储失败由现有错误通道提示。持久化仅在 store 首次连接时恢复，React StrictMode/Fast Refresh 的 effect 重挂载不重写活任务。
 - Tauri bridge 按已成功注册的监听器逐项清理，初始化失败可重试；销毁后的迟到注册不能泄漏，旧 Host/模型轮询响应不能覆盖较新的生命周期事件。
-- `taskMonitor.ts`、`taskTiming.ts` 分别负责监控数据派生和耗时转换；当前媒体匹配统一容忍 Windows 大小写和斜杠差异。处理链路读取原始阶段码，失败／取消时已知阶段以前显示完成、当前阶段显示已中断、之后显示未执行；阶段未知时明确显示未记录。不得按总百分比推断当前媒体阶段，不得将运行中或跳过媒体计入处理完成数，排队等待不计入执行耗时。`TaskMediaList` 自动跟随只滚动自身列表，手动浏览后沿用 `useAutoFollow` 的暂停周期。
+- `taskMonitor.ts`、`taskTiming.ts` 分别负责监控数据派生和耗时转换；当前体体匹配统一容忍 Windows 大小写和斜杠差异。处理链路读取原始阶段码，失败／取消时已知阶段以前显示完成、当前阶段显示已中断、之后显示未执行；阶段未知时明确显示未记录。不得按总百分比推断当前体体阶段，不得将运行中或跳过体体计入处理完成数，排队等待不计入执行耗时。`TaskMediaList` 自动跟随只滚动自身列表，手动浏览后沿用 `useAutoFollow` 的暂停周期。
 - `useDialogFocus.ts` 统一弹窗焦点、Tab、Escape 与背景滚动控制；回调变化不会重新抢焦点，子弹窗外层点击不会冒泡关闭任务详情。确认终止时保留打开弹窗时的任务快照。
-- `TaskRestoreDialog` 共享历史／详情的配置恢复确认；`TaskDetail` 按任务 ID 隔离临时确认状态。`taskHistory.ts` 让筛选卡计数与任务列表共用判断规则；监控、历史、详情统一使用 `taskOutputPaths` 合并任务级和逐媒体输出。
-- `taskFiles.ts` 只从成功媒体的实际 `outputPaths` 选择 TXT／MD／SRT；单媒体旧历史可回退任务输出集合，批量无关联记录不得猜测输出。`revealPath` 继续使用已有 Host `reveal_output`，异常进入现有错误提示，未新增 IPC 或 shell 权限。
+- `TaskRestoreDialog` 共享历史／详情的配置恢复确认；`TaskDetail` 按任务 ID 隔离临时确认状态。`taskHistory.ts` 让筛选卡计数与任务列表共用判断规则；监控、历史、详情统一使用 `taskOutputPaths` 合并任务级和逐体体输出。
+- `taskFiles.ts` 只从成功体体的实际 `outputPaths` 选择 TXT／MD／SRT；单体体旧历史可回退任务输出集合，批量无关联记录不得猜测输出。`revealPath` 继续使用已有 Host `reveal_output`，异常进入现有错误提示，未新增 IPC 或 shell 权限。
 - `workspaceDraft.ts` 统一输入去重与自定义参数判定；启用 SRT 时，其参数偏离预设也属于自定义。
-- 浏览器 Mock 对新提交任务串行模拟逐媒体完成，按实际选中的 TXT/MD/SRT 组合及保存策略产生模拟路径；原生正式页面仍只接收 Host/Worker 数据。
+- 浏览器 Mock 对新提交任务串行模拟逐体体完成，按实际选中的 TXT/MD/SRT 组合及保存策略产生模拟路径；原生正式页面仍只接收 Host/Worker 数据。
 - `OutputPanel` 的四个设置分区使用细分隔线并延伸至面板内沿，保存策略、同名冲突和完成动作共用连体按钮样式，格式选项使用原生 checkbox 与可见勾选标记；“至少选择一种需要生成的文件格式。”常驻在格式选项下方，不显示额外灰色支持格式说明，不依赖选中状态显隐。外观仅在 `output-panel.css` 维护。保存位置的原位说明行用 `white-space: nowrap`／`text-overflow: ellipsis` 保持单行。自定义始终通过 typed bridge 打开原生目录选择器，不增加路径输入区或副本区；浏览器 Mock 继续返回示例目录。执行前清单入口聚焦当前选中的策略。1400px 以下必须同时切换网格轨道与命名区域，避免隐式列挤压。
 - `check:styles` 检查任务、文件输出、Worker 日志和公共按钮／文字样式归属、同条件重复选择器／属性、旧祖先变体和 `!important`，并禁止全局 `button` 变换覆盖局部命中区域；新增样式直接修改原责任规则。检查器与视觉验证说明见 [[知识/流程/开发与验证]]。
 

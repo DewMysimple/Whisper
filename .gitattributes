@@ -13,6 +13,15 @@
 *.txt text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.rs text eol=lf
 
 # Windows Script Host files use native Windows line endings.
 *.vbs text eol=crlf
