@@ -9,6 +9,7 @@ const postcss = require('postcss');
 const sourceRoot = fileURLToPath(new URL('../../apps/web/src/', import.meta.url));
 const taskDirectory = 'components/tasks/';
 const sharedOwners = new Map([
+  ['output-sheet', 'components/output-panel.css'],
   ['card-button', 'components/card-button.css'],
   ['segmented-card', 'components/segmented-card.css'],
   ['primary-button', 'components/button.css'],

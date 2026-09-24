@@ -1,0 +1,273 @@
+.output-sheet {
+  display: flex;
+  flex-direction: column;
+}
+
+.output-sheet .panel-heading {
+  margin-bottom: 22px;
+}
+
+.output-location-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.output-location-chip > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.output-sheet-body {
+  display: grid;
+  min-width: 0;
+}
+
+.output-sheet-section {
+  min-width: 0;
+  padding: 22px 0;
+  border-top: 1px solid var(--border);
+}
+
+.output-sheet-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.output-sheet-section:last-child {
+  padding-bottom: 0;
+}
+
+.output-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.output-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-body);
+  font-weight: 650;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.output-section-title > svg {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
+.output-section-note {
+  color: var(--text-faint);
+  font-size: var(--font-caption);
+}
+
+.output-segments {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 11px;
+  background: var(--surface-soft);
+}
+
+.output-segments > button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--font-caption);
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.output-segments > button[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--text) 6%, transparent);
+  background: var(--surface-raised);
+  color: var(--accent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.output-segments > button:not(:disabled):hover {
+  color: var(--accent);
+  background-color: var(--surface-raised);
+}
+
+.output-segments > button:not(:disabled):active {
+  box-shadow: inset 0 1px 3px color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.output-segments > button:focus-visible,
+.output-format-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.output-segments > button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.output-location-options {
+  margin-top: 14px;
+}
+
+.output-location-description {
+  min-width: 0;
+  margin: 10px 0 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.output-format-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.output-format-option {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 16px;
+  min-width: 0;
+  min-height: 60px;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+
+.output-format-option.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 38%, var(--surface-raised));
+}
+
+.output-format-option:hover {
+  border-color: var(--accent);
+}
+
+.output-format-code {
+  display: grid;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  font-weight: 750;
+}
+
+.output-format-option.is-selected .output-format-code {
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--border));
+  color: var(--accent);
+}
+
+.output-format-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.output-format-mark {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: transparent;
+}
+
+.output-format-option.is-selected .output-format-mark {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.output-format-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.output-format-required {
+  margin: 8px 0 0;
+  color: var(--accent);
+  font-size: var(--font-caption);
+  line-height: 1.5;
+}
+
+.output-format-required + .output-format-list {
+  margin-top: 10px;
+}
+
+.output-rule-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 20px;
+  row-gap: 10px;
+}
+
+.output-rule-description {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--font-caption);
+  line-height: 1.5;
+}
+
+.output-rule-row .finish-action-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .output-segments > button,
+  .output-format-option {
+    transition: none;
+  }
+}

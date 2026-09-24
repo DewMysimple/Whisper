@@ -385,11 +385,16 @@ test('keeps selection feedback separate from non-selecting action cards', async 
   await expect(preflightProfile).toHaveClass(/card-button/);
   await expect(preflightProfile).not.toHaveClass(/is-selected/);
   await expect(preflightProfile).not.toHaveAttribute('aria-pressed');
-  await expect(markdownFormat).toHaveClass(/selection-card/);
-  await expect(finishAction).toHaveClass(/selection-card/);
+  await expect(markdownFormat.getByRole('checkbox')).not.toBeChecked();
+  await expect(finishAction).toHaveAttribute('aria-pressed', 'true');
   await pressAndReadTransform(transcriptMode);
-  await pressAndReadTransform(markdownFormat);
-  await pressAndReadTransform(finishAction);
+  for (const control of [markdownFormat, finishAction]) {
+    await control.scrollIntoViewIfNeeded();
+    await control.hover();
+    await page.mouse.down();
+    await expect(control).toHaveCSS('transform', 'none');
+    await page.mouse.up();
+  }
 
   const selectedIcon = selectedFormat.locator('.output-format-code');
   const selectedColors = await selectedIcon.evaluate((element) => {
@@ -492,17 +497,17 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   ).resolves.toBe('13px');
   await expect(
     page
-      .locator('.output-setting-card-heading small')
+      .locator('.output-section-note')
       .first()
       .evaluate((element) => getComputedStyle(element).fontSize),
   ).resolves.toBe('12px');
-  await expect(page.locator('.output-settings-grid > .output-setting-card')).toHaveCount(4);
+  await expect(page.locator('.output-sheet-body > .output-sheet-section')).toHaveCount(4);
   await expect(
     page
-      .locator('.output-settings-grid')
+      .locator('.output-sheet-body')
       .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length),
   ).resolves.toBe(1);
-  const outputCardOverflow = await page.locator('.output-setting-card').evaluateAll((cards) =>
+  const outputCardOverflow = await page.locator('.output-sheet-section').evaluateAll((cards) =>
     cards.map((card) => ({
       horizontal: card.scrollWidth - card.clientWidth,
       vertical: card.scrollHeight - card.clientHeight,
