@@ -39,6 +39,24 @@
   --button-hover: color-mix(in srgb, var(--danger) 88%, #000);
   color: #fff;
 }
+.primary-button.button-flat {
+  background-image: none;
+  box-shadow: none;
+}
+.primary-button.button-flat:not(:disabled):active {
+  background-color: color-mix(in srgb, var(--button-hover) 90%, var(--text));
+  box-shadow: none;
+}
+.primary-button.button-flat:disabled {
+  border-color: var(--border);
+  background-color: var(--surface-soft);
+  color: var(--text-faint);
+  opacity: 1;
+}
+.primary-button.button-flat:focus-visible {
+  outline-color: var(--on-accent);
+  outline-offset: -4px;
+}
 .secondary-button {
   border-color: color-mix(in srgb, var(--text) 11%, transparent);
   background-color: color-mix(in srgb, var(--surface-raised) 86%, transparent);

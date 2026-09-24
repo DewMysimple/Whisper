@@ -292,8 +292,6 @@ export function LaunchCard() {
           </CardButton>
         </div>
 
-        {readinessMessage && <p className="launch-summary">{readinessMessage}</p>}
-
         {inputs.length > 0 && (
           <button
             aria-label={`查看 ${mediaCount} 个媒体文件进度`}
@@ -308,7 +306,9 @@ export function LaunchCard() {
 
         <Button
           variant="primary"
+          surface="flat"
           className="launch-submit"
+          aria-describedby={readinessMessage ? 'launch-readiness' : undefined}
           disabled={!canStart}
           onClick={requestStart}
           type="button"
@@ -320,12 +320,19 @@ export function LaunchCard() {
               : profileMode === 'subtitle'
                 ? `开始生成 ${outputSummary}`
                 : '开始本地转录'}
-            <ChevronRight size={17} />
           </span>
           <kbd aria-hidden="true" className="launch-shortcut">
             CTRL + ENTER
           </kbd>
         </Button>
+        <p
+          className="launch-summary"
+          id="launch-readiness"
+          role="status"
+          aria-hidden={readinessMessage === null}
+        >
+          {readinessMessage}
+        </p>
       </div>
       <ConfirmDialog
         confirmLabel="继续转录"

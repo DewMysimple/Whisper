@@ -99,13 +99,29 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     await expect(page.getByLabel('执行前清单')).toBeVisible();
   });
 
-  test(`launch hover retains its edge hit area and gradient (${reducedMotion})`, async ({
+  test(`launch stays flat and keeps readiness feedback below a stable button (${reducedMotion})`, async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion });
     await page.goto('/');
     await page.getByRole('button', { name: '选择媒体文件', exact: true }).click();
     const launch = page.locator('.launch-submit');
+    const summary = page.locator('.launch-summary');
+    const txt = page.getByRole('checkbox', { name: '生成 TXT 格式' });
+    const readLayout = () =>
+      launch.evaluate((element) => {
+        const card = element.closest('.launch-card')!.getBoundingClientRect();
+        const button = element.getBoundingClientRect();
+        const hint = document.querySelector('.launch-summary')!.getBoundingClientRect();
+        const pixels = (value: number) => Math.round(value * 100) / 100;
+        return {
+          cardHeight: pixels(card.height),
+          buttonTop: pixels(button.top - card.top),
+          buttonHeight: pixels(button.height),
+          hintTop: pixels(hint.top - card.top),
+          hintHeight: pixels(hint.height),
+        };
+      });
     await expect(launch).toBeEnabled();
     await launch.scrollIntoViewIfNeeded();
     for (const theme of ['light', 'dark']) {
@@ -114,10 +130,26 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
       });
       if (await toggle.count()) await toggle.click();
       await launch.scrollIntoViewIfNeeded();
+      const readyLayout = await readLayout();
+      await txt.uncheck();
+      await expect(launch).toBeDisabled();
+      await expect(launch).toHaveCSS('opacity', '1');
+      await expect(launch).toHaveCSS('background-image', 'none');
+      await expect(launch).toHaveCSS('box-shadow', 'none');
+      await expect(summary).toHaveText('还需启用至少一种输出格式，完成后即可执行。');
+      await expect(summary).toHaveAttribute('aria-hidden', 'false');
+      expect(await readLayout()).toEqual(readyLayout);
+      expect(readyLayout.hintTop).toBeGreaterThan(readyLayout.buttonTop + readyLayout.buttonHeight);
+      await txt.check();
+      await expect(launch).toBeEnabled();
+      await expect(summary).toBeEmpty();
+      await expect(summary).toHaveAttribute('aria-hidden', 'true');
+      expect(await readLayout()).toEqual(readyLayout);
+      await launch.scrollIntoViewIfNeeded();
       await page.mouse.move(0, 0);
       const before = await launch.boundingBox();
-      const gradient = await launch.evaluate((e) => getComputedStyle(e).backgroundImage);
-      expect(gradient).toContain('linear-gradient');
+      await expect(launch).toHaveCSS('background-image', 'none');
+      await expect(launch).toHaveCSS('box-shadow', 'none');
       // Exercise the bottom edge that used to move out from under the pointer.
       await page.mouse.move(before!.x + before!.width / 2, before!.y + before!.height - 0.25);
       const samples = await launch.evaluate(async (e) => {
@@ -126,16 +158,22 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
           await new Promise(requestAnimationFrame);
           values.push({
             y: e.getBoundingClientRect().y,
-            gradient: getComputedStyle(e).backgroundImage,
+            backgroundImage: getComputedStyle(e).backgroundImage,
+            shadow: getComputedStyle(e).boxShadow,
           });
         }
         return values;
       });
       for (const sample of samples) {
         expect(sample.y).toBeCloseTo(before!.y, 1);
-        expect(sample.gradient).toBe(gradient);
+        expect(sample.backgroundImage).toBe('none');
+        expect(sample.shadow).toBe('none');
       }
       await holdWithoutMoving(page, launch);
+      await page.locator('.preflight-sources-link').focus();
+      await page.keyboard.press('Tab');
+      await expect(launch).toBeFocused();
+      await expect(launch).toHaveCSS('outline-style', 'solid');
     }
   });
 }

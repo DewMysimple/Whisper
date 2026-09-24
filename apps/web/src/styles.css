@@ -4495,16 +4495,6 @@ textarea:focus {
   font-weight: 620;
 }
 
-.launch-summary {
-  display: grid;
-  align-content: start;
-  gap: 3px;
-}
-
-.launch-summary > span {
-  display: block;
-}
-
 .task-progress-monitor {
   background:
     radial-gradient(
@@ -4815,7 +4805,6 @@ output,
 .launch-card .step-label,
 .launch-card h2,
 .launch-card h3,
-.launch-card .launch-summary,
 .launch-card .preflight-copy strong,
 .launch-card .preflight-copy small {
   color: inherit;
@@ -4856,17 +4845,19 @@ output,
 }
 
 .launch-summary {
-  min-height: 0;
-  margin: 10px 2px 0;
-  color: var(--text-muted) !important;
-  font-size: var(--font-meta);
-  line-height: var(--line-body);
+  min-height: 3em;
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  line-height: 1.5;
 }
 
 .preflight-status {
   display: inline-flex;
   flex: 0 0 auto;
+  min-width: calc(4em + 37px);
   align-items: center;
+  justify-content: center;
   gap: 5px;
   padding: 5px 8px;
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
@@ -5046,6 +5037,7 @@ output,
   margin-top: 22px;
   gap: 12px;
   padding: 0 16px;
+  justify-content: space-between;
 }
 
 .launch-submit-label {
