@@ -18,6 +18,7 @@ supersedes: null
 | 2026-09-24 | ui | - | archived | flat-launch-button-readiness-layout | [[日志/2026-09-24-简化开始转录按钮与下置执行提示.md|简化开始转录按钮与下置执行提示]] |
 | 2026-09-24 | ui | - | archived | output-continuous-layout-preview | [[日志/2026-09-24-文件输出连续分区排版试验.md|文件输出连续分区排版试验]] |
 | 2026-09-24 | feature | - | archived | output-location-strategies-20260924 | [[日志/2026-09-24-文件输出三种保存策略与原位路径.md|文件输出三种保存策略与原位路径]] |
+| 2026-09-24 | ui | - | archived | persistent-output-format-guidance | [[日志/2026-09-24-文件格式提示常驻于选项下方.md|文件格式提示常驻于选项下方]] |
 | 2026-09-24 | ui | - | archived | stable-output-format-hint-layout | [[日志/2026-09-24-固定文件格式提示占位避免跳动.md|固定文件格式提示占位避免跳动]] |
 | 2026-09-23 | operations | - | archived | portable-release-rebuild-2026-09-23 | [[日志/2026-09-23-重建并验收最新便携版.md|重建并验收最新便携版]] |
 | 2026-09-23 | ui | - | archived | shared-workbench-selects-2026-09-23 | [[日志/2026-09-23-统一工作台下拉菜单与强调色.md|统一工作台下拉菜单与强调色]] |

@@ -31,23 +31,33 @@ for (const theme of ['light', 'dark'] as const) {
       'true',
     );
     await expect(description).toHaveText('直接保存在每个媒体文件所在目录');
-    const requiredHint = panel.getByRole('status');
+    const requiredHint = panel.locator('.output-format-required');
+    const formatExplanation = panel.locator('.output-format-description');
     const txtFormat = panel.getByRole('checkbox', { name: '生成 TXT 格式' });
+    await expect(requiredHint).toHaveText('至少选择一种需要生成的文件格式。');
+    await expect(requiredHint).toBeVisible();
+    await expect(formatExplanation).toHaveText(
+      '可多选；转录文本支持 TXT / Markdown，字幕任务支持 SRT / TXT。',
+    );
     const selectedLayout = await readOutputLayout();
     await txtFormat.uncheck();
     await expect(requiredHint).toHaveText('至少选择一种需要生成的文件格式。');
+    await expect(formatExplanation).toBeVisible();
     expect(await readOutputLayout()).toEqual(selectedLayout);
     const headingBox = await panel.locator('.output-section-heading').boundingBox();
-    const hintBox = await requiredHint.boundingBox();
     const formatsBox = await panel.locator('.output-format-list').boundingBox();
-    expect(hintBox!.y).toBeGreaterThan(headingBox!.y + headingBox!.height);
-    expect(hintBox!.y + hintBox!.height).toBeLessThan(formatsBox!.y);
+    const hintBox = await requiredHint.boundingBox();
+    const explanationBox = await formatExplanation.boundingBox();
+    expect(formatsBox!.y).toBeGreaterThan(headingBox!.y + headingBox!.height);
+    expect(hintBox!.y).toBeGreaterThan(formatsBox!.y + formatsBox!.height);
+    expect(explanationBox!.y).toBeGreaterThan(hintBox!.y + hintBox!.height);
     await panel.locator('.output-file-types').screenshot({
       animations: 'disabled',
       path: testInfo.outputPath(`required-format-${theme}.png`),
     });
     await txtFormat.check();
-    await expect(requiredHint).toHaveCount(0);
+    await expect(requiredHint).toBeVisible();
+    await expect(formatExplanation).toBeVisible();
     expect(await readOutputLayout()).toEqual(selectedLayout);
     await choices.getByRole('button', { name: '文件夹', exact: true }).click();
     await page.getByRole('checkbox', { name: '生成 Markdown 格式' }).check();
@@ -93,7 +103,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(requiredHint).toBeVisible();
     expect(await readOutputLayout()).toEqual(largerTextLayout);
     await srtFormat.check();
-    await expect(requiredHint).toHaveCount(0);
+    await expect(requiredHint).toBeVisible();
     expect(await readOutputLayout()).toEqual(largerTextLayout);
     const pathLayout = await description.evaluate((element) => ({
       height: element.getBoundingClientRect().height,
