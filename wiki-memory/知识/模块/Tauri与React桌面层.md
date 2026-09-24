@@ -6,6 +6,7 @@ importance: high
 updated: 2026-09-24
 topic: tauri-react-desktop
 source_logs:
+  - "[[日志/2026-09-24-固定文件格式提示占位避免跳动]]"
   - "[[日志/2026-09-24-文件输出连续分区排版试验]]"
   - "[[日志/2026-09-24-文件输出三种保存策略与原位路径]]"
   - "[[日志/2026-09-23-整体界面预设补齐宽度与布局]]"
@@ -81,7 +82,7 @@ supersedes: null
 - `taskFiles.ts` 只从成功媒体的实际 `outputPaths` 选择 TXT／MD／SRT；单媒体旧历史可回退任务输出集合，批量无关联记录不得猜测输出。`revealPath` 继续使用已有 Host `reveal_output`，异常进入现有错误提示，未新增 IPC 或 shell 权限。
 - `workspaceDraft.ts` 统一输入去重与自定义参数判定；启用 SRT 时，其参数偏离预设也属于自定义。
 - 浏览器 Mock 对新提交任务串行模拟逐媒体完成，按实际选中的 TXT/MD/SRT 组合及保存策略产生模拟路径；原生正式页面仍只接收 Host/Worker 数据。
-- `OutputPanel` 的四个设置分区使用细分隔线，保存策略、同名冲突和完成动作共用连体按钮样式，格式选项使用原生 checkbox 与可见勾选标记；无选中格式时，提示在标题下方、选项上方显示。外观仅在 `output-panel.css` 维护，原位说明行用 `white-space: nowrap`／`text-overflow: ellipsis` 保持单行。自定义始终通过 typed bridge 打开原生目录选择器，不增加路径输入区或副本区；浏览器 Mock 继续返回示例目录。执行前清单入口聚焦当前选中的策略。1400px 以下必须同时切换网格轨道与命名区域，避免隐式列挤压。
+- `OutputPanel` 的四个设置分区使用细分隔线，保存策略、同名冲突和完成动作共用连体按钮样式，格式选项使用原生 checkbox 与可见勾选标记；无选中格式时，提示在标题下方、选项上方显示；提示节点始终保留布局占位，选中格式后以 `visibility: hidden` 与 `aria-hidden` 隐藏，不能条件卸载或折叠间距造成纵向跳动。外观仅在 `output-panel.css` 维护，原位说明行用 `white-space: nowrap`／`text-overflow: ellipsis` 保持单行。自定义始终通过 typed bridge 打开原生目录选择器，不增加路径输入区或副本区；浏览器 Mock 继续返回示例目录。执行前清单入口聚焦当前选中的策略。1400px 以下必须同时切换网格轨道与命名区域，避免隐式列挤压。
 - `check:styles` 检查任务、文件输出、Worker 日志和公共按钮／文字样式归属、同条件重复选择器／属性、旧祖先变体和 `!important`，并禁止全局 `button` 变换覆盖局部命中区域；新增样式直接修改原责任规则。检查器与视觉验证说明见 [[知识/流程/开发与验证]]。
 
 模型与参数控制、生成目录和新旧 Worker 配套关系见 [[决策/ADR-004-模型与参数工作台]]。`ParameterField` 使用生成规则校验，页面不复制数值范围；`WorkspaceEntryCard` 集中路径输入与参数跳转的相同表面。预览使用独立 `preview-state.v1` 存储，正式 `desktop-state.v1` 保持原 key；两者不能互读模拟任务。

@@ -51,6 +51,7 @@ export function OutputPanel() {
           { code: 'SRT', name: '字幕文件', key: 'srtEnabled', enabled: output.srtEnabled },
           { code: 'TXT', name: '纯文本', key: 'txtEnabled', enabled: output.txtEnabled },
         ] as const);
+  const hasSelectedFormat = formats.some((format) => format.enabled);
 
   return (
     <section className="panel output-panel output-sheet" aria-labelledby="output-title">
@@ -113,11 +114,13 @@ export function OutputPanel() {
             </h3>
             <span className="output-section-note">可多选</span>
           </div>
-          {!formats.some((format) => format.enabled) && (
-            <p className="output-format-required" role="status">
-              至少选择一种需要生成的文件格式。
-            </p>
-          )}
+          <p
+            className={`output-format-required ${hasSelectedFormat ? 'is-satisfied' : ''}`}
+            aria-hidden={hasSelectedFormat}
+            role="status"
+          >
+            至少选择一种需要生成的文件格式。
+          </p>
           <div className="output-format-list">
             {formats.map((format) => (
               <label

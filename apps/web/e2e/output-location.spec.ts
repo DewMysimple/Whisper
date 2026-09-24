@@ -7,6 +7,22 @@ for (const theme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: theme });
     await page.goto('/');
     const panel = page.getByRole('region', { name: '文件输出', exact: true });
+    const readOutputLayout = () =>
+      panel.evaluate((element) => {
+        const panelBox = element.getBoundingClientRect();
+        // Ignore browser floating-point noise below one hundredth of a CSS pixel.
+        const pixels = (value: number) => Math.round(value * 100) / 100;
+        return {
+          height: pixels(panelBox.height),
+          sections: Array.from(
+            element.querySelectorAll('.output-sheet-section, .output-format-list'),
+            (section) => {
+              const box = section.getBoundingClientRect();
+              return { top: pixels(box.top - panelBox.top), height: pixels(box.height) };
+            },
+          ),
+        };
+      });
     const choices = panel.getByRole('group', { name: '文件输出策略' });
     const description = panel.locator('.output-location-description');
     await expect(choices.getByRole('button')).toHaveText(['跟随', '文件夹', '自定义']);
@@ -17,8 +33,10 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(description).toHaveText('直接保存在每个媒体文件所在目录');
     const requiredHint = panel.getByRole('status');
     const txtFormat = panel.getByRole('checkbox', { name: '生成 TXT 格式' });
+    const selectedLayout = await readOutputLayout();
     await txtFormat.uncheck();
     await expect(requiredHint).toHaveText('至少选择一种需要生成的文件格式。');
+    expect(await readOutputLayout()).toEqual(selectedLayout);
     const headingBox = await panel.locator('.output-section-heading').boundingBox();
     const hintBox = await requiredHint.boundingBox();
     const formatsBox = await panel.locator('.output-format-list').boundingBox();
@@ -30,6 +48,7 @@ for (const theme of ['light', 'dark'] as const) {
     });
     await txtFormat.check();
     await expect(requiredHint).toHaveCount(0);
+    expect(await readOutputLayout()).toEqual(selectedLayout);
     await choices.getByRole('button', { name: '文件夹', exact: true }).click();
     await page.getByRole('checkbox', { name: '生成 Markdown 格式' }).check();
     await expect(description).toHaveText('在每个媒体目录中创建 Text 文件夹');
@@ -68,6 +87,14 @@ for (const theme of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 1180, height: 900 });
     await page.reload();
     await expect(description).toHaveText(longPath);
+    const largerTextLayout = await readOutputLayout();
+    const srtFormat = panel.getByRole('checkbox', { name: '生成 SRT 格式' });
+    await srtFormat.uncheck();
+    await expect(requiredHint).toBeVisible();
+    expect(await readOutputLayout()).toEqual(largerTextLayout);
+    await srtFormat.check();
+    await expect(requiredHint).toHaveCount(0);
+    expect(await readOutputLayout()).toEqual(largerTextLayout);
     const pathLayout = await description.evaluate((element) => ({
       height: element.getBoundingClientRect().height,
       lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
