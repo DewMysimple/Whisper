@@ -422,7 +422,7 @@ test('uses preflight cards as non-selecting configuration shortcuts', async ({ p
     },
     {
       shortcut: page.getByRole('button', { name: '前往输出策略配置' }),
-      target: page.getByRole('button', { name: '选择输出文件夹' }),
+      target: page.getByRole('button', { name: '跟随', exact: true }),
     },
     {
       shortcut: page.getByRole('button', { name: '前往执行方式配置' }),
@@ -553,35 +553,22 @@ test('creates a task from the complete desktop workspace path', async ({ page },
   await expect(page.getByRole('checkbox', { name: '生成 TXT 格式' })).toBeChecked();
   await page.getByRole('checkbox', { name: '生成 Markdown 格式' }).check();
   await expect(page.getByText('跟随媒体')).toBeVisible();
-  await page.getByRole('button', { name: '选择输出文件夹' }).click();
+  await page.getByRole('button', { name: '自定义', exact: true }).click();
   await expect(
     page.getByLabel('文件输出').getByText('D:\\字幕项目\\2026-07', { exact: true }),
   ).toBeVisible();
+  await expect(page.locator('.output-location-description')).toHaveText('D:\\字幕项目\\2026-07');
+  await expect(page.locator('.output-copy-panel')).toHaveCount(0);
+  await expect(page.locator('.output-path-value')).toHaveCount(0);
+  const outputStrategies = page.getByRole('group', { name: '文件输出策略' });
+  await expect(outputStrategies.getByRole('button')).toHaveText(['跟随', '文件夹', '自定义']);
   await expect(
-    page.getByText('Text、Markdown 文件直接写入所选目录，不创建格式子文件夹'),
-  ).toBeVisible();
-  const txtCopy = page.getByRole('checkbox', { name: '同时在媒体旁保存 TXT 副本' });
-  const markdownCopy = page.getByRole('checkbox', {
-    name: '同时在媒体旁保存 Markdown 副本',
-  });
-  await expect(txtCopy).not.toBeChecked();
-  await expect(markdownCopy).not.toBeChecked();
-  await txtCopy.check();
-  await markdownCopy.check();
-  const changeDirectory = page.getByRole('button', { name: '更换文件夹' });
-  const restoreDirectory = page.getByRole('button', { name: '恢复默认位置' });
-  await expect
-    .poll(async () =>
-      Promise.all([
-        changeDirectory.evaluate((element) => getComputedStyle(element).color),
-        restoreDirectory.evaluate((element) => getComputedStyle(element).color),
-      ]),
-    )
-    .toEqual(['rgb(29, 29, 31)', 'rgb(255, 91, 4)']);
+    outputStrategies.getByRole('button', { name: '自定义', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
   await page.locator('.output-panel').screenshot({
     path: testInfo.outputPath('output-custom-location.png'),
   });
-  await page.getByRole('button', { name: '恢复默认位置' }).click();
+  await page.getByRole('button', { name: '跟随', exact: true }).click();
   await expect(page.getByText('跟随媒体')).toBeVisible();
   await expect(page.getByText('D:\\字幕项目\\2026-07')).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 0));

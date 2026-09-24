@@ -95,7 +95,7 @@ _RECOGNITION_STRATEGIES = frozenset(
 _MODEL_IDS = frozenset(SUPPORTED_MODEL_IDS)
 _INPUT_KINDS = frozenset({"file", "directory"})
 _INPUT_ORIGINS = frozenset({"dialog", "drop", "paste", "manual"})
-_OUTPUT_MODES = frozenset({"compatibility", "custom"})
+_OUTPUT_MODES = frozenset({"compatibility", "custom", "source", "folders"})
 _CONFLICT_POLICIES = frozenset({"overwrite", "fail", "auto_rename", "skip"})
 _CANCEL_REASONS = frozenset({"user", "shutdown", "superseded"})
 

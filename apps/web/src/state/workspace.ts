@@ -319,7 +319,7 @@ export interface WorkspaceState {
   addDirectory(): Promise<void>;
   addClipboardPaths(): Promise<void>;
   chooseOutputDirectory(): Promise<void>;
-  restoreDefaultOutputDirectory(): void;
+  selectOutputLocation(mode: 'source' | 'folders'): void;
   removeInput(id: string): void;
   clearInputs(): void;
   selectProfile(mode: ProfileMode, id: PresetId): void;
@@ -375,7 +375,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   subtitleParameters: { ...getSubtitlePreset('en_v1').subtitleParameters },
   subtitleOverrides: {},
   output: {
-    mode: 'compatibility',
+    mode: 'source',
     rootDirectory: null,
     txtEnabled: true,
     markdownEnabled: false,
@@ -619,10 +619,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
             ...state.output,
             mode: 'custom',
             rootDirectory,
-            preserveSourceTxt:
-              state.output.mode === 'custom' ? state.output.preserveSourceTxt : false,
-            preserveSourceMarkdown:
-              state.output.mode === 'custom' ? state.output.preserveSourceMarkdown : false,
+            preserveSourceTxt: false,
+            preserveSourceMarkdown: false,
           },
           lastError: null,
         }));
@@ -632,11 +630,11 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ lastError: errorMessage(error) });
     }
   },
-  restoreDefaultOutputDirectory: () => {
+  selectOutputLocation: (mode) => {
     set((state) => ({
       output: {
         ...state.output,
-        mode: 'compatibility',
+        mode,
         rootDirectory: null,
         preserveSourceTxt: false,
         preserveSourceMarkdown: false,

@@ -96,7 +96,9 @@ export function LaunchCard() {
   const usesCustomOutput = output.mode === 'custom';
   const outputLocationLabel = usesCustomOutput
     ? (output.rootDirectory ?? '尚未选择自选目录')
-    : '跟随每个媒体文件';
+    : output.mode === 'source'
+      ? '跟随每个媒体文件'
+      : '媒体旁的分类文件夹';
   const checklistPending = pendingOverwrite !== null || pendingShutdownStart !== null;
   const checklistStatus = startingTask
     ? '正在准备'
@@ -238,7 +240,12 @@ export function LaunchCard() {
           <CardButton
             aria-label="前往输出策略配置"
             className={`preflight-item ${needsOutputRoot || !hasOutputTarget ? 'needs-attention' : ''}`}
-            onClick={() => focusChecklistTarget('.output-panel', '.output-location-action')}
+            onClick={() =>
+              focusChecklistTarget(
+                '.output-panel',
+                '.output-location-options > button[aria-pressed="true"]',
+              )
+            }
             type="button"
           >
             <span className="preflight-icon" aria-hidden="true">

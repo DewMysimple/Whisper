@@ -163,6 +163,42 @@ def custom_policy(
     }
 
 
+@pytest.mark.parametrize("mode", ["source", "folders", "custom"])
+@pytest.mark.parametrize("formats", [("txt",), ("md",), ("srt",), ("txt", "md"), ("txt", "srt"), ("txt", "md", "srt")])
+def test_output_locations_write_only_selected_formats_per_media(tmp_path, mode, formats):
+    media_paths = [tmp_path / "中文课程" / "one.wav", tmp_path / "interviews" / "two.mp4"]
+    policy = {
+        "mode": mode,
+        "root_directory": str(tmp_path / "chosen") if mode == "custom" else None,
+        "txt": {"enabled": "txt" in formats},
+        "markdown": {"enabled": "md" in formats},
+        "srt": {"enabled": "srt" in formats},
+        "preserve_source_txt": False,
+        "preserve_source_markdown": False,
+        "conflict_policy": "fail",
+    }
+    plans = build_configurable_output_plans(media_paths, policy)
+    expected_files = set()
+    for media, plan in zip(media_paths, plans):
+        expected = set()
+        for extension in formats:
+            directory = tmp_path / "chosen" if mode == "custom" else media.parent
+            if mode == "folders":
+                directory /= "SRT" if extension == "srt" else "Text"
+            expected.add(directory / f"{media.stem}.{extension}")
+        assert set(plan.content_paths) == expected
+        prepare_output_plan(plan)
+        write_primary_outputs(plan, "正文", markdown_content="# 正文", srt_content="1\n00:00:00,000 --> 00:00:01,000\n正文\n")
+        expected_files.update(expected)
+    assert {path for path in tmp_path.rglob("*") if path.is_file()} == expected_files
+    assert not list(tmp_path.rglob("Markdown"))
+    with pytest.raises(OutputConflictError):
+        build_configurable_output_plans(media_paths, policy)
+    renamed = build_configurable_output_plans(media_paths, {**policy, "conflict_policy": "auto_rename"})
+    assert all(path.stem.endswith(" (2)") for plan in renamed for path in plan.content_paths)
+    assert build_configurable_output_plans(media_paths, {**policy, "conflict_policy": "skip"}) == ()
+
+
 def test_custom_plan_writes_all_formats_directly_to_shared_root_and_source_backup(tmp_path):
     media = tmp_path / "input" / "course.wav"
 

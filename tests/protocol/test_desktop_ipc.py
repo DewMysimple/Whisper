@@ -84,6 +84,13 @@ def test_media_inspect_accepts_nonempty_local_paths():
     assert message.params["paths"] == ("C:/Media/one.mp4", "D:/Batch/two.wav")
 
 
+@pytest.mark.parametrize("mode", ["source", "folders", "custom", "compatibility"])
+def test_output_locations_are_accepted_by_protocol_and_schema(mode):
+    message = CommandMessage("req-output-location", CommandMethod.TRANSCRIPTION_START, start_params(mode=mode))
+    assert message.params["output"]["mode"] == mode
+    assert mode in load_schema()["$defs"]["OutputPolicy"]["properties"]["mode"]["enum"]
+
+
 def test_media_inspect_rejects_empty_path_list():
     with pytest.raises(ProtocolValidationError):
         CommandMessage("req-media-inspect", CommandMethod.MEDIA_INSPECT, {"paths": []})

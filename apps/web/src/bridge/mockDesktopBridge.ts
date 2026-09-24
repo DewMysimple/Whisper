@@ -321,10 +321,24 @@ export class MockDesktopBridge implements DesktopBridge {
       ].filter((value) => value !== null);
       const outputPaths =
         phase === 3
-          ? extensions.map(
-              (extension) =>
-                `${draft.output.rootDirectory ?? 'D:\\Mock'}\\${taskId}\\${basename}.${extension}`,
-            )
+          ? extensions.map((extension) => {
+              const mediaDirectory = inputPath.slice(
+                0,
+                Math.max(inputPath.lastIndexOf('\\'), inputPath.lastIndexOf('/')),
+              );
+              let directory = mediaDirectory;
+              if (draft.output.mode === 'custom') directory = draft.output.rootDirectory!;
+              else if (draft.output.mode !== 'source') {
+                const folder =
+                  extension === 'srt'
+                    ? 'SRT'
+                    : extension === 'md' && draft.output.mode === 'compatibility'
+                      ? 'Markdown'
+                      : 'Text';
+                directory += `\\${folder}`;
+              }
+              return `${directory}\\${basename}.${extension}`;
+            })
           : [];
       outputs.push(...outputPaths);
       this.emit({

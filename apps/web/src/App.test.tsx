@@ -99,7 +99,7 @@ describe('desktop workspace', () => {
     await user.click(checklistLinks[1]!);
     expect(screen.getByRole('button', { name: '选择媒体文件' })).toHaveFocus();
     await user.click(checklistLinks[2]!);
-    expect(screen.getByRole('button', { name: '选择输出文件夹' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '跟随' })).toHaveFocus();
     await user.click(checklistLinks[3]!);
     expect(screen.getByRole('button', { name: '无操作' })).toHaveFocus();
     expect(scrollIntoView).not.toHaveBeenCalled();
@@ -156,28 +156,23 @@ describe('desktop workspace', () => {
 
     await user.click(screen.getByRole('checkbox', { name: '生成 Markdown 格式' }));
     expect(screen.getByText('跟随媒体')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '选择输出文件夹' }));
+    await user.click(screen.getByRole('button', { name: '自定义' }));
     expect(screen.getAllByText('D:\\字幕项目\\2026-07')).toHaveLength(2);
     expect(screen.getByText('自选目录')).toBeInTheDocument();
-    const txtCopy = screen.getByRole('checkbox', { name: '同时在媒体旁保存 TXT 副本' });
-    const markdownCopy = screen.getByRole('checkbox', {
-      name: '同时在媒体旁保存 Markdown 副本',
-    });
-    expect(txtCopy).not.toBeChecked();
-    expect(markdownCopy).not.toBeChecked();
-    await user.click(txtCopy);
-    await user.click(markdownCopy);
-    expect(txtCopy).toBeChecked();
-    expect(markdownCopy).toBeChecked();
-    await user.click(screen.getByRole('button', { name: '恢复默认位置' }));
-    expect(screen.getByText('跟随媒体')).toBeInTheDocument();
+    expect(screen.queryByText('媒体旁副本')).not.toBeInTheDocument();
+    const strategies = screen.getByRole('group', { name: '文件输出策略' });
+    expect(
+      within(strategies)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['跟随', '文件夹', '自定义']);
+    await user.click(within(strategies).getByRole('button', { name: '文件夹' }));
     expect(screen.queryByText('D:\\字幕项目\\2026-07')).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('checkbox', { name: '同时在媒体旁保存 TXT 副本' }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByText('在每个媒体文件旁创建 Text、Markdown 文件夹，文件直接存放'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('在每个媒体目录中创建 Text 文件夹')).toBeInTheDocument();
+    expect(useWorkspace.getState().output).toMatchObject({ mode: 'folders', rootDirectory: null });
+    await user.click(within(strategies).getByRole('button', { name: '跟随' }));
+    expect(screen.getByText('直接保存在每个媒体文件所在目录')).toBeInTheDocument();
+    expect(useWorkspace.getState().output).toMatchObject({ mode: 'source', rootDirectory: null });
     expect(screen.getByRole('button', { name: /开始本地转录/ })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: /开始本地转录/ }));
     expect(screen.getByRole('dialog', { name: '确认使用标准转录版本' })).toBeInTheDocument();

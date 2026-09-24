@@ -92,7 +92,7 @@ export interface PresetDefinition {
 }
 
 export interface OutputPolicy {
-  mode: 'compatibility' | 'custom';
+  mode: 'source' | 'folders' | 'custom' | 'compatibility';
   rootDirectory: string | null;
   txtEnabled: boolean;
   markdownEnabled: boolean;

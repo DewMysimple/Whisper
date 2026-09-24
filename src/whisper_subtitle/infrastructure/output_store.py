@@ -126,7 +126,7 @@ def _policy_directory(
 
 def _configured_plan(media: Path, policy: Mapping[str, object]) -> OutputPlan:
     mode = policy.get("mode")
-    if mode not in {"compatibility", "custom"}:
+    if mode not in {"compatibility", "custom", "source", "folders"}:
         raise ValueError(f"unsupported output mode: {mode!r}")
     txt = policy.get("txt")
     markdown = policy.get("markdown")
@@ -137,6 +137,16 @@ def _configured_plan(media: Path, policy: Mapping[str, object]) -> OutputPlan:
         raise TypeError("output target enabled flags must be bool")
     if not txt["enabled"] and not markdown["enabled"] and not srt["enabled"]:
         raise ValueError("at least one output target must be enabled")
+
+    if mode in {"source", "folders"}:
+        # Media-relative policies are resolved per input, including expanded folders.
+        text_directory = media.parent if mode == "source" else media.parent / "Text"
+        subtitle_directory = media.parent if mode == "source" else media.parent / "SRT"
+        return OutputPlan(
+            primary_txt=text_directory / f"{media.stem}.txt" if txt["enabled"] else None,
+            primary_md=text_directory / f"{media.stem}.md" if markdown["enabled"] else None,
+            primary_srt=subtitle_directory / f"{media.stem}.srt" if srt["enabled"] else None,
+        )
 
     root_value = policy.get("root_directory")
     root = Path(str(root_value)) if root_value is not None else None

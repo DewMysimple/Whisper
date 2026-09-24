@@ -36,7 +36,7 @@ const preferences: WorkspacePreferences = {
   subtitleParameters: { ...getSubtitlePreset('en_v1').subtitleParameters },
   subtitleOverrides: {},
   output: {
-    mode: 'compatibility',
+    mode: 'source',
     rootDirectory: null,
     txtEnabled: true,
     markdownEnabled: false,
@@ -63,6 +63,35 @@ const runningTask: TaskSnapshot = {
 
 describe('desktop workspace persistence', () => {
   beforeEach(() => localStorage.clear());
+
+  it.each(['source', 'folders', 'custom'] as const)('persists the %s output strategy', (mode) => {
+    const selected = {
+      ...preferences,
+      output: {
+        ...preferences.output,
+        mode,
+        rootDirectory: mode === 'custom' ? 'D:\\课程输出' : null,
+      },
+    };
+    expect(importPreferences(exportPreferences(selected)).output).toEqual(selected.output);
+  });
+
+  it('migrates legacy preferences to format folders and removes additional copies', () => {
+    const legacy = {
+      ...preferences,
+      output: {
+        ...preferences.output,
+        mode: 'compatibility' as const,
+        preserveSourceTxt: true,
+        preserveSourceMarkdown: true,
+      },
+    };
+    expect(importPreferences(exportPreferences(legacy)).output).toMatchObject({
+      mode: 'folders',
+      preserveSourceTxt: false,
+      preserveSourceMarkdown: false,
+    });
+  });
 
   it('restores preferences and marks active work as interrupted', () => {
     saveWorkspaceState(preferences, [runningTask]);

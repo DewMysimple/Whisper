@@ -3886,6 +3886,18 @@ textarea:focus {
   line-height: 1.5;
 }
 
+.output-location-description {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.output-location-description.is-path {
+  color: var(--text);
+  user-select: text;
+}
+
 .output-panel-v3 .output-path-value {
   display: -webkit-box;
   max-height: 43px;
@@ -3977,17 +3989,20 @@ textarea:focus {
   color: white;
 }
 
+.output-panel-v3 .output-location-options,
 .output-panel-v3 .output-conflict-options,
 .output-panel-v3 .finish-action-options {
   margin-top: auto;
 }
 
+.output-panel-v3 .output-location-options,
 .output-panel-v3 .output-conflict-options {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
 }
 
+.output-panel-v3 .output-location-options > button,
 .output-panel-v3 .output-conflict-options > button {
   min-width: 0;
   min-height: 44px;
@@ -4001,6 +4016,7 @@ textarea:focus {
   font-weight: 680;
 }
 
+.output-panel-v3 .output-location-options > button.is-selected,
 .output-panel-v3 .output-conflict-options > button.is-selected {
   background: color-mix(in srgb, var(--accent-soft) 54%, var(--surface));
   color: var(--accent);
@@ -5747,7 +5763,8 @@ output,
 
 @media (max-width: 1400px) {
   .workspace-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'source' 'output' 'preset' 'subtitle' 'launch';
   }
 
   .workspace-secondary {

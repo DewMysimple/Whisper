@@ -1305,6 +1305,18 @@ mod tests {
     }
 
     #[test]
+    fn media_relative_output_modes_pass_through_to_worker() {
+        for mode in ["source", "folders"] {
+            let mut draft = valid_draft();
+            draft.output.mode = mode.to_owned();
+            assert!(validate_start_draft(&draft).is_ok());
+            let params = draft_to_protocol_params(draft);
+            assert_eq!(params["output"]["mode"], json!(mode));
+            assert!(params["output"]["root_directory"].is_null());
+        }
+    }
+
+    #[test]
     fn strips_only_one_complete_quote_pair() {
         assert_eq!(
             strip_one_pair_of_quotes(r#""C:\Media Files\a.mp4""#),

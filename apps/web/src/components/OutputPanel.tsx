@@ -1,4 +1,4 @@
-import { Copy, FileText, FolderOutput, Power, RotateCcw, ShieldCheck } from 'lucide-react';
+import { FileText, FolderOutput, Power, ShieldCheck } from 'lucide-react';
 
 import { useWorkspace } from '../state/workspace';
 
@@ -18,26 +18,27 @@ export function OutputPanel() {
   const output = useWorkspace((state) => state.output);
   const setOutput = useWorkspace((state) => state.setOutput);
   const chooseOutputDirectory = useWorkspace((state) => state.chooseOutputDirectory);
-  const restoreDefaultOutputDirectory = useWorkspace(
-    (state) => state.restoreDefaultOutputDirectory,
-  );
+  const selectOutputLocation = useWorkspace((state) => state.selectOutputLocation);
   const profileMode = useWorkspace((state) => state.profileMode);
   const finishAction = useWorkspace((state) => state.finishAction);
   const powerCapabilities = useWorkspace((state) => state.powerCapabilities);
   const setFinishAction = useWorkspace((state) => state.setFinishAction);
   const usesCustomLocation = output.mode === 'custom' && output.rootDirectory !== null;
+  const locationMode = output.mode === 'compatibility' ? 'folders' : output.mode;
+  const locationLabel = { source: '跟随媒体', folders: '分类文件夹', custom: '自选目录' }[
+    locationMode
+  ];
   const enabledDirectories = [
+    output.txtEnabled || (profileMode === 'transcript' && output.markdownEnabled) ? 'Text' : null,
     profileMode === 'subtitle' && output.srtEnabled ? 'SRT' : null,
-    output.txtEnabled ? 'Text' : null,
-    profileMode === 'transcript' && output.markdownEnabled ? 'Markdown' : null,
   ].filter((directory): directory is string => directory !== null);
-  const directoryList = enabledDirectories.join('、');
-  const locationDescription =
-    directoryList.length === 0
-      ? '尚未选择输出格式'
-      : usesCustomLocation
-        ? `${directoryList} 文件直接写入所选目录，不创建格式子文件夹`
-        : `在每个媒体文件旁创建 ${directoryList} 文件夹，文件直接存放`;
+  const locationDescription = usesCustomLocation
+    ? output.rootDirectory!
+    : locationMode === 'source'
+      ? '直接保存在每个媒体文件所在目录'
+      : enabledDirectories.length > 0
+        ? `在每个媒体目录中创建 ${enabledDirectories.join(' / ')} 文件夹`
+        : '按格式保存到媒体旁的 Text / SRT 文件夹';
 
   return (
     <section className="panel output-panel output-panel-v3" aria-labelledby="output-title">
@@ -47,7 +48,7 @@ export function OutputPanel() {
           <h2 id="output-title">文件输出</h2>
         </div>
         <span className={`output-location-chip ${usesCustomLocation ? 'is-custom' : ''}`}>
-          <FolderOutput size={14} /> {usesCustomLocation ? '自选目录' : '跟随媒体'}
+          <FolderOutput size={14} /> {locationLabel}
         </span>
       </div>
 
@@ -63,29 +64,41 @@ export function OutputPanel() {
             <span>
               <small>保存位置</small>
               <strong id="output-location-title">
-                {usesCustomLocation ? '自选输出文件夹' : '跟随每个媒体文件'}
+                {usesCustomLocation
+                  ? '自选输出文件夹'
+                  : locationMode === 'source'
+                    ? '跟随每个媒体文件'
+                    : '按格式分类保存'}
               </strong>
             </span>
           </div>
-          <p className="output-setting-description">{locationDescription}</p>
-          {usesCustomLocation && <code className="output-path-value">{output.rootDirectory}</code>}
-          <div className="output-location-actions">
-            <button
-              className="output-location-action"
-              onClick={() => void chooseOutputDirectory()}
-              type="button"
-            >
-              <FolderOutput size={15} /> {usesCustomLocation ? '更换文件夹' : '选择输出文件夹'}
-            </button>
-            {usesCustomLocation && (
+          <p
+            className={`output-setting-description output-location-description ${usesCustomLocation ? 'is-path' : ''}`}
+          >
+            {locationDescription}
+          </p>
+          <div className="output-location-options" aria-label="文件输出策略" role="group">
+            {(
+              [
+                { value: 'source', label: '跟随' },
+                { value: 'folders', label: '文件夹' },
+                { value: 'custom', label: '自定义' },
+              ] as const
+            ).map((option) => (
               <button
-                className="output-location-reset"
-                onClick={restoreDefaultOutputDirectory}
+                aria-pressed={locationMode === option.value}
+                className={`selection-card ${locationMode === option.value ? 'is-selected' : ''}`}
+                key={option.value}
+                onClick={() =>
+                  option.value === 'custom'
+                    ? void chooseOutputDirectory()
+                    : selectOutputLocation(option.value)
+                }
                 type="button"
               >
-                <RotateCcw size={15} /> 恢复默认位置
+                {option.label}
               </button>
-            )}
+            ))}
           </div>
         </section>
 
@@ -242,53 +255,6 @@ export function OutputPanel() {
           </div>
         </section>
       </div>
-
-      {usesCustomLocation &&
-        profileMode === 'transcript' &&
-        (output.txtEnabled || output.markdownEnabled) && (
-          <section className="output-copy-panel" aria-labelledby="output-copy-title">
-            <div className="output-copy-heading">
-              <span>
-                <Copy size={15} />
-                <strong id="output-copy-title">媒体旁副本</strong>
-              </span>
-              <small>可选附加写入</small>
-            </div>
-            <p>除了自选目录，也可以在原媒体旁保存一份。</p>
-            <div className="output-copy-options">
-              {output.txtEnabled && (
-                <label>
-                  <span>
-                    <strong>TXT 副本</strong>
-                    <small>媒体旁的 Text 文件夹</small>
-                  </span>
-                  <input
-                    aria-label="同时在媒体旁保存 TXT 副本"
-                    checked={output.preserveSourceTxt}
-                    onChange={(event) => setOutput({ preserveSourceTxt: event.target.checked })}
-                    type="checkbox"
-                  />
-                </label>
-              )}
-              {output.markdownEnabled && (
-                <label>
-                  <span>
-                    <strong>Markdown 副本</strong>
-                    <small>媒体旁的 Markdown 文件夹</small>
-                  </span>
-                  <input
-                    aria-label="同时在媒体旁保存 Markdown 副本"
-                    checked={output.preserveSourceMarkdown}
-                    onChange={(event) =>
-                      setOutput({ preserveSourceMarkdown: event.target.checked })
-                    }
-                    type="checkbox"
-                  />
-                </label>
-              )}
-            </div>
-          </section>
-        )}
     </section>
   );
 }

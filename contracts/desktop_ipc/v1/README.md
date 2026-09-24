@@ -88,7 +88,7 @@ vendor-independent source for them. `cpu_frequency_mhz` is explicitly the
 frequency reported by the operating system and may differ from a momentary
 Boost clock shown by vendor utilities.
 
-`transcription.start` carries an `InputSource[]`, a base preset plus validated overrides, an explicit compatibility/custom output policy, and may include a local `model_id`. Supported task model IDs are `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-turbo`. The Worker freezes the model with the task and echoes it in `task.queued.data.model_id`; omitting it preserves the original `large-v3-turbo` behavior. The existing CLI continues to accept one physical input argument.
+`transcription.start` carries an `InputSource[]`, a base preset plus validated overrides, an explicit source/folders/custom (or legacy compatibility) output policy, and may include a local `model_id`. Supported task model IDs are `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-turbo`. The Worker freezes the model with the task and echoes it in `task.queued.data.model_id`; omitting it preserves the original `large-v3-turbo` behavior. The existing CLI continues to accept one physical input argument.
 
 When `execution` is omitted, the Worker preserves automatic hardware selection:
 CUDA device 0 with FP16 (or FP32 compatibility fallback), otherwise CPU INT8.
@@ -121,6 +121,17 @@ the request must include all subtitle layout parameters:
   }
 }
 ```
+
+The desktop's `source` mode writes every enabled format directly beside each
+expanded input media. `folders` writes TXT and Markdown together under `Text`
+and SRT under `SRT` beside each media; only directories required by enabled
+formats are created. These media-relative modes use no custom root, per-target
+directory overrides, or additional source copies. `custom` writes all formats
+directly into the selected root. Conflict handling applies to all modes.
+The additive `source`/`folders` values require a matching Host and Worker; do not
+send them to older frozen Workers. `compatibility` and CLI paths stay unchanged.
+The current UI migrates legacy workspace preferences to `folders`, disables
+extra copies, and preserves historical task drafts.
 
 `preserve_source_markdown` is also an additive optional v1 field. It defaults
 to `false`. In custom-root mode, `preserve_source_txt` and

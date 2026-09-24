@@ -3,7 +3,7 @@ type: moc
 status: active
 kind: process
 importance: high
-updated: 2026-09-23
+updated: 2026-09-24
 topic: work-log-index
 source_logs: []
 supersedes: null
@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-24 | feature | - | archived | output-location-strategies-20260924 | [[日志/2026-09-24-文件输出三种保存策略与原位路径.md|文件输出三种保存策略与原位路径]] |
 | 2026-09-23 | operations | - | archived | portable-release-rebuild-2026-09-23 | [[日志/2026-09-23-重建并验收最新便携版.md|重建并验收最新便携版]] |
 | 2026-09-23 | ui | - | archived | shared-workbench-selects-2026-09-23 | [[日志/2026-09-23-统一工作台下拉菜单与强调色.md|统一工作台下拉菜单与强调色]] |
 | 2026-09-23 | ui | - | archived | model-card-hover-and-directory-entry-2026-09-23 | [[日志/2026-09-23-模型卡片悬停与路径入口整改.md|模型卡片悬停与路径入口整改]] |

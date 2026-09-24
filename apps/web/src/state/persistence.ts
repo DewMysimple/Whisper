@@ -269,8 +269,10 @@ function parsePreferences(value: unknown): WorkspacePreferences | null {
   if (!isRecord(value.output)) return null;
   const output = {
     ...value.output,
+    mode: value.output.mode === 'compatibility' ? 'folders' : value.output.mode,
     srtEnabled: value.output.srtEnabled ?? false,
-    preserveSourceMarkdown: value.output.preserveSourceMarkdown ?? false,
+    preserveSourceTxt: false,
+    preserveSourceMarkdown: false,
     conflictPolicy:
       value.output.conflictPolicy === 'auto_rename'
         ? 'auto_rename'
@@ -449,7 +451,10 @@ function isSubtitleOverrides(value: unknown): value is Partial<SubtitleParameter
 function isOutputPolicy(value: unknown): value is OutputPolicy {
   if (!isRecord(value)) return false;
   return (
-    (value.mode === 'compatibility' || value.mode === 'custom') &&
+    (value.mode === 'compatibility' ||
+      value.mode === 'custom' ||
+      value.mode === 'source' ||
+      value.mode === 'folders') &&
     (value.rootDirectory === null || typeof value.rootDirectory === 'string') &&
     typeof value.txtEnabled === 'boolean' &&
     typeof value.markdownEnabled === 'boolean' &&

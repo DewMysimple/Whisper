@@ -54,7 +54,13 @@ export function TaskRestoreDialog({
           </div>
           <div>
             <dt>输出策略</dt>
-            <dd>{task.draft?.output.mode === 'custom' ? '自定义目录' : '跟随媒体'}</dd>
+            <dd>
+              {task.draft?.output.mode === 'custom'
+                ? '自定义目录'
+                : task.draft?.output.mode === 'source'
+                  ? '跟随媒体'
+                  : '分类文件夹'}
+            </dd>
           </div>
         </dl>
       )}

@@ -215,6 +215,18 @@ describe('TauriDesktopBridge', () => {
     );
   });
 
+  it('opens the native directory picker and preserves cancellation', async () => {
+    const bridge = new TauriDesktopBridge();
+    native.open.mockResolvedValueOnce('D:\\课程输出');
+    await expect(bridge.selectOutputDirectory()).resolves.toBe('D:\\课程输出');
+    expect(native.open).toHaveBeenCalledWith(
+      expect.objectContaining({ directory: true, multiple: false }),
+    );
+    native.open.mockResolvedValueOnce(null);
+    await expect(bridge.selectOutputDirectory()).resolves.toBeNull();
+    bridge.dispose();
+  });
+
   it('releases partial registrations and allows setup to retry after a listener failure', async () => {
     const bridge = new TauriDesktopBridge();
     const released = vi.fn();

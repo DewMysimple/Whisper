@@ -51,6 +51,36 @@ describe('workspace terminal event notifications', () => {
     });
   });
 
+  it('selects media-relative locations and preserves the selection when the folder dialog is cancelled or fails', async () => {
+    const select = vi.spyOn(desktopBridge, 'selectOutputDirectory');
+    useWorkspace.getState().selectOutputLocation('folders');
+    expect(useWorkspace.getState().output).toMatchObject({ mode: 'folders', rootDirectory: null });
+    select.mockResolvedValueOnce(null);
+    await useWorkspace.getState().chooseOutputDirectory();
+    expect(useWorkspace.getState().output.mode).toBe('folders');
+    select.mockResolvedValueOnce('D:\\课程输出');
+    await useWorkspace.getState().chooseOutputDirectory();
+    expect(useWorkspace.getState().output).toMatchObject({
+      mode: 'custom',
+      rootDirectory: 'D:\\课程输出',
+      preserveSourceTxt: false,
+      preserveSourceMarkdown: false,
+    });
+    select.mockResolvedValueOnce(null);
+    await useWorkspace.getState().chooseOutputDirectory();
+    expect(useWorkspace.getState().output.rootDirectory).toBe('D:\\课程输出');
+    select.mockRejectedValueOnce(new Error('无法打开文件夹选择器'));
+    await useWorkspace.getState().chooseOutputDirectory();
+    expect(useWorkspace.getState().lastError).toBe('无法打开文件夹选择器');
+    expect(useWorkspace.getState().output.rootDirectory).toBe('D:\\课程输出');
+    select.mockResolvedValueOnce('E:\\新目录');
+    await useWorkspace.getState().chooseOutputDirectory();
+    expect(useWorkspace.getState().output.rootDirectory).toBe('E:\\新目录');
+    useWorkspace.getState().selectOutputLocation('source');
+    expect(useWorkspace.getState().output).toMatchObject({ mode: 'source', rootDirectory: null });
+    select.mockRestore();
+  });
+
   it('keeps the full session log beyond 200 lines and clears only on the Host event', () => {
     for (let index = 0; index < 205; index += 1) {
       useWorkspace.getState().handleEvent({

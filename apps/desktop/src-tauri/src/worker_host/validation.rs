@@ -72,12 +72,13 @@ pub(super) fn validate_start_draft(draft: &StartDraft) -> Result<(), HostError> 
         ));
     }
     let output = &draft.output;
-    if !matches!(output.mode.as_str(), "compatibility" | "custom")
-        || !matches!(
-            output.conflict_policy.as_str(),
-            "fail" | "overwrite" | "auto_rename" | "skip"
-        )
-        || (!output.txt_enabled && !output.markdown_enabled && !output.srt_enabled)
+    if !matches!(
+        output.mode.as_str(),
+        "compatibility" | "custom" | "source" | "folders"
+    ) || !matches!(
+        output.conflict_policy.as_str(),
+        "fail" | "overwrite" | "auto_rename" | "skip"
+    ) || (!output.txt_enabled && !output.markdown_enabled && !output.srt_enabled)
     {
         return Err(HostError::new(
             "request.invalid",

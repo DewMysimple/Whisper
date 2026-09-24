@@ -90,7 +90,7 @@ apps/
 - apps/web 组件只依赖 typed `DesktopBridge`；Tauri adapter 集中封装白名单 command/event 与原生通知，bridge 之外禁止直接导入 `@tauri-apps/*`，组件不直接导入 Python 或任意 shell。
 - apps/desktop 的正式构建只加载本地静态 WebView 资源，CSP 的 `connect-src 'none'` 保持不变；开发态可从固定 loopback Vite 服务加载同一套 React UI。Rust 只开放精确桌面 command，不开放通用 shell 或生产网络权限。
 - apps/desktop 负责 Worker 进程和 Desktop IPC v1 校验，不实现 preset、转录、后处理或输出内容规则。
-- 默认输出把 TXT、Markdown、SRT 文件直接写入各媒体旁的 `Text`、`Markdown`、`SRT` 文件夹；自定义根目录使用同名一级文件夹，并可分别选择是否额外保留媒体旁 TXT/Markdown 副本，不再把两种副本绑定为同一个开关。
+- 桌面保存策略为跟随（`source`，直接写媒体目录）、文件夹（`folders`，TXT／Markdown → 媒体旁 `Text`，SRT → 媒体旁 `SRT`）和自定义（`custom`，全部直接写所选根目录）。只创建启用格式所需的目录；覆盖／跳过／重命名仍在任务执行前统一规划。IPC v1 保留旧 `compatibility` 与副本字段处理旧任务，CLI 输出规则不变。新 mode 需要配套 Host／Worker。
 - preset 只描述业务参数和后处理策略，不绑定 Python 脚本文件。
 - 任何本地模型、虚拟环境和工作目录均通过 `AppPaths` 解析，不从源码层级反推项目根目录。
 

@@ -499,7 +499,7 @@
       "additionalProperties": false,
       "required": ["mode", "txt", "markdown", "preserve_source_txt", "conflict_policy"],
       "properties": {
-        "mode": { "enum": ["compatibility", "custom"] },
+        "mode": { "enum": ["compatibility", "custom", "source", "folders"] },
         "root_directory": {
           "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
         },
