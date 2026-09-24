@@ -57,6 +57,13 @@
   outline-color: var(--on-accent);
   outline-offset: -4px;
 }
+.primary-button.button-flat.launch-submit {
+  border-color: color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 12px;
+}
+.primary-button.button-flat.launch-submit:not(:disabled):hover {
+  border-color: color-mix(in srgb, currentColor 34%, transparent);
+}
 .secondary-button {
   border-color: color-mix(in srgb, var(--text) 11%, transparent);
   background-color: color-mix(in srgb, var(--surface-raised) 86%, transparent);

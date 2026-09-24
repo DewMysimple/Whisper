@@ -314,7 +314,9 @@ export function LaunchCard() {
           type="button"
         >
           <span className="launch-submit-label">
-            <Play fill="currentColor" size={17} />
+            <span className="launch-submit-icon" aria-hidden="true">
+              <Play fill="currentColor" size={15} />
+            </span>
             {startingTask
               ? '正在准备本地模型…'
               : profileMode === 'subtitle'

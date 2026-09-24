@@ -99,9 +99,9 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     await expect(page.getByLabel('执行前清单')).toBeVisible();
   });
 
-  test(`launch stays flat and keeps readiness feedback below a stable button (${reducedMotion})`, async ({
+  test(`launch stays flat with a refined frame and stable readiness feedback (${reducedMotion})`, async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.emulateMedia({ reducedMotion });
     await page.goto('/');
     await page.getByRole('button', { name: '选择媒体文件', exact: true }).click();
@@ -124,12 +124,25 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
       });
     await expect(launch).toBeEnabled();
     await launch.scrollIntoViewIfNeeded();
+    const iconFrame = launch.locator('.launch-submit-icon');
+    const shortcut = launch.locator('.launch-shortcut');
     for (const theme of ['light', 'dark']) {
       const toggle = page.getByRole('button', {
         name: `切换为${theme === 'dark' ? '深色' : '浅色'}主题`,
       });
       if (await toggle.count()) await toggle.click();
       await launch.scrollIntoViewIfNeeded();
+      await expect(launch).toHaveCSS('border-radius', '12px');
+      await expect(iconFrame).toHaveCSS('width', '26px');
+      await expect(iconFrame).toHaveCSS('height', '26px');
+      await expect(iconFrame).toHaveCSS('border-radius', '8px');
+      await expect(shortcut).toHaveCSS('border-radius', '7px');
+      await expect(shortcut).toHaveCSS('border-width', '1px');
+      await expect(shortcut).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await launch.screenshot({
+        animations: 'disabled',
+        path: testInfo.outputPath(`launch-frame-${theme}-${reducedMotion}.png`),
+      });
       const readyLayout = await readLayout();
       await txt.uncheck();
       await expect(launch).toBeDisabled();
