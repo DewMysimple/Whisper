@@ -8,7 +8,7 @@ from typing import Any
 
 from .contracts import Preset
 from .models import CALIBRATED_MODEL_IDS, TRANSLATION_MODEL_IDS
-from .parameters import PARAMETER_RULES, VAD_PARAMETER_NAMES, normalize_overrides
+from .parameters import ENGINE_DEFAULTS, PARAMETER_RULES, VAD_PARAMETER_NAMES, normalize_overrides
 from .postprocess.strategies import STRATEGY_LABELS
 
 
@@ -64,9 +64,7 @@ def _params(
     compression_ratio_threshold: float,
     log_prob_threshold: float,
     no_speech_threshold: float,
-    condition_on_previous_text: bool,
     initial_prompt: str,
-    min_silence_duration_ms: int,
 ) -> dict[str, Any]:
     return {
         "language": language,
@@ -81,14 +79,21 @@ def _params(
         "compression_ratio_threshold": compression_ratio_threshold,
         "log_prob_threshold": log_prob_threshold,
         "no_speech_threshold": no_speech_threshold,
-        "condition_on_previous_text": condition_on_previous_text,
+        "condition_on_previous_text": False,
         "prompt_reset_on_temperature": 0.5,
         "initial_prompt": initial_prompt,
         "hotwords": None,
         "word_timestamps": False,
+        # faster-whisper retains a custom feature-extractor window on a cached
+        # model. Pin the inherited value so a later task resets a prior override.
+        "chunk_length": ENGINE_DEFAULTS["chunk_length"],
         "vad_filter": True,
         "vad_parameters": {
-            "min_silence_duration_ms": min_silence_duration_ms,
+            # Preserve quiet narration under music. The previous 0.5 threshold
+            # discarded whole spoken sentences before Whisper could decode them.
+            "threshold": 0.05,
+            "min_silence_duration_ms": 2000,
+            "speech_pad_ms": 600,
             "max_speech_duration_s": 999999,
         },
     }
@@ -106,9 +111,7 @@ PRESETS = (
             compression_ratio_threshold=2.4,
             log_prob_threshold=-1.0,
             no_speech_threshold=0.6,
-            condition_on_previous_text=True,
             initial_prompt=CN_PROMPT,
-            min_silence_duration_ms=300,
         ),
         postprocess_strategy="chinese_standard",
     ),
@@ -116,16 +119,14 @@ PRESETS = (
         id="cn2",
         cli_alias="cn2",
         label="中文防幻觉",
-        description="中文防幻觉版，关闭上下文 + 收紧阈值，清理尾部与句内重复幻觉，输出到 Text 文件夹",
+        description="中文防幻觉版，减少上下文循环与重复片段，兼顾轻声旁白，输出到 Text 文件夹",
         group="中文",
         params=_params(
             language="zh",
             compression_ratio_threshold=2.0,
             log_prob_threshold=-1.5,
             no_speech_threshold=0.8,
-            condition_on_previous_text=False,
             initial_prompt=CN_PROMPT,
-            min_silence_duration_ms=500,
         ),
         postprocess_strategy="chinese_anti_hallucination",
     ),
@@ -140,9 +141,7 @@ PRESETS = (
             compression_ratio_threshold=2.4,
             log_prob_threshold=-1.0,
             no_speech_threshold=0.6,
-            condition_on_previous_text=True,
             initial_prompt=EN_PROMPT,
-            min_silence_duration_ms=300,
         ),
         postprocess_strategy="english_standard",
     ),
@@ -157,9 +156,7 @@ PRESETS = (
             compression_ratio_threshold=2.0,
             log_prob_threshold=-1.5,
             no_speech_threshold=0.8,
-            condition_on_previous_text=False,
             initial_prompt=EN_PROMPT,
-            min_silence_duration_ms=500,
         ),
         postprocess_strategy="english_anti_hallucination",
     ),
@@ -184,6 +181,7 @@ _PARAMETER_TYPES = {
     "initial_prompt": str,
     "hotwords": type(None),
     "word_timestamps": bool,
+    "chunk_length": int,
     "vad_filter": bool,
     "vad_parameters": Mapping,
 }
@@ -202,9 +200,11 @@ def _validate_params(preset: Preset, errors: list[str]) -> None:
             errors.append(f"{preset.id}: param {key} must be {expected_name}")
     vad_parameters = preset.params.get("vad_parameters")
     if isinstance(vad_parameters, Mapping):
-        for key in ("min_silence_duration_ms", "max_speech_duration_s"):
+        for key in ("min_silence_duration_ms", "max_speech_duration_s", "speech_pad_ms"):
             if type(vad_parameters.get(key)) is not int:
                 errors.append(f"{preset.id}: vad parameter {key} must be int")
+        if type(vad_parameters.get("threshold")) is not float:
+            errors.append(f"{preset.id}: vad parameter threshold must be float")
 
 
 def validate_registry(presets: Iterable[Preset]) -> None:

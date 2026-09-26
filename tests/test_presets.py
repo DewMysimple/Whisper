@@ -73,18 +73,19 @@ def test_anti_hallucination_presets_have_expected_parameter_differences(
     ]
     assert robust["log_prob_threshold"] < standard["log_prob_threshold"]
     assert robust["no_speech_threshold"] > standard["no_speech_threshold"]
-    assert standard["condition_on_previous_text"] is True
+    assert standard["condition_on_previous_text"] is False
     assert robust["condition_on_previous_text"] is False
     assert (
         robust["vad_parameters"]["min_silence_duration_ms"]
-        > standard["vad_parameters"]["min_silence_duration_ms"]
+        == standard["vad_parameters"]["min_silence_duration_ms"]
+        == 2000
     )
 
 
 def test_display_values_include_nested_and_derived_fields():
     preset = get_preset_by_id("cn2")
     assert "后处理" in DISPLAY_KEYS
-    assert get_display_value(preset, "min_silence_duration_ms") == "500"
+    assert get_display_value(preset, "min_silence_duration_ms") == "2000"
     assert get_display_value(preset, "后处理")
     assert get_display_value(preset, "missing") == "-"
 
@@ -112,7 +113,7 @@ def test_derived_preset_freezes_valid_overrides_without_mutating_registry():
     assert derived.params["vad_parameters"]["min_silence_duration_ms"] == 750
     assert original.params["beam_size"] == 5
     assert original.params["temperature"] == 0.0
-    assert original.params["vad_parameters"]["min_silence_duration_ms"] == 500
+    assert original.params["vad_parameters"]["min_silence_duration_ms"] == 2000
 
 
 @pytest.mark.parametrize("model_id", ["large-v3", "large-v3-turbo"])

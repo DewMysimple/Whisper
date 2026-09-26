@@ -1,1 +1,2 @@
-Hello, this is a whisper transcription regression test. The quick brown fox jumps over the lazy dog.
+Hello,this is a whisper transcription regression test.
+The quick brown fox jumps over the lazy dog.

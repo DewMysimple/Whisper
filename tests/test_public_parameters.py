@@ -89,3 +89,28 @@ def test_public_catalog_matches_installed_engine_signature():
     signature(WhisperModel.transcribe).bind(None, "fixture.wav", **options)
     VadOptions(**options["vad_parameters"])
     assert set(LANGUAGE_CODES) == set(_LANGUAGE_CODES)
+
+
+@pytest.mark.parametrize("preset_id", ["cn", "cn2", "en_v1", "en_v2"])
+def test_inherited_window_resets_previous_task_on_reused_extractor(preset_id):
+    import numpy as np
+    from faster_whisper.feature_extractor import FeatureExtractor
+
+    extractor = FeatureExtractor()
+    observed = []
+
+    def transcribe(path, **options):
+        extractor(np.zeros(16000, dtype=np.float32), chunk_length=options.get("chunk_length"))
+        observed.append(extractor.n_samples // extractor.sampling_rate)
+        return [], SimpleNamespace(language="zh")
+
+    engine = FasterWhisperEngine(
+        SimpleNamespace(transcribe=transcribe),
+        model_name="large-v3-turbo",
+        location=resolve_model_location(Path("test")),
+    )
+    for overrides in ({"chunk_length": 20}, {}):
+        preset = derive_preset(preset_id, overrides, model_id="large-v3-turbo")
+        engine.transcribe("fixture.wav", **preset.transcription_options())
+
+    assert observed == [20, 30]

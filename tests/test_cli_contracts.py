@@ -12,8 +12,8 @@ import pytest
 
 from whisper_subtitle import cli
 from whisper_subtitle.domain.presets import (
+    derive_preset,
     get_postprocess_label,
-    get_preset_by_id,
 )
 
 
@@ -121,7 +121,9 @@ def test_explicit_model_dir_is_scoped_to_one_cli_invocation(monkeypatch, tmp_pat
 def test_cli_alias_resolves_to_recorded_preset_parameters(preset_name):
     snapshots = json.loads(PARAMETERS_PATH.read_text(encoding="utf-8"))
     snapshot = snapshots[preset_name]
-    preset = get_preset_by_id(CLI_TO_PRESET_ID[preset_name])
+    preset = derive_preset(
+        CLI_TO_PRESET_ID[preset_name], {}, model_id="large-v3-turbo"
+    )
 
     assert snapshot["preset_id"] == preset.id
     assert snapshot["params"] == preset.transcription_options()

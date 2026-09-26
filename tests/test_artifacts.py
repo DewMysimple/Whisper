@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from whisper_subtitle.domain.presets import derive_preset, get_preset_by_cli_alias
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_PATH = PROJECT_ROOT / "tests" / "benchmark" / "baseline.json"
@@ -71,7 +73,7 @@ def test_benchmark_schema_declares_cold_and_warm_semantics():
     baseline = load_json(BASELINE_PATH)
     environment = baseline["environment"]
 
-    assert baseline["schema_version"] == 2
+    assert baseline["schema_version"] == 3
     assert environment["runs_per_phase"] >= 3
     assert environment["measurement_runs_per_preset"] == (
         environment["runs_per_phase"] * 2
@@ -87,9 +89,13 @@ def test_parameter_snapshot_matches_benchmark(preset_name):
     baseline = load_json(BASELINE_PATH)["presets"][preset_name]
     snapshot = load_json(PARAMETERS_PATH)[preset_name]
     assert snapshot["preset_id"] == baseline["preset_id"]
-    assert snapshot["script"] == baseline["script"]
+    assert snapshot["entrypoint"] == baseline["entrypoint"]
     assert snapshot["model"] == baseline["model"]
     assert snapshot["params"] == baseline["params"]
+    effective = derive_preset(
+        get_preset_by_cli_alias(preset_name).id, {}, model_id="large-v3-turbo"
+    )
+    assert snapshot["params"] == effective.transcription_options()
     assert snapshot["postprocess"] == baseline["postprocess"]
 
 

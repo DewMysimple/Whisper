@@ -19,13 +19,14 @@ import pynvml
 
 from whisper_subtitle.domain.presets import (
     CLI_ALIASES,
+    derive_preset,
     get_postprocess_label,
     get_preset_by_cli_alias,
 )
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-INPUT_PATH = PROJECT_ROOT / "Log" / "执行2" / "baseline" / "regression_input.wav"
+INPUT_PATH = PROJECT_ROOT / "tests" / "fixtures" / "english_short.wav"
 AUTO_BACKUP_PATH = INPUT_PATH.parent / "Text" / f"{INPUT_PATH.stem}.txt"
 BENCHMARK_DIR = PROJECT_ROOT / "tests" / "benchmark"
 RUNS_DIR = BENCHMARK_DIR / "runs"
@@ -126,6 +127,9 @@ def run_preset(preset_name: str, handle, run_label: str, cli_path: Path) -> dict
     environment["PYTHONUNBUFFERED"] = "1"
     environment["HF_HUB_OFFLINE"] = "1"
     environment["TRANSFORMERS_OFFLINE"] = "1"
+    environment.setdefault(
+        "WHISPER_SUBTITLE_MODEL_DIR", str(PROJECT_ROOT / "models" / "huggingface")
+    )
 
     baseline_gpu = int(pynvml.nvmlDeviceGetMemoryInfo(handle).used)
     started = time.perf_counter()
@@ -217,12 +221,15 @@ def run_preset(preset_name: str, handle, run_label: str, cli_path: Path) -> dict
     golden = GOLDEN_DIR / f"{preset_name}_output.txt"
     if not golden.is_file():
         raise RuntimeError(f"preset {preset_name} golden not found: {golden}")
-    transcript_hash = sha256(transcript)
+    # Windows output uses CRLF; repository goldens use LF. Compare decoded text
+    # so a native line ending cannot masquerade as a recognition regression.
+    transcript_text = transcript.read_text(encoding="utf-8")
+    golden_text = golden.read_text(encoding="utf-8")
     golden_hash = sha256(golden)
-    if transcript_hash != golden_hash:
+    if transcript_text != golden_text:
         raise RuntimeError(
             f"preset {preset_name} output changed: "
-            f"actual={transcript_hash}, golden={golden_hash}"
+            f"actual={transcript_text!r}, golden={golden_text!r}"
         )
 
     peak_process_gpu = samples["peak_process_gpu"]
@@ -234,7 +241,9 @@ def run_preset(preset_name: str, handle, run_label: str, cli_path: Path) -> dict
         peak_gpu = peak_device_delta
         gpu_method = "NVML device-used delta (process metric unavailable)"
 
-    preset = get_preset_by_cli_alias(preset_name)
+    preset = derive_preset(
+        get_preset_by_cli_alias(preset_name).id, {}, model_id="large-v3-turbo"
+    )
     return {
         "preset_id": preset.id,
         "entrypoint": f"whisper-subtitle transcribe --preset {preset.cli_alias}",

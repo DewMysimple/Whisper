@@ -61,8 +61,9 @@ TEXT_PARAMETERS = frozenset({
 LANGUAGE_CODES = tuple("en zh de es ru ko fr ja pt tr pl ca nl ar sv it id hi fi vi he uk el ms cs ro da hu ta no th ur hr bg lt la mi ml cy sk te fa lv bn sr az sl kn et mk br eu is hy ne mn bs kk sq sw gl mr pa si km sn yo so af oc ka be tg sd gu am yi lo uz fo ht ps tk nn mt sa lb my bo tl mg as tt haw ln ha ba jw su yue".split())
 SPECIAL_PARAMETERS = TEXT_PARAMETERS | {"task", "language", "suppress_tokens"}
 
-# Values are used for displaying inherited settings only; they are not injected
-# into tasks unless the user overrides them. Defaults match faster-whisper 1.2.1.
+# Values display inherited settings unless a preset explicitly pins one (for
+# example chunk_length to reset cached extractor state between tasks).
+# Defaults match faster-whisper 1.2.1; calibrated preset values take precedence.
 ENGINE_DEFAULTS = {
     "multilingual": False,
     "language_detection_threshold": 0.5,
