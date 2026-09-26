@@ -17,6 +17,8 @@ From the repository root:
 corepack pnpm release:build
 ```
 
+On Windows, double-click the repository-root `buildStart.cmd` for the same portable build. The window stays open to show the result. It builds the current local source tree and refreshes `dist/WhisperSubtitle/`, `dist/WhisperSubtitle.zip`, and `dist/WhisperSubtitle.sha256`.
+
 The command creates a clean release environment, builds and freezes the headless Worker, copies one direct offline model snapshot, builds the Tauri desktop host, assembles the portable directory, writes a manifest, and creates the adjacent ZIP. Existing generated paths owned by this release pipeline are sent to the Windows Recycle Bin before replacement.
 
 ```text
