@@ -30,6 +30,35 @@ describe('model and parameter workbench', () => {
     expect(isParameterValue('beam_size', 3.5)).toBe(false);
   });
 
+  it('isolates Qwen options and restores existing Whisper profiles on switch back', () => {
+    const store = useWorkspace.getState;
+    store().setParameter('beam_size', 8);
+    store().selectModel('qwen3-asr-1.7b');
+    expect(store().overrides).toEqual({});
+    store().setParameter('beam_size', 7);
+    store().setParameter('language', 'he');
+    expect(store().overrides).toEqual({});
+    store().setParameter('hotwords', '本地术语');
+    expect(store().overrides).toEqual({ hotwords: '本地术语' });
+    store().selectModel('large-v3-turbo');
+    expect(store().parameters.beam_size).toBe(8);
+    expect(store().overrides).toEqual({ beam_size: 8 });
+    store().selectModel('qwen3-asr-1.7b');
+    expect(store().overrides).toEqual({ hotwords: '本地术语' });
+  });
+
+  it('uses backend-specific hardware capabilities in the preview', async () => {
+    const qwen = await desktopBridge.getHardwareCapabilities('qwen3-asr-1.7b');
+    expect(qwen.devices.find((item) => item.device === 'cpu')?.computeTypes).toEqual(['float32']);
+    expect(qwen.devices.find((item) => item.device === 'cuda')?.computeTypes).not.toContain(
+      'int8_float16',
+    );
+    const whisper = await desktopBridge.getHardwareCapabilities('large-v3-turbo');
+    expect(whisper.devices.find((item) => item.device === 'cuda')?.computeTypes).toContain(
+      'int8_float16',
+    );
+  });
+
   it('isolates all supported model/preset profiles and persists null, sequence and text overrides', () => {
     const store = useWorkspace.getState;
     store().setParameter('temperature', 0);

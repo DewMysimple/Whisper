@@ -16,8 +16,8 @@ release_webview_ready:
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
-  CreateDirectory "$INSTDIR\_internal\models\large-v3-turbo"
-  CopyFiles /SILENT "$EXEDIR\_internal\models\large-v3-turbo\*.*" "$INSTDIR\_internal\models\large-v3-turbo"
+  CreateDirectory "$INSTDIR\_internal\models"
+  CopyFiles /SILENT "$EXEDIR\_internal\models\*.*" "$INSTDIR\_internal\models"
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL

@@ -19,7 +19,19 @@ corepack pnpm release:build
 
 On Windows, double-click the repository-root `buildStart.cmd` for the same portable build. The window stays open to show the result. It builds the current local source tree and refreshes `dist/WhisperSubtitle/`, `dist/WhisperSubtitle.zip`, and `dist/WhisperSubtitle.sha256`.
 
-The command creates a clean release environment, builds and freezes the headless Worker, copies one direct offline model snapshot, builds the Tauri desktop host, assembles the portable directory, writes a manifest, and creates the adjacent ZIP. Existing generated paths owned by this release pipeline are sent to the Windows Recycle Bin before replacement.
+The command creates a clean release environment, builds and freezes the headless Worker, copies validated offline model bundles, builds the Tauri desktop host, assembles the portable directory, writes a manifest, and creates the adjacent ZIP. Existing generated paths owned by this release pipeline are sent to the Windows Recycle Bin before replacement. Close the application before replacing its directory; assembly checks for running processes before replacement.
+
+The default Worker includes Whisper and Qwen3-ASR. It bundles Turbo plus any complete local Qwen ASR bundles and their shared ForcedAligner. Qwen adds the PyTorch CUDA and Transformers runtime; the initial dependency download and final package are substantially larger. Model files must already be present: the application does not download them.
+
+```powershell
+# Original Whisper runtime only
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/build.ps1 -WhisperOnly
+
+# Separate validation package while the current portable app is running
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/build.ps1 -OutputRoot "$PWD/dist/qwen-validation"
+```
+
+After validation, `tools/release/assemble.ps1` can reuse the prepared `build/release` stage without downloading or freezing dependencies again. See [Qwen deployment and backend contracts](../../docs/development/qwen_asr.md).
 
 ```text
 dist/
@@ -30,7 +42,7 @@ dist/
 │       ├── worker/
 │       │   ├── whisper-subtitle-worker.exe
 │       │   └── _internal/
-│       ├── models/large-v3-turbo/
+│       ├── models/                 # Turbo and available Qwen bundles
 │       ├── distribution/
 │       │   ├── README.md
 │       │   └── sbom-python.cdx.json
@@ -76,7 +88,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/build.ps1 `
 ## Runtime and model policy
 
 - Windows 11 x64, a compatible NVIDIA GPU/driver and sufficient disk space remain external prerequisites.
-- The portable package contains the desktop host, PyInstaller `onedir` Worker, CUDA user-mode dependencies and one direct `large-v3-turbo` model snapshot.
+- The portable package contains the desktop host, PyInstaller `onedir` Worker, CUDA user-mode dependencies, a direct `large-v3-turbo` snapshot and locally installed Qwen bundles unless `-WhisperOnly` is selected.
 - WebView2 uses the Evergreen runtime. The optional installer medium carries Microsoft's signed x64 offline installer in `_internal/distribution/`; Tauri bundling performs no prerequisite download. The portable application expects the Windows 11 runtime to be present.
 - The Rust Host launches only `_internal/worker/whisper-subtitle-worker.exe` without a shell and injects the packaged `_internal/models` path. Desktop IPC remains stdin/stdout JSONL.
 - Application preferences and WebView data remain in the current Windows user's profile; copying the portable directory does not copy prior settings or output paths.

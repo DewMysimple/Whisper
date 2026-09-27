@@ -37,7 +37,7 @@ def check_environment(
         errors.append(f"当前 Python 解释器不存在: {paths.python_executable}")
     if not paths.model_location.available_models():
         errors.append(
-            f"未找到受支持的本地 Whisper 模型；请安装 {SUPPORTED_MODEL_LABEL}，"
+            f"未找到受支持的本地识别模型；请安装 {SUPPORTED_MODEL_LABEL}，"
             "并检查 WHISPER_SUBTITLE_MODEL_DIR。"
         )
     return errors
@@ -63,7 +63,7 @@ def check_worker_environment(
         errors.append(f"当前 Python 解释器不存在: {paths.python_executable}")
     if not paths.model_location.available_models():
         errors.append(
-            f"未找到受支持的本地 Whisper 模型；请安装 {SUPPORTED_MODEL_LABEL}，"
+            f"未找到受支持的本地识别模型；请安装 {SUPPORTED_MODEL_LABEL}，"
             "并检查 WHISPER_SUBTITLE_MODEL_DIR。"
         )
     return errors

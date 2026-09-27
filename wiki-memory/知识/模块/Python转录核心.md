@@ -3,9 +3,10 @@ type: knowledge
 status: active
 kind: module
 importance: high
-updated: 2026-09-26
+updated: 2026-09-27
 topic: python-transcription-core
 source_logs:
+  - "[[日志/2026-09-27-Qwen本地模型适配与Whisper兼容]]"
   - "[[日志/2026-09-26-校准四预设并修复配乐旁白漏识别]]"
   - "[[日志/2026-08-23-项目记忆重建]]"
   - "[[日志/2026-08-24-架构瘦身实施]]"
@@ -23,7 +24,7 @@ supersedes: null
 - `domain/presets.py` 是四个 preset 的唯一注册表。
 - `domain/postprocess/`、`detail_review.py`、`mixed_language.py`、`quality.py` 负责纯文本、片段质量和候选复核规则。
 - `application/transcribe.py` 是单文件/批量转录的统一编排入口；混合语言和中文细节复核位于 `application/recognition_passes.py`。
-- `infrastructure/whisper_engine.py` 适配 faster-whisper，其他 infrastructure 模块负责 CUDA、硬件、媒体、性能和输出。
+- `infrastructure/engines.py` 选择适配器；`whisper_engine.py` 保留 faster-whisper，`qwen_engine.py` 接入原生 Transformers Qwen3-ASR 和 ForcedAligner。媒体窗口、原始偏移、片段契约与后处理／输出流程共用；见 [[决策/ADR-006-多后端本地识别与Qwen适配]]。
 
 ## 修改规则
 

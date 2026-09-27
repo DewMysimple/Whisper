@@ -1,6 +1,18 @@
-import type { EditableParameters } from '../contracts/desktop';
+import type { EditableParameters, ModelId } from '../contracts/desktop';
+import { isQwenModel } from './models';
 
 export type ParameterKey = keyof EditableParameters;
+export function parameterCopy(modelId: ModelId, name: ParameterKey) {
+  const copy = PARAMETER_COPY[name];
+  const help: Partial<Record<ParameterKey, string>> = {
+    initial_prompt: '术语与背景提示，应用到每个识别窗口，最多 4000 字符。',
+    hotwords: '人名、术语可分行输入，与背景提示共同提供给识别模型。',
+    max_speech_duration_s: '限制语音分段；实际分段同时受识别窗口长度限制。',
+    max_new_tokens: '默认每窗口 440 个 token。达到上限时会报告截断，请缩短窗口后重试。',
+    word_timestamps: '使用共享 ForcedAligner 对齐中文、英语等 11 种语言；SRT 始终启用。',
+  };
+  return isQwenModel(modelId) && help[name] ? { ...copy, help: help[name] } : copy;
+}
 export const PARAMETER_GROUPS: Array<{ title: string; description: string; keys: ParameterKey[] }> =
   [
     {

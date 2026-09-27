@@ -3,7 +3,7 @@ import { Check, Cpu, FolderOpen, RefreshCw, RotateCcw } from 'lucide-react';
 import { desktopBridge } from '../bridge';
 import type { LocalModelDescriptor } from '../contracts/desktop';
 import { PRESETS, getPreset } from '../data/presets';
-import { getModelLabel } from '../data/models';
+import { getModelLabel, isQwenModel, supportsParameter } from '../data/models';
 import { PARAMETER_GROUPS } from '../data/parameterPresentation';
 import { errorMessage } from '../state/workspaceDraft';
 import { useWorkspace } from '../state/workspace';
@@ -107,15 +107,20 @@ function LocalModels() {
                 )}
               </span>
               <span className="config-model-description">
-                {model.id === 'large-v3-turbo'
-                  ? '速度优先 · 原声转录'
-                  : model.id === 'large-v3'
-                    ? '精度优先 · 支持翻译为英语'
-                    : '较低资源占用 · 支持翻译为英语'}
+                {isQwenModel(model.id)
+                  ? '多语言原声转录 · 共享逐词对齐模型'
+                  : model.id === 'large-v3-turbo'
+                    ? '速度优先 · 原声转录'
+                    : model.id === 'large-v3'
+                      ? '精度优先 · 支持翻译为英语'
+                      : '较低资源占用 · 支持翻译为英语'}
               </span>
             </CardButton>
             <div className="config-model-footer">
-              <span className={`config-model-status ${model.installed ? 'is-available' : ''}`}>
+              <span
+                className={`config-model-status ${model.installed ? 'is-available' : ''}`}
+                title={model.detail}
+              >
                 <span aria-hidden="true" />
                 {model.installed ? '本地可用' : '未安装'}
               </span>
@@ -205,27 +210,36 @@ export function ConfigurationView() {
       </section>
       {tab === 'parameters' && (
         <>
-          {PARAMETER_GROUPS.map((group) => (
-            <section
-              className="config-section insight-card"
-              key={group.title}
-              aria-label={group.title}
-            >
-              <header className="config-section-heading">
-                <div>
-                  <p className="step-label">INFERENCE PARAMETERS</p>
-                  <h2>{group.title}</h2>
-                  <p className="config-description">{group.description}</p>
+          {PARAMETER_GROUPS.map((group) => ({
+            ...group,
+            keys: group.keys.filter((name) => supportsParameter(modelId, name)),
+          }))
+            .filter((group) => group.keys.length > 0)
+            .map((group) => (
+              <section
+                className="config-section insight-card"
+                key={group.title}
+                aria-label={group.title}
+              >
+                <header className="config-section-heading">
+                  <div>
+                    <p className="step-label">INFERENCE PARAMETERS</p>
+                    <h2>{group.title}</h2>
+                    <p className="config-description">
+                      {isQwenModel(modelId) && group.title === '解码与采样'
+                        ? '控制每个窗口生成的文字长度。'
+                        : group.description}
+                    </p>
+                  </div>
+                  <span className="config-section-count">{group.keys.length} 项参数</span>
+                </header>
+                <div className="config-parameter-grid">
+                  {group.keys.map((name) => (
+                    <ParameterField key={`${modelId}:${presetId}:${name}`} name={name} />
+                  ))}
                 </div>
-                <span className="config-section-count">{group.keys.length} 项参数</span>
-              </header>
-              <div className="config-parameter-grid">
-                {group.keys.map((name) => (
-                  <ParameterField key={`${modelId}:${presetId}:${name}`} name={name} />
-                ))}
-              </div>
-            </section>
-          ))}
+              </section>
+            ))}
         </>
       )}
     </div>

@@ -119,7 +119,19 @@ fn validate_overrides(
     base_preset_id: &str,
     model_id: &str,
 ) -> Result<(), HostError> {
+    use super::model_catalog::{QWEN_LANGUAGES, QWEN_MODEL_IDS, QWEN_PARAMETER_NAMES};
     for (name, value) in overrides {
+        if QWEN_MODEL_IDS.contains(&model_id)
+            && (!QWEN_PARAMETER_NAMES.contains(&name.as_str())
+                || (name == "language"
+                    && !value.is_null()
+                    && !value.as_str().is_some_and(|v| QWEN_LANGUAGES.contains(&v))))
+        {
+            return Err(HostError::new(
+                "request.invalid",
+                format!("unsupported parameter for {model_id}: {name}"),
+            ));
+        }
         let valid = match name.as_str() {
             "task" => value.as_str().is_some_and(|task| {
                 task == "transcribe"

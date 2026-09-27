@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from ..infrastructure.hardware import HardwareInfo
-from ..infrastructure.whisper_engine import FasterWhisperEngine
+from ..infrastructure.engines import load_engine
+from ..domain.transcription import TranscriptionEngine
 from ..paths import ModelLocation
 from ..protocol import ErrorCode, ErrorMessage, EventMessage
 
@@ -47,9 +48,5 @@ def _default_engine_loader(
     hardware: HardwareInfo,
     location: ModelLocation,
     model_id: str,
-) -> FasterWhisperEngine:
-    return FasterWhisperEngine.load(
-        hardware,
-        location,
-        model_name=model_id,
-    )
+) -> TranscriptionEngine:
+    return load_engine(hardware, location, model_id)

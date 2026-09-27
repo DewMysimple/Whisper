@@ -19,8 +19,8 @@ import type {
 } from '../contracts/desktop';
 import { PERFORMANCE_POLL_INTERVAL_MS } from '../state/performanceWindow';
 import { formatElapsedSeconds } from '../state/taskTiming';
-import { MODEL_IDS } from '../contracts/desktop';
-import { getModelLabel } from '../data/models';
+import { MODEL_IDS, DEFAULT_MODEL_ID } from '../contracts/desktop';
+import { getModelLabel, isQwenModel } from '../data/models';
 import { isCustomTaskDraft } from '../state/workspaceDraft';
 import { executionDevice, executionProblem } from '../state/executionOptions';
 
@@ -146,7 +146,12 @@ export class MockDesktopBridge implements DesktopBridge {
   }
 
   async listLocalModels(): Promise<LocalModelDescriptor[]> {
-    const installed = new Set<ModelId>(['medium', 'large-v3-turbo']);
+    const installed = new Set<ModelId>([
+      'medium',
+      'large-v3-turbo',
+      'qwen3-asr-1.7b',
+      'qwen3-asr-0.6b',
+    ]);
     return MODEL_IDS.map((id) => ({
       id,
       label: getModelLabel(id),
@@ -165,7 +170,7 @@ export class MockDesktopBridge implements DesktopBridge {
     return { shutdown: true };
   }
 
-  async getHardwareCapabilities() {
+  async getHardwareCapabilities(modelId: ModelId = DEFAULT_MODEL_ID) {
     return {
       cpuThreads: 28,
       devices: [
@@ -173,21 +178,23 @@ export class MockDesktopBridge implements DesktopBridge {
           device: 'cpu' as const,
           deviceIndex: 0,
           name: 'Intel Core i7 · 演示',
-          computeTypes: ['int8', 'int8_float32', 'float32'],
+          computeTypes: isQwenModel(modelId) ? ['float32'] : ['int8', 'int8_float32', 'float32'],
         },
         {
           device: 'cuda' as const,
           deviceIndex: 0,
           name: 'RTX 5070 Ti · 演示',
-          computeTypes: [
-            'float16',
-            'float32',
-            'int8',
-            'int8_float16',
-            'int8_float32',
-            'bfloat16',
-            'int8_bfloat16',
-          ],
+          computeTypes: isQwenModel(modelId)
+            ? ['bfloat16', 'float16', 'float32']
+            : [
+                'float16',
+                'float32',
+                'int8',
+                'int8_float16',
+                'int8_float32',
+                'bfloat16',
+                'int8_bfloat16',
+              ],
         },
       ],
     };
@@ -223,7 +230,7 @@ export class MockDesktopBridge implements DesktopBridge {
     options: StartTranscriptionOptions = {},
   ): Promise<{ taskId: string }> {
     const execution = { ...draft.execution };
-    const capabilities = await this.getHardwareCapabilities();
+    const capabilities = await this.getHardwareCapabilities(draft.modelId);
     const problem = executionProblem(execution, capabilities);
     if (problem) throw new Error(problem);
     const device = executionDevice(execution, capabilities)!;
@@ -258,8 +265,12 @@ export class MockDesktopBridge implements DesktopBridge {
           execution.compute_type && execution.compute_type !== 'auto'
             ? execution.compute_type
             : device.device === 'cuda'
-              ? 'float16'
-              : 'int8',
+              ? isQwenModel(draft.modelId)
+                ? 'bfloat16'
+                : 'float16'
+              : isQwenModel(draft.modelId)
+                ? 'float32'
+                : 'int8',
         cpuThreads: execution.cpu_threads ?? (device.device === 'cuda' ? 0 : 4),
       },
       mediaPaths,

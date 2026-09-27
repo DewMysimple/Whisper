@@ -33,9 +33,10 @@ def test_transcribe_forwards_preset_input_output_and_exit_code(
 ):
     observed = {}
 
-    def fake_run(request, *, progress_format):
+    def fake_run(request, *, progress_format, model_id):
         observed["request"] = request
         observed["progress_format"] = progress_format
+        observed["model_id"] = model_id
         return 7
 
     monkeypatch.setattr(
@@ -63,12 +64,13 @@ def test_transcribe_forwards_preset_input_output_and_exit_code(
     assert observed["request"].output_dir == Path("output folder")
     assert observed["request"].desktop is True
     assert observed["progress_format"] == "jsonl"
+    assert observed["model_id"] == "large-v3-turbo"
 
 
 def test_transcribe_omits_default_output_argument(monkeypatch):
     observed = {}
 
-    def fake_run(request, *, progress_format):
+    def fake_run(request, *, progress_format, model_id):
         observed["request"] = request
         observed["progress_format"] = progress_format
         return 0
@@ -85,7 +87,7 @@ def test_transcribe_omits_default_output_argument(monkeypatch):
 
 
 def test_transcribe_propagates_application_failure(monkeypatch):
-    def fake_run(_request, *, progress_format):
+    def fake_run(_request, *, progress_format, model_id):
         raise RuntimeError("application failure")
 
     monkeypatch.setattr(
@@ -101,7 +103,7 @@ def test_explicit_model_dir_is_scoped_to_one_cli_invocation(monkeypatch, tmp_pat
     observed = {}
     monkeypatch.setenv("WHISPER_SUBTITLE_MODEL_DIR", "previous-model-home")
 
-    def fake_run(_request, *, progress_format):
+    def fake_run(_request, *, progress_format, model_id):
         observed["model_dir"] = os.environ["WHISPER_SUBTITLE_MODEL_DIR"]
         return 0
 

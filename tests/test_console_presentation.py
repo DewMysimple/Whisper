@@ -53,7 +53,7 @@ def test_request_adapter_returns_application_batch_exit_code(monkeypatch):
         def __init__(self, *, progress):
             observed["progress"] = progress
 
-        def run(self, request, *, engine=None):
+        def run(self, request, *, engine=None, model_id=None):
             observed["request"] = request
             observed["engine"] = engine
             return SimpleNamespace(exit_code=7)

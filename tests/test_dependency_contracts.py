@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import tomllib
 from pathlib import Path
 
 
@@ -10,14 +11,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REMOVED = {"torch", "torchaudio", "torchvision"}
 
 
-def test_removed_pytorch_packages_are_not_declared():
-    declarations = (
-        (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        + (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8")
-    ).lower()
-
-    for package in REMOVED:
-        assert package not in declarations
+def test_pytorch_is_optional_and_whisper_install_remains_lightweight():
+    project = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert not any(package in dependency for package in REMOVED for dependency in project["dependencies"])
+    assert any(dependency.startswith("torch==") for dependency in project["optional-dependencies"]["qwen"])
+    assert not any(package in str(project) for package in {"torchaudio", "torchvision"})
 
 
 def test_production_source_has_no_removed_pytorch_imports():

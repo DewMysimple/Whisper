@@ -1,8 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+import os
 
-from PyInstaller.utils.hooks import collect_all, collect_data_files, copy_metadata
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules, copy_metadata
 
 
 PROJECT_ROOT = Path(SPEC).resolve().parents[2]
@@ -14,6 +15,18 @@ binaries = []
 # pynvml is imported dynamically by the performance sampler. PyInstaller cannot
 # discover that import from static analysis, so the frozen Worker must declare it.
 hiddenimports = ["pynvml"]
+bundle_qwen = os.environ.get("WHISPER_SUBTITLE_BUNDLE_QWEN") == "1"
+excludes = ["tkinter", "pytest", "torchvision", "torchaudio", "librosa", "numba", "scipy", "sklearn"]
+if bundle_qwen:
+    for package in ("transformers.models.qwen3_asr", "transformers.models.qwen3"):
+        hiddenimports += collect_submodules(package)
+    hiddenimports += ["torch", "transformers", "safetensors.torch"]
+    # Transformers inspects source files to construct lazy import maps.
+    datas += collect_data_files("transformers", include_py_files=True)
+    for distribution in ("torch", "transformers", "safetensors", "regex", "tqdm", "packaging", "pyyaml"):
+        datas += copy_metadata(distribution)
+else:
+    excludes += ["torch", "transformers"]
 
 for distribution in (
     "whisper_subtitle",
@@ -53,10 +66,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    # Torch is not part of the Worker runtime. Excluding optional ML stacks
-    # keeps a developer environment with Torch installed from inflating the
-    # frozen onedir by several gigabytes through PyInstaller's optional hooks.
-    excludes=["tkinter", "pytest", "torch", "torchvision", "torchaudio"],
+    excludes=excludes,
     noarchive=False,
     optimize=1,
 )

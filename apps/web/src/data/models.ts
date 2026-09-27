@@ -1,14 +1,20 @@
 import type { ModelId } from '../contracts/desktop';
-
-const MODEL_LABELS: Record<ModelId, string> = {
-  tiny: 'Tiny',
-  base: 'Base',
-  small: 'Small',
-  medium: 'Medium',
-  'large-v3': 'Large V3',
-  'large-v3-turbo': 'Large V3 Turbo',
-};
+import { MODEL_CAPABILITIES } from '../contracts/modelCatalog.generated';
 
 export function getModelLabel(modelId: ModelId): string {
-  return MODEL_LABELS[modelId];
+  return MODEL_CAPABILITIES[modelId].label;
+}
+
+export function isQwenModel(modelId: ModelId): boolean {
+  return MODEL_CAPABILITIES[modelId].backend === 'qwen3-asr';
+}
+
+export function supportsParameter(modelId: ModelId, name: string): boolean {
+  const parameters: readonly string[] | null = MODEL_CAPABILITIES[modelId].parameters;
+  return parameters === null || parameters.includes(name);
+}
+
+export function supportsLanguage(modelId: ModelId, value: unknown): boolean {
+  const languages: readonly string[] | null = MODEL_CAPABILITIES[modelId].languages;
+  return value === null || languages === null || languages.includes(String(value));
 }

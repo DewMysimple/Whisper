@@ -343,11 +343,17 @@ async fn restart_worker(state: State<'_, HostState>) -> Result<HostStatus, HostE
 }
 
 #[tauri::command]
-async fn worker_environment(state: State<'_, HostState>) -> Result<Value, HostError> {
+async fn worker_environment(
+    state: State<'_, HostState>,
+    model_id: Option<String>,
+) -> Result<Value, HostError> {
     let manager = Arc::clone(&state.0);
-    tauri::async_runtime::spawn_blocking(move || manager.environment())
-        .await
-        .map_err(|error| HostError::new("host.task_failed", error.to_string()))?
+    tauri::async_runtime::spawn_blocking(move || match model_id {
+        Some(id) => manager.environment_for_model(&id),
+        None => manager.environment(),
+    })
+    .await
+    .map_err(|error| HostError::new("host.task_failed", error.to_string()))?
 }
 
 #[tauri::command]

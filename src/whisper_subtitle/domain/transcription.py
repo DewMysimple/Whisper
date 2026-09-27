@@ -5,8 +5,31 @@ from __future__ import annotations
 from collections.abc import Iterable
 from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
+from dataclasses import dataclass
 
 from .mixed_language import LanguageDetectionRegion
+
+
+@dataclass(frozen=True, slots=True)
+class TranscribedWord:
+    start: float
+    end: float
+    word: str
+
+
+@dataclass(frozen=True, slots=True)
+class TranscribedSegment:
+    start: float
+    end: float
+    text: str
+    words: tuple[TranscribedWord, ...] | None = None
+
+
+@dataclass(slots=True)
+class TranscriptionInfo:
+    duration: float
+    language: str | None = None
+    language_probability: float | None = None
 
 
 @runtime_checkable
@@ -19,6 +42,10 @@ class TranscriptionEngine(Protocol):
         **options: Any,
     ) -> tuple[Iterable[Any], Any]:
         """Transcribe one media path with preset-specific options."""
+
+@runtime_checkable
+class LanguageRegionDetector(TranscriptionEngine, Protocol):
+    """Optional secondary-recognition capability provided by Whisper."""
 
     def detect_language_regions(
         self,

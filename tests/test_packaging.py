@@ -98,10 +98,10 @@ def test_worker_bundle_is_onedir_and_release_has_no_legacy_gui_dependency():
     build_requirements = (RELEASE_TOOLS / "requirements-build.txt").read_text(encoding="utf-8")
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "COLLECT(" in spec
-    assert (
-        'excludes=["tkinter", "pytest", "torch", "torchvision", "torchaudio"]'
-        in spec
-    )
+    assert 'excludes += ["torch", "transformers"]' in spec
+    assert 'WHISPER_SUBTITLE_BUNDLE_QWEN' in spec
+    assert '[switch]$WhisperOnly' in build_script
+    assert 'stage_models.py' in build_script
     assert 'hiddenimports = ["pynvml"]' in spec
     assert "PyQt5" not in spec
     assert "Copy-Item -LiteralPath $WorkerSource" in build_script
@@ -150,13 +150,14 @@ def test_release_output_has_a_shallow_user_facing_layout():
     assert 'Join-Path $DistRoot "WhisperSubtitle.zip"' in assemble_script
     assert 'Join-Path $ApplicationRoot "WhisperSubtitle.exe"' in assemble_script
     assert 'Join-Path $ApplicationRoot "_internal"' in assemble_script
-    assert 'Join-Path $InternalStage "models\\large-v3-turbo"' in assemble_script
+    assert 'Join-Path $InternalStage "models\\*"' in assemble_script
     assert "Resolve-WebView2Installer" in assemble_script
     assert "Get-AuthenticodeSignature" in assemble_script
     assert "MicrosoftEdgeWebView2RuntimeInstallerX64.exe" in assemble_script
     assert "[Security.Cryptography.SHA256]::Create()" in assemble_script
     assert "Get-FileHash" not in assemble_script
-    assert 'Join-Path $DistRoot "release"' in build_script
+    assert '"Close the running WhisperSubtitle' in assemble_script
+    assert '-not $_.HasExited' in assemble_script
     assert "WhisperSubtitle-portable" not in assemble_script
     assert "dist\\release" not in assemble_script
 

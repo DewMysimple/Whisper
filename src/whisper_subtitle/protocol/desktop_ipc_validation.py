@@ -12,6 +12,7 @@ from ..domain.models import (
     TRANSLATION_MODEL_IDS,
 )
 from ..domain.parameters import normalize_overrides
+from ..domain.backend_parameters import validate_model_overrides
 from .desktop_ipc import (
     CommandMethod,
     ErrorCode,
@@ -174,6 +175,7 @@ def _validate_parameter_overrides(
     )
     try:
         normalized = normalize_overrides(overrides)
+        validate_model_overrides(model_id, normalized)
         if normalized.get("task") == "translate" and (
             base_preset_id not in {"en_v1", "en_v2"}
             or model_id not in TRANSLATION_MODEL_IDS
@@ -376,7 +378,6 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
     params = _require_object(value, "params", code=ErrorCode.REQUEST_INVALID)
     if method in {
         CommandMethod.SYSTEM_HEALTH,
-        CommandMethod.SYSTEM_ENVIRONMENT,
         CommandMethod.SYSTEM_METRICS,
         CommandMethod.MODEL_UNLOAD,
         CommandMethod.WORKER_SHUTDOWN,
@@ -387,7 +388,7 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
             field_name="params",
             code=ErrorCode.REQUEST_INVALID,
         )
-    elif method is CommandMethod.MODEL_LOAD:
+    elif method in {CommandMethod.MODEL_LOAD, CommandMethod.SYSTEM_ENVIRONMENT}:
         _require_fields(
             params,
             required=set(),
@@ -397,6 +398,8 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
         )
         if "model_id" in params:
             _require_nonempty_string(params["model_id"], "params.model_id")
+            if params["model_id"] not in _MODEL_IDS:
+                raise ProtocolValidationError(ErrorCode.REQUEST_INVALID, "params.model_id is unsupported")
     elif method is CommandMethod.MEDIA_INSPECT:
         _require_fields(
             params,

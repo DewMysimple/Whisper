@@ -3,6 +3,7 @@ param(
     [string]$BuildRoot = "",
     [string]$SigningConfig = "",
     [string]$WebView2Installer = "",
+    [string]$OutputRoot = "",
     [switch]$IncludeInstaller
 )
 
@@ -16,6 +17,13 @@ $StageRoot = Join-Path $BuildRoot "stage"
 $InternalStage = Join-Path $StageRoot "_internal"
 $Python = Join-Path $BuildRoot "environment\Scripts\python.exe"
 $DistRoot = Join-Path $RepositoryRoot "dist"
+if ($OutputRoot) {
+    $candidate = [System.IO.Path]::GetFullPath($OutputRoot)
+    if (-not $candidate.StartsWith(($DistRoot + "\"), [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "OutputRoot must be a directory below the repository dist directory"
+    }
+    $DistRoot = $candidate
+}
 $ApplicationRoot = Join-Path $DistRoot "WhisperSubtitle"
 $ArchivePath = Join-Path $DistRoot "WhisperSubtitle.zip"
 $ChecksumPath = Join-Path $DistRoot "WhisperSubtitle.sha256"
@@ -86,6 +94,8 @@ foreach ($required in @($Python, $WorkerExe, $PythonSbom, (Join-Path $InternalSt
 
 Push-Location $RepositoryRoot
 try {
+    $running = Get-Process | Where-Object { -not $_.HasExited -and $_.Path -and $_.Path.StartsWith(($ApplicationRoot + "\"), [System.StringComparison]::OrdinalIgnoreCase) }
+    if ($running) { throw "Close the running WhisperSubtitle before replacing $ApplicationRoot, or choose -OutputRoot for a separate validation build." }
     New-Item -ItemType Directory -Force -Path $DistRoot | Out-Null
     foreach ($generated in @($ApplicationRoot, $ArchivePath, $ChecksumPath, $InstallerRoot)) {
         Send-ToRecycleBin $generated
@@ -158,7 +168,7 @@ try {
         $InstallerInternal = Join-Path $InstallerRoot "_internal"
         New-Item -ItemType Directory -Force -Path (Join-Path $InstallerInternal "models") | Out-Null
         Copy-Item -LiteralPath $Installer.FullName -Destination (Join-Path $InstallerRoot "WhisperSubtitle-Setup.exe")
-        Copy-Item -LiteralPath (Join-Path $InternalStage "models\large-v3-turbo") -Destination (Join-Path $InstallerInternal "models\large-v3-turbo") -Recurse
+        Copy-Item -Path (Join-Path $InternalStage "models\*") -Destination (Join-Path $InstallerInternal "models") -Recurse
         Copy-Item -LiteralPath $DistributionStage -Destination (Join-Path $InstallerInternal "distribution") -Recurse
         Copy-Item -LiteralPath $ResolvedWebView2Installer -Destination (Join-Path $InstallerInternal "distribution\MicrosoftEdgeWebView2RuntimeInstallerX64.exe")
         Copy-Item -LiteralPath $UserGuideSource -Destination (Join-Path $InstallerRoot $UserGuideFileName)

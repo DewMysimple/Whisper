@@ -395,7 +395,7 @@ export interface DesktopBridge {
   restartWorker(): Promise<HostStatus>;
   listLocalModels(): Promise<LocalModelDescriptor[]>;
   openModelDirectory(modelId: ModelId): Promise<void>;
-  getHardwareCapabilities(): Promise<HardwareCapabilities>;
+  getHardwareCapabilities(modelId?: ModelId): Promise<HardwareCapabilities>;
   getPowerCapabilities(): Promise<PowerCapabilities>;
   getPowerActionStatus(): Promise<PowerActionStatus>;
   cancelPowerAction(): Promise<PowerActionStatus>;

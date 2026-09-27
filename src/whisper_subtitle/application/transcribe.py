@@ -27,12 +27,14 @@ from ..domain.postprocess import (
     merge_chinese_segments_to_sentences,
     merge_english_segments_to_sentences,
 )
-from ..domain.presets import resolve_preset
+from ..domain.presets import derive_preset, resolve_preset
+from ..domain.backend_parameters import is_qwen_model
 from ..domain.quality import build_recognition_quality_diagnostics
 from ..domain.transcription import TranscriptionEngine
 from ..domain.subtitles import build_srt_document
 from ..domain.transcript_layout import build_transcript_document
 from ..infrastructure.hardware import HardwareDetector, HardwareInfo
+from ..infrastructure.engines import hardware_detector as backend_hardware_detector, load_engine
 from ..infrastructure.media_files import MediaDiscoveryError, discover_media_files
 from ..infrastructure.output_store import (
     OutputPlan,
@@ -120,8 +122,14 @@ class TranscriptionService:
             )
         )
 
-    def _create_default_engine(self, preset_id: str) -> TranscriptionEngine:
+    def _create_default_engine(self, preset_id: str, model_id: str = DEFAULT_MODEL_ID) -> TranscriptionEngine:
         location = self._configure_runtime()
+        if model_id != DEFAULT_MODEL_ID:
+            hardware = backend_hardware_detector(model_id).resolve({})
+            self._emit("model_loading", f"正在加载本地模型 {model_id} ({hardware.device}/{hardware.compute_type})", preset_id=preset_id)
+            engine = load_engine(hardware, location, model_id)
+            self._emit("model_loaded", "模型加载完成", preset_id=preset_id)
+            return engine
         hardware = self._detect_hardware()
         if hardware.cuda_available:
             hardware_message = "\n".join(
@@ -202,7 +210,10 @@ class TranscriptionService:
         if mixed_recognition and model_id not in SECONDARY_RECOGNITION_MODEL_IDS:
             raise ValueError("mixed_zh_en requires a Large V3 or Large V3 Turbo model")
         segments, info = engine.transcribe(str(media_path), **params)
-        if params.get("language") is None:
+        probability = getattr(info, "language_probability", None)
+        if probability is None:
+            language_message = f"🌐 识别语言: {info.language or '未识别到语音'}"
+        elif params.get("language") is None:
             language_message = (
                 f"🌐 检测到主要语言: {info.language} "
                 f"(概率: {info.language_probability:.2f})；原声转录已开启"
@@ -225,7 +236,13 @@ class TranscriptionService:
         media_duration = getattr(info, "duration", None)
         last_progress_emit = 0.0
         last_progress_percent = -1.0
-        for segment in segments:
+        segment_iterator = iter(segments)
+        while True:
+            self._check_cancelled()
+            try:
+                segment = next(segment_iterator)
+            except StopIteration:
+                break
             self._check_cancelled()
             segment_list.append(segment)
             segment_end = getattr(segment, "end", None)
@@ -497,9 +514,12 @@ class TranscriptionService:
         request: TranscriptionRequest,
         *,
         engine: TranscriptionEngine | None = None,
+        model_id: str = DEFAULT_MODEL_ID,
     ) -> BatchResult:
         """Run discovery, model setup and every file in a resilient batch."""
         preset = resolve_preset(request.preset_id)
+        if is_qwen_model(model_id):
+            preset = derive_preset(preset.id, {}, model_id=model_id)
         try:
             media_files = discover_media_files(request.input_path)
         except MediaDiscoveryError as exc:
@@ -525,7 +545,7 @@ class TranscriptionService:
             request.recognition_strategy,
         )
         active_engine = (
-            engine if engine is not None else self._create_default_engine(preset.id)
+            engine if engine is not None else self._create_default_engine(preset.id, model_id)
         )
         listing = "\n".join(f"   • {path}" for path in media_files)
         self._emit(
@@ -553,6 +573,8 @@ class TranscriptionService:
                     active_engine,
                     current=current,
                     total=total,
+                    preset=preset,
+                    model_id=model_id,
                 )
             except TranscriptionCancelled:
                 raise

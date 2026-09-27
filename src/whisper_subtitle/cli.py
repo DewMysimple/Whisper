@@ -12,6 +12,7 @@ from .domain.presets import (
     get_preset_by_cli_alias,
 )
 from .paths import MODEL_DIR_ENV
+from .domain.models import DEFAULT_MODEL_ID, SUPPORTED_MODEL_IDS
 
 
 def _configure_cli_encoding():
@@ -56,6 +57,8 @@ def _build_parser():
         "--model-dir",
         help="本地模型目录或 Hugging Face 缓存根目录",
     )
+    transcribe.add_argument("--model", choices=SUPPORTED_MODEL_IDS, default=DEFAULT_MODEL_ID,
+                            help="本地识别模型（默认: large-v3-turbo）")
 
     subparsers.add_parser("check", help="运行环境自检")
     worker = subparsers.add_parser("worker", help="启动无界面的常驻推理 Worker")
@@ -84,7 +87,7 @@ def _run_transcribe(args):
     if args.model_dir:
         os.environ[MODEL_DIR_ENV] = args.model_dir
     try:
-        return run_transcription_request(request, progress_format=args.progress)
+        return run_transcription_request(request, progress_format=args.progress, model_id=args.model)
     finally:
         if args.model_dir:
             if previous_model_dir is None:

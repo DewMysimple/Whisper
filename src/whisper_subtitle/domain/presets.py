@@ -7,6 +7,7 @@ from types import MappingProxyType
 from typing import Any
 
 from .contracts import Preset
+from .backend_parameters import is_qwen_model, qwen_defaults, validate_model_overrides
 from .models import CALIBRATED_MODEL_IDS, TRANSLATION_MODEL_IDS
 from .parameters import ENGINE_DEFAULTS, PARAMETER_RULES, VAD_PARAMETER_NAMES, normalize_overrides
 from .postprocess.strategies import STRATEGY_LABELS
@@ -281,8 +282,9 @@ def derive_preset(
     if not isinstance(overrides, Mapping):
         raise TypeError("overrides must be a mapping")
     overrides = normalize_overrides(overrides)
+    validate_model_overrides(model_id, overrides)
 
-    params = base.transcription_options()
+    params = qwen_defaults() if is_qwen_model(model_id) else base.transcription_options()
     if model_id in MODEL_CALIBRATED_IDS:
         # Detect a stable primary language from multiple windows. faster-whisper
         # 1.2.1's `multilingual=True` chooses one language token independently

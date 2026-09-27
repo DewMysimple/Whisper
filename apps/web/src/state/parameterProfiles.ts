@@ -8,6 +8,7 @@ import {
   type RecognitionStrategy,
 } from '../contracts/desktop';
 import { getPreset } from '../data/presets';
+import { supportsParameter, supportsLanguage } from '../data/models';
 
 export const DEFAULT_RECOGNITION_STRATEGY: RecognitionStrategy = 'stable_primary';
 
@@ -81,6 +82,13 @@ export function sanitizeProfileOverrides(
   overrides: Partial<EditableParameters>,
 ): Partial<EditableParameters> {
   const sanitized = { ...overrides };
+  for (const name of Object.keys(sanitized) as (keyof EditableParameters)[]) {
+    if (
+      !supportsParameter(modelId, name) ||
+      (name === 'language' && !supportsLanguage(modelId, sanitized[name]))
+    )
+      delete sanitized[name];
+  }
   if (sanitized.task === 'translate' && !translationTaskSupported(modelId, presetId)) {
     delete sanitized.task;
   }

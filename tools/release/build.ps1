@@ -4,7 +4,9 @@ param(
     [string]$ModelDir = "",
     [string]$SigningConfig = "",
     [string]$WebView2Installer = "",
-    [switch]$IncludeInstaller
+    [string]$OutputRoot = "",
+    [switch]$IncludeInstaller,
+    [switch]$WhisperOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +16,7 @@ $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $BuildRoot = Join-Path $RepositoryRoot "build\release"
 $StageRoot = Join-Path $BuildRoot "stage"
 $DistRoot = Join-Path $RepositoryRoot "dist"
+$IncludeQwen = -not $WhisperOnly
 
 function Send-ToRecycleBin([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return }
@@ -45,19 +48,6 @@ function Assert-LastExitCode([string]$Step) {
     if ($LASTEXITCODE -ne 0) { throw "$Step failed with exit code $LASTEXITCODE" }
 }
 
-function Resolve-DirectModel([string]$Candidate) {
-    $root = if ($Candidate) { (Resolve-Path -LiteralPath $Candidate).Path } else { Join-Path $RepositoryRoot "models\huggingface" }
-    if ((Test-Path (Join-Path $root "config.json")) -and (Test-Path (Join-Path $root "model.bin"))) {
-        return $root
-    }
-    $config = Get-ChildItem -LiteralPath $root -Recurse -Filter "config.json" -File |
-        Where-Object { Test-Path -LiteralPath (Join-Path $_.DirectoryName "model.bin") } |
-        Sort-Object FullName |
-        Select-Object -First 1
-    if (-not $config) { throw "No complete direct large-v3-turbo model found below $root" }
-    return $config.DirectoryName
-}
-
 Push-Location $RepositoryRoot
 try {
     $pyproject = Get-Content -Encoding utf8 -Raw "pyproject.toml"
@@ -73,18 +63,13 @@ try {
 
     if (-not $BootstrapPython) { $BootstrapPython = Join-Path $RepositoryRoot "whisper_env\Scripts\python.exe" }
     $BootstrapPython = (Resolve-Path -LiteralPath $BootstrapPython).Path
-    $DirectModel = Resolve-DirectModel $ModelDir
+    $ModelSource = if ($ModelDir) { (Resolve-Path -LiteralPath $ModelDir).Path } else { Join-Path $RepositoryRoot "models\huggingface" }
+    $ModelArguments = @("--source", $ModelSource)
+    if ($IncludeQwen) { $ModelArguments += "--include-qwen" }
+    & $BootstrapPython "tools/release/stage_models.py" @ModelArguments
+    Assert-LastExitCode "local model bundle validation"
 
     Send-ToRecycleBin $BuildRoot
-    foreach ($generated in @(
-        (Join-Path $DistRoot "WhisperSubtitle"),
-        (Join-Path $DistRoot "WhisperSubtitle.zip"),
-        (Join-Path $DistRoot "WhisperSubtitle.sha256"),
-        (Join-Path $DistRoot "installer"),
-        (Join-Path $DistRoot "release")
-    )) {
-        Send-ToRecycleBin $generated
-    }
     New-Item -ItemType Directory -Force -Path $BuildRoot, $StageRoot, $DistRoot | Out-Null
 
     $BuildEnv = Join-Path $BuildRoot "environment"
@@ -104,14 +89,26 @@ try {
     if ($Wheels.Count -ne 1) { throw "Expected exactly one project wheel, found $($Wheels.Count)" }
     & $Python -m pip install --no-deps $Wheels[0].FullName
     Assert-LastExitCode "project wheel install"
+    if ($IncludeQwen) {
+        $TorchRequirement = & $Python -c "import importlib.metadata as m; print(next(r.split(';')[0].strip() for r in m.requires('whisper_subtitle') if r.startswith('torch==')))"
+        Assert-LastExitCode "Qwen runtime requirement from project metadata"
+        & $Python -m pip install --disable-pip-version-check --timeout 60 --retries 8 $TorchRequirement --index-url "https://download.pytorch.org/whl/cu128"
+        Assert-LastExitCode "Qwen CUDA runtime install"
+        & $Python -m pip install --disable-pip-version-check --timeout 60 --retries 8 "$($Wheels[0].FullName)[qwen]"
+        Assert-LastExitCode "Qwen optional dependencies"
+    }
     & $Python -m pip check
     Assert-LastExitCode "fresh build environment pip check"
 
     $PyInstallerRoot = Join-Path $BuildRoot "pyinstaller"
     $WorkerDist = Join-Path $PyInstallerRoot "dist"
     $WorkerWork = Join-Path $PyInstallerRoot "work"
-    & $Python -m PyInstaller --clean --noconfirm --distpath $WorkerDist --workpath $WorkerWork "tools/release/worker.spec"
-    Assert-LastExitCode "PyInstaller Worker build"
+    $PreviousBundleQwen = $env:WHISPER_SUBTITLE_BUNDLE_QWEN
+    try {
+        $env:WHISPER_SUBTITLE_BUNDLE_QWEN = if ($IncludeQwen) { "1" } else { "0" }
+        & $Python -m PyInstaller --clean --noconfirm --distpath $WorkerDist --workpath $WorkerWork "tools/release/worker.spec"
+        Assert-LastExitCode "PyInstaller Worker build"
+    } finally { $env:WHISPER_SUBTITLE_BUNDLE_QWEN = $PreviousBundleQwen }
     $WorkerSource = Join-Path $WorkerDist "whisper-subtitle-worker"
     if (-not (Test-Path -LiteralPath (Join-Path $WorkerSource "whisper-subtitle-worker.exe"))) {
         throw "Frozen Worker executable was not produced"
@@ -124,10 +121,10 @@ try {
     Assert-LastExitCode "CycloneDX SBOM generation"
     Copy-Item -LiteralPath "tools/release/README.md" -Destination (Join-Path $DistributionStage "README.md")
     Copy-Item -LiteralPath $WorkerSource -Destination (Join-Path $InternalStage "worker") -Recurse
-    New-Item -ItemType Directory -Force -Path (Join-Path $InternalStage "models") | Out-Null
-    Copy-Item -LiteralPath $DirectModel -Destination (Join-Path $InternalStage "models\large-v3-turbo") -Recurse
+    & $Python "tools/release/stage_models.py" @ModelArguments --destination (Join-Path $InternalStage "models")
+    Assert-LastExitCode "offline model bundles"
 
-    & (Join-Path $PSScriptRoot "assemble.ps1") -BuildRoot $BuildRoot -SigningConfig $SigningConfig -WebView2Installer $WebView2Installer -IncludeInstaller:$IncludeInstaller
+    & (Join-Path $PSScriptRoot "assemble.ps1") -BuildRoot $BuildRoot -OutputRoot $OutputRoot -SigningConfig $SigningConfig -WebView2Installer $WebView2Installer -IncludeInstaller:$IncludeInstaller
     Assert-LastExitCode "release assembly"
 } finally {
     Pop-Location

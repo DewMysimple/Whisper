@@ -3,7 +3,7 @@ type: moc
 status: active
 kind: process
 importance: high
-updated: 2026-09-26
+updated: 2026-09-27
 topic: work-log-index
 source_logs: []
 supersedes: null
@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-27 | feature | 按用户授权接入前述 Qwen3-ASR，保留以前的模型和使用方式，维护公共边界与可扩展能力来源。 | archived | qwen-backend-integration-2026-09-27 | [[日志/2026-09-27-Qwen本地模型适配与Whisper兼容.md|Qwen 本地模型适配与 Whisper 兼容]] |
 | 2026-09-26 | bug | - | archived | narration-preset-calibration-20260926 | [[日志/2026-09-26-校准四预设并修复配乐旁白漏识别.md|校准四预设并修复配乐旁白漏识别]] |
 | 2026-09-26 | operations | 提供可双击运行的构建入口，用当前本地源码更新完整便携版 `dist`。 | archived | one-click-portable-build-2026-09-26 | [[日志/2026-09-26-新增一键便携构建入口并更新dist.md|新增一键便携构建入口并更新 dist]] |
 | 2026-09-25 | ui | 针对开发服务器调整转录工作台的媒体进度与本地转录区域：未选择输出格式时不再在启动区重复提示；操作区与左侧“模型与参数”入口卡同顶同高；重新设计内层排版和视觉融合。 | archived | launch-action-layout-refinement | [[日志/2026-09-25-重设计启动操作面板内部布局.md|重设计启动操作面板内部布局]] |

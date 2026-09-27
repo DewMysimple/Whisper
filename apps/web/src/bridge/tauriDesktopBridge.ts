@@ -224,9 +224,11 @@ export class TauriDesktopBridge implements DesktopBridge {
     await invoke('open_model_directory', { modelId });
   }
 
-  async getHardwareCapabilities() {
+  async getHardwareCapabilities(modelId?: ModelId) {
     await this.ensureNativeListeners();
-    const envelope = await invoke<WorkerEnvelope>('worker_environment');
+    const envelope = modelId
+      ? await invoke<WorkerEnvelope>('worker_environment', { modelId })
+      : await invoke<WorkerEnvelope>('worker_environment');
     return readHardwareCapabilities(envelope.data.result);
   }
 

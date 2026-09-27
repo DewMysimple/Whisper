@@ -5,6 +5,7 @@ import {
   type TranscriptionTask,
 } from '../contracts/desktop';
 import { GENERATED_MODEL_PROFILES, GENERATED_PRESET_PARAMETERS } from './presetCatalog.generated';
+import { isQwenModel } from './models';
 
 type PresetPresentation = Omit<PresetDefinition, 'parameters'>;
 
@@ -52,6 +53,7 @@ export function getPreset(
 }
 
 export function modelProfileSummary(modelId: ModelId): string {
+  if (isQwenModel(modelId)) return 'Qwen3 原声转录 · 自动语言识别 · SRT 逐词对齐';
   const maximum = GENERATED_MODEL_PROFILES[modelId].temperatureFallbackMax;
   if (maximum !== null) {
     return modelId === 'large-v3'

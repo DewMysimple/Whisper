@@ -1,10 +1,11 @@
 import { useEffect, useId, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import type { EditableParameters } from '../contracts/desktop';
-import { PARAMETER_COPY, type ParameterKey } from '../data/parameterPresentation';
+import { parameterCopy, type ParameterKey } from '../data/parameterPresentation';
 import { isParameterValue, PARAMETER_RULES } from '../state/parameterValidation';
 import { useWorkspace } from '../state/workspace';
 import { translationTaskSupported } from '../state/parameterProfiles';
+import { supportsLanguage } from '../data/models';
 import { IconButton } from './Button';
 import { RoundedSelect } from './RoundedSelect';
 
@@ -14,6 +15,7 @@ function inputValue(value: unknown): string {
 }
 
 export function ParameterField({ name }: { name: ParameterKey }) {
+  const modelId = useWorkspace((s) => s.selectedModelId);
   const value = useWorkspace((s) => s.parameters[name]);
   const customized = useWorkspace((s) => Object.hasOwn(s.overrides, name));
   const setParameter = useWorkspace((s) => s.setParameter);
@@ -26,7 +28,7 @@ export function ParameterField({ name }: { name: ParameterKey }) {
   const contextEnabled = useWorkspace((s) => s.parameters.condition_on_previous_text);
   const wordEnabled = useWorkspace((s) => s.parameters.word_timestamps) || srtEnabled;
   const id = useId();
-  const copy = PARAMETER_COPY[name];
+  const copy = parameterCopy(modelId, name);
   const schema = PARAMETER_RULES[name];
   const rule = schema.anyOf?.[0] ?? schema;
   const [draft, setDraft] = useState(inputValue(value));
@@ -70,7 +72,10 @@ export function ParameterField({ name }: { name: ParameterKey }) {
           : draft.split(/[,，]/).map((part) => (part.trim() === '' ? NaN : Number(part.trim())));
       next = name === 'temperature' && parts.length === 1 ? parts[0] : parts;
     } else if (!isText && name !== 'language') next = draft.trim() === '' ? NaN : Number(draft);
-    if (!isParameterValue(name, next)) {
+    if (
+      !isParameterValue(name, next) ||
+      (name === 'language' && !supportsLanguage(modelId, next))
+    ) {
       const hint = isSequence
         ? '请输入范围内的有效数列；温度须递增。'
         : name === 'language'

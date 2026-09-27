@@ -1,5 +1,33 @@
 import { expect, test } from '@playwright/test';
 
+test('Qwen exposes supported parameters and switching back restores Whisper settings', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '前往参数调节' }).click();
+  await page.getByLabel('束搜索宽度', { exact: true }).fill('8');
+  await page.getByLabel('束搜索宽度', { exact: true }).press('Tab');
+  const navigation = page.getByLabel('模型与参数功能');
+  await navigation.getByRole('button', { name: /模型切换/ }).click();
+  await page.getByRole('button', { name: '选择 Qwen3-ASR 1.7B 模型', exact: true }).click();
+  await navigation.getByRole('button', { name: /参数调节/ }).click();
+  await expect(page.getByLabel('束搜索宽度', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('温度与回退序列', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.config-field')).toHaveCount(13);
+  await page.getByRole('combobox', { name: '术语提示模式' }).click();
+  await page.getByRole('option', { name: '手动设置' }).click();
+  await page.getByLabel('术语提示', { exact: true }).fill('本地术语');
+  await page.getByLabel('术语提示', { exact: true }).press('Tab');
+  await page.getByRole('button', { name: /硬件优化/ }).click();
+  await expect(page.getByRole('button', { name: /节省显存/ })).toBeDisabled();
+  await page.getByRole('button', { name: /模型与参数/ }).click();
+  await navigation.getByRole('button', { name: /模型切换/ }).click();
+  await page.getByRole('button', { name: '选择 Large V3 Turbo 模型', exact: true }).click();
+  await navigation.getByRole('button', { name: /参数调节/ }).click();
+  await expect(page.getByLabel('束搜索宽度', { exact: true })).toHaveValue('8');
+  await expect(page.locator('.config-field')).toHaveCount(36);
+});
+
 test('configures models and parameters through the shared entry, persists them and freezes a task', async ({
   page,
 }) => {
@@ -90,10 +118,10 @@ test('model cards keep a stable hover surface and offer a separate directory act
   await page.goto('/');
   await page.getByRole('button', { name: /模型与参数/ }).click();
   const cards = page.locator('.config-model');
-  await expect(cards).toHaveCount(6);
+  await expect(cards).toHaveCount(8);
   await expect(page.locator('.config-model code')).toHaveCount(0);
   await expect(page.locator('.config-model-grid')).not.toContainText('models\\');
-  await expect(page.locator('.config-model-choice.card-button')).toHaveCount(6);
+  await expect(page.locator('.config-model-choice.card-button')).toHaveCount(8);
   const unavailable = page.getByRole('button', { name: '选择 Tiny 模型，未安装' });
   await expect(unavailable).toBeDisabled();
   const selected = page.getByRole('button', { name: '选择 Large V3 Turbo 模型' });
@@ -165,7 +193,7 @@ test('configuration renders in both themes and preserves accessible editable fie
         .getByRole('button', { name: /模型切换/ })
         .click();
       const cards = page.locator('.config-model');
-      await expect(cards).toHaveCount(6);
+      await expect(cards).toHaveCount(8);
       const geometry = await cards.evaluateAll((elements) =>
         elements.map((element) => {
           const bounds = element.getBoundingClientRect();
@@ -187,7 +215,7 @@ test('configuration renders in both themes and preserves accessible editable fie
       ).toBeLessThanOrEqual(1);
       expect(geometry.every((item) => item.overflow <= 1)).toBe(true);
       // The desktop shell keeps its 1080px minimum width even in a narrower viewport.
-      expect(new Set(geometry.map((item) => item.top)).size).toBe(width === 1728 ? 2 : 3);
+      expect(new Set(geometry.map((item) => item.top)).size).toBe(width === 1728 ? 3 : 4);
       expect(
         await page.locator('.configuration-view').evaluate((el) => el.scrollWidth - el.clientWidth),
       ).toBeLessThanOrEqual(1);
@@ -210,7 +238,7 @@ test('configuration renders in both themes and preserves accessible editable fie
         return { width: bounds.width, height: bounds.height, left: bounds.left, top: bounds.top };
       }),
     );
-    expect(new Set(narrowGeometry.map((item) => item.top)).size).toBe(6);
+    expect(new Set(narrowGeometry.map((item) => item.top)).size).toBe(8);
     expect(new Set(narrowGeometry.map((item) => item.left)).size).toBe(1);
     expect(new Set(narrowGeometry.map((item) => item.width)).size).toBe(1);
     expect(new Set(narrowGeometry.map((item) => item.height)).size).toBe(1);

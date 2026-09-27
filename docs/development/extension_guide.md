@@ -31,9 +31,10 @@ CLI choices、桌面 preset 卡片、设置恢复和进程参数都从同一注�
 
 1. 实现 `domain.transcription.TranscriptionEngine` 协议的 `transcribe()`。
 2. 将具体实现放在 `infrastructure/`，不要让 domain 导入第三方推理库。
-3. 通过 `TranscriptionService(engine_loader=...)` 或 `run(..., engine=...)` 注入。
-4. 验证返回片段具有 `text/start/end`，信息对象具有语言字段。
-5. 增加适配器单元测试和真实端到端回归。
+3. 在 `infrastructure/engines.py` 注册后端及其硬件探测器；测试仍可通过 `TranscriptionService(engine_loader=...)` 或 `run(..., engine=...)` 注入。
+4. 返回后端中立的片段、词与识别信息；没有语言概率时返回 `None`，不可编造概率或对齐时间戳。
+5. 在模型注册表和 `domain/backend_parameters.py` 声明能力范围，生成 Web／Rust／schema 投影，避免复制任务、缓存或输出流程。
+6. 增加适配器单元测试、真实端到端回归和切回旧后端的验证。Qwen 实例见 [本地后端说明](qwen_asr.md)。
 
 ## 新增 UI 或自动化入口
 

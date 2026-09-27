@@ -22,7 +22,9 @@ from whisper_subtitle.domain.models import (  # noqa: E402
     SECONDARY_RECOGNITION_MODEL_IDS,
     SUPPORTED_MODEL_IDS,
     TRANSLATION_MODEL_IDS,
+    MODEL_ASSETS,
 )
+from whisper_subtitle.domain.backend_parameters import QWEN_PARAMETER_NAMES, QWEN_LANGUAGES
 
 
 TYPESCRIPT_OUTPUT = (
@@ -65,6 +67,13 @@ def render_typescript() -> str:
                 _ordered(SECONDARY_RECOGNITION_MODEL_IDS),
             ),
             _typescript_array("TRANSLATION_MODEL_IDS", _ordered(TRANSLATION_MODEL_IDS)),
+            "export const MODEL_CAPABILITIES = " + json.dumps({
+                model.id: {"label": model.label, "backend": model.backend,
+                           "parameters": sorted(QWEN_PARAMETER_NAMES) if model.backend == "qwen3-asr" else None,
+                           "languages": list(QWEN_LANGUAGES) if model.backend == "qwen3-asr" else None,
+                           "companionId": model.companion_id}
+                for model in MODEL_DEFINITIONS
+            }, ensure_ascii=False, indent=2) + " as const;",
         )
     ) + "\n"
     corepack = shutil.which("corepack") or shutil.which("corepack.cmd")
@@ -76,7 +85,7 @@ def render_typescript() -> str:
         input=source,
         capture_output=True,
         check=True,
-        text=True,
+        text=True, encoding="utf-8",
     )
     return formatted.stdout
 
@@ -129,6 +138,14 @@ def render_rust() -> str:
                     )
                 )
             )
+    assets = []
+    for model in MODEL_ASSETS:
+        files = ", ".join(json.dumps(name) for name in model.required_files)
+        repositories = ", ".join(json.dumps(_rust_repository(name)) for name in model.repositories)
+        config_type = f'Some("{model.config_model_type}")' if model.config_model_type else "None"
+        architecture = f'Some("{model.config_architecture}")' if model.config_architecture else "None"
+        companion = f'Some("{model.companion_id}")' if model.companion_id else "None"
+        assets.append(f'    ModelAsset {{ id: "{model.id}", repositories: &[{repositories}], required_files: &[{files}], config_model_type: {config_type}, config_architecture: {architecture}, companion_id: {companion} }},')
     sections = (
         "//! Generated model catalog shared by the Rust Host.\n"
         "//! Edit `src/whisper_subtitle/domain/models.py` and run the generator.",
@@ -139,11 +156,17 @@ def render_rust() -> str:
             _ordered(SECONDARY_RECOGNITION_MODEL_IDS),
         ),
         _rust_array("TRANSLATION_MODEL_IDS", _ordered(TRANSLATION_MODEL_IDS)),
+        _rust_array("QWEN_MODEL_IDS", [m.id for m in MODEL_DEFINITIONS if m.backend == "qwen3-asr"]),
+        _rust_array("QWEN_PARAMETER_NAMES", sorted(QWEN_PARAMETER_NAMES)),
+        _rust_array("QWEN_LANGUAGES", QWEN_LANGUAGES),
+        "pub(super) struct ModelAsset { pub id: &'static str, pub repositories: &'static [&'static str], pub required_files: &'static [&'static str], pub config_model_type: Option<&'static str>, pub config_architecture: Option<&'static str>, pub companion_id: Option<&'static str> }",
+        "pub(super) const MODEL_ASSETS: &[ModelAsset] = &[\n" + "\n".join(assets) + "\n];",
         "pub(super) const MODEL_CATALOG: &[(&str, &str, &[&str])] = &[\n"
         + "\n".join(entries)
         + "\n];",
     )
-    return "\n\n".join(sections) + "\n"
+    return subprocess.run(["rustfmt", "--edition", "2024"], input="\n\n".join(sections) + "\n",
+                          text=True, encoding="utf-8", capture_output=True, check=True).stdout
 
 
 def _model_enums(value: Any) -> Iterable[list[str]]:
@@ -168,19 +191,46 @@ def schema_errors() -> list[str]:
     errors = [
         f"Desktop IPC model_id enum #{index} differs from the Python catalog capabilities"
         for index, values in enumerate(enums, start=1)
-        if tuple(values) not in {tuple(supported), tuple(translation)}
+        if tuple(values) not in {tuple(supported), tuple(translation), tuple(qwen_model_ids())}
     ]
     if supported not in enums:
         errors.append("Desktop IPC schema does not expose the complete model catalog")
     if translation not in enums:
         errors.append("Desktop IPC schema does not enforce translation model capabilities")
+    if schema["$defs"].get("QwenModelParameters") != qwen_parameter_constraint():
+        errors.append("Desktop IPC Qwen parameter capabilities are stale")
     return errors
+
+
+def qwen_model_ids() -> list[str]:
+    return [model.id for model in MODEL_DEFINITIONS if model.backend == "qwen3-asr"]
+
+
+def qwen_parameter_constraint() -> dict[str, Any]:
+    return {
+        "if": {"required": ["model_id"], "properties": {"model_id": {"enum": qwen_model_ids()}}},
+        "then": {"properties": {"profile": {"properties": {"overrides": {
+            "propertyNames": {"enum": sorted(QWEN_PARAMETER_NAMES)},
+            "properties": {"language": {"enum": [None, *QWEN_LANGUAGES]}},
+        }}}}},
+    }
+
+
+def update_schema_constraint() -> None:
+    raw = SCHEMA_PATH.read_text(encoding="utf-8")
+    marker = '    "QwenModelParameters": '
+    start = raw.index("{", raw.index(marker) + len(marker))
+    _, length = json.JSONDecoder().raw_decode(raw[start:])
+    replacement = json.dumps(qwen_parameter_constraint(), ensure_ascii=False, indent=2).replace("\n", "\n    ")
+    SCHEMA_PATH.write_text(raw[:start] + replacement + raw[start + length:], encoding="utf-8", newline="\n")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
+    if not args.check:
+        update_schema_constraint()
     expected = {
         TYPESCRIPT_OUTPUT: render_typescript(),
         RUST_OUTPUT: render_rust(),

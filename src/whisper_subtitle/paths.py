@@ -10,20 +10,16 @@ from importlib import resources
 from pathlib import Path
 from typing import Mapping
 
-from .domain.models import MODEL_REPOSITORIES, SUPPORTED_MODEL_IDS
+from .domain.models import ASSETS_BY_ID, MODEL_REPOSITORIES, SUPPORTED_MODEL_IDS
+from .model_files import complete_model_directory
 
 
 MODEL_DIR_ENV = "WHISPER_SUBTITLE_MODEL_DIR"
 APP_HOME_ENV = "WHISPER_SUBTITLE_HOME"
-MODEL_REQUIRED_FILES = ("config.json", "model.bin")
 
 
 class ModelNotFoundError(FileNotFoundError):
-    """Raised when no complete local faster-whisper model can be resolved."""
-
-
-def _is_model_directory(path: Path) -> bool:
-    return path.is_dir() and all((path / name).is_file() for name in MODEL_REQUIRED_FILES)
+    """Raised when no complete local model artifact can be resolved."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,12 +40,12 @@ class ModelLocation:
     def find_model(self, model_name: str) -> Path | None:
         """Find a complete direct directory or cached Hugging Face snapshot."""
         normalized = model_name.lower().replace("_", "-")
-        if self.direct_model is not None and _is_model_directory(self.direct_model):
+        if self.direct_model is not None and complete_model_directory(self.direct_model, normalized):
             direct_name = self.direct_model.name.lower().replace("_", "-")
             if direct_name == normalized or normalized == "large-v3-turbo":
                 return self.direct_model
         managed = self.hf_home / normalized
-        if _is_model_directory(managed):
+        if complete_model_directory(managed, normalized):
             return managed
         if not self.hub.is_dir():
             return None
@@ -65,9 +61,17 @@ class ModelLocation:
             if not snapshots.is_dir():
                 continue
             for snapshot in sorted(snapshots.iterdir(), reverse=True):
-                if _is_model_directory(snapshot):
+                if complete_model_directory(snapshot, normalized):
                     return snapshot
         return None
+
+    def require_bundle(self, model_name: str) -> Path:
+        """Validate the ASR checkpoint and its shared timestamp companion."""
+        path = self.require_model(model_name)
+        companion = ASSETS_BY_ID[model_name].companion_id
+        if companion:
+            self.require_model(companion)
+        return path
 
     def available_models(self) -> tuple[str, ...]:
         """Return supported local models without triggering network access."""
@@ -75,6 +79,8 @@ class ModelLocation:
             model_id
             for model_id in SUPPORTED_MODEL_IDS
             if self.find_model(model_id) is not None
+            and (ASSETS_BY_ID[model_id].companion_id is None
+                 or self.find_model(ASSETS_BY_ID[model_id].companion_id) is not None)
         )
 
     def require_model(self, model_name: str) -> Path:
@@ -83,7 +89,7 @@ class ModelLocation:
         if model_path is not None:
             return model_path
         raise ModelNotFoundError(
-            "未找到本地 Whisper 模型 "
+            "未找到完整的本地模型 "
             f"{model_name}。已检查: {self.hub}。"
             "请使用 --model-dir <目录>，或设置环境变量 "
             f"{MODEL_DIR_ENV} / HF_HOME；便携模式可将模型放入 "
@@ -115,7 +121,14 @@ def _user_model_home(environ: Mapping[str, str]) -> Path:
 
 def _model_location(model_home: Path, source: str) -> ModelLocation:
     model_home = Path(model_home).expanduser()
-    direct = model_home if _is_model_directory(model_home) else None
+    direct = model_home if any(complete_model_directory(model_home, model_id) for model_id in ASSETS_BY_ID) else None
+    # Native bundles use sibling directories for the shared alignment model.
+    # Preserve the legacy arbitrary-name direct Whisper directory convention.
+    if direct is not None and any(
+        definition.config_model_type and complete_model_directory(direct, model_id)
+        for model_id, definition in ASSETS_BY_ID.items()
+    ):
+        model_home = model_home.parent
     return ModelLocation(
         hf_home=model_home,
         hub=model_home / "hub",

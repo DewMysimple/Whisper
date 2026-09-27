@@ -7,6 +7,7 @@ import json
 from ..application.transcribe import TranscriptionService
 from ..domain.contracts import ProgressEvent, TranscriptionRequest
 from ..domain.transcription import TranscriptionEngine
+from ..domain.models import DEFAULT_MODEL_ID
 
 
 class ConsoleProgressRenderer:
@@ -50,10 +51,12 @@ def run_transcription_request(
     *,
     progress_format: str = "text",
     engine: TranscriptionEngine | None = None,
+    model_id: str = DEFAULT_MODEL_ID,
 ) -> int:
     """Run one typed request through the unified application service."""
     batch = TranscriptionService(progress=progress_renderer(progress_format)).run(
         request,
         engine=engine,
+        model_id=model_id,
     )
     return batch.exit_code

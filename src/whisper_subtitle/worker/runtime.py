@@ -17,7 +17,7 @@ from ..bootstrap import configure_runtime
 from ..domain.contracts import ProgressEvent
 from ..domain.presets import derive_preset
 from ..infrastructure.environment_check import check_worker_environment
-from ..infrastructure.hardware import HardwareDetector
+from ..infrastructure.engines import hardware_detector as backend_hardware_detector
 from ..infrastructure.output_store import (
     OutputConflictError,
     select_configurable_outputs,
@@ -111,8 +111,7 @@ class WorkerRuntime:
         self._media_duration_cache: dict[
             str, tuple[int, int, tuple[bool, float | None, str | None]]
         ] = {}
-        hardware_detector = hardware_detector or HardwareDetector().detect
-        self._hardware_capabilities = hardware_capabilities_probe or HardwareDetector().capabilities
+        self._hardware_capabilities = hardware_capabilities_probe
         self._condition = threading.Condition()
         self._queue: deque[WorkerTask] = deque()
         self._tasks: dict[str, WorkerTask] = {}
@@ -204,7 +203,9 @@ class WorkerRuntime:
                 "platform": platform.platform(),
             }
             try:
-                result["hardware_capabilities"] = self._hardware_capabilities()
+                model_id = str(command.params.get("model_id") or DEFAULT_MODEL_NAME)
+                probe = self._hardware_capabilities or backend_hardware_detector(model_id).capabilities
+                result["hardware_capabilities"] = probe()
             except Exception as exc:
                 result["hardware_error"] = str(exc) or type(exc).__name__
             self._complete_command(command, result)

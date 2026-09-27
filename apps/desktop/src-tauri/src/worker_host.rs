@@ -385,6 +385,17 @@ impl WorkerManager {
         self.send_generated_command("system.environment", json!({}), COMMAND_TIMEOUT)
     }
 
+    pub fn environment_for_model(&self, model_id: &str) -> Result<Value, HostError> {
+        if !model_catalog::SUPPORTED_MODEL_IDS.contains(&model_id) {
+            return Err(HostError::new("request.invalid", "model_id is unsupported"));
+        }
+        self.send_generated_command(
+            "system.environment",
+            json!({"model_id": model_id}),
+            COMMAND_TIMEOUT,
+        )
+    }
+
     pub fn health(&self) -> Result<Value, HostError> {
         self.send_generated_command("system.health", json!({}), COMMAND_TIMEOUT)
     }
@@ -1422,7 +1433,10 @@ mod tests {
         }
 
         let models = inspect_local_models(&root);
-        assert_eq!(models.len(), 6);
+        assert_eq!(
+            models.len(),
+            super::model_catalog::SUPPORTED_MODEL_IDS.len()
+        );
         assert_eq!(
             model_directory_target(&root, "medium"),
             Some(medium.clone())

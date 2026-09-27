@@ -650,12 +650,91 @@
         "cpu_threads": { "type": "integer", "minimum": 0 }
       }
     },
+    "QwenModelParameters": {
+      "if": {
+        "required": [
+          "model_id"
+        ],
+        "properties": {
+          "model_id": {
+            "enum": [
+              "qwen3-asr-1.7b",
+              "qwen3-asr-0.6b"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "profile": {
+            "properties": {
+              "overrides": {
+                "propertyNames": {
+                  "enum": [
+                    "chunk_length",
+                    "hotwords",
+                    "initial_prompt",
+                    "language",
+                    "max_new_tokens",
+                    "max_speech_duration_s",
+                    "min_silence_duration_ms",
+                    "min_speech_duration_ms",
+                    "speech_pad_ms",
+                    "vad_filter",
+                    "vad_neg_threshold",
+                    "vad_threshold",
+                    "word_timestamps"
+                  ]
+                },
+                "properties": {
+                  "language": {
+                    "enum": [
+                      null,
+                      "zh",
+                      "en",
+                      "yue",
+                      "ar",
+                      "de",
+                      "fr",
+                      "es",
+                      "pt",
+                      "id",
+                      "it",
+                      "ko",
+                      "ru",
+                      "th",
+                      "vi",
+                      "ja",
+                      "tr",
+                      "hi",
+                      "ms",
+                      "nl",
+                      "sv",
+                      "da",
+                      "fi",
+                      "pl",
+                      "cs",
+                      "tl",
+                      "fa",
+                      "el",
+                      "hu",
+                      "mk",
+                      "ro"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "TranscriptionStartParams": {
       "type": "object",
       "additionalProperties": false,
       "required": ["inputs", "profile", "output"],
       "properties": {
-        "model_id": { "enum": ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"] },
+        "model_id": { "enum": ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo", "qwen3-asr-1.7b", "qwen3-asr-0.6b"] },
         "execution": { "$ref": "#/$defs/ExecutionSettings" },
         "recognition_strategy": {
           "enum": ["stable_primary", "mixed_zh_en", "zh_detail_review"]
@@ -669,6 +748,7 @@
         "output": { "$ref": "#/$defs/OutputPolicy" }
       },
       "allOf": [
+        { "$ref": "#/$defs/QwenModelParameters" },
         {
           "if": {
             "properties": {
@@ -714,7 +794,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "model_id": { "type": "string", "minLength": 1 }
+        "model_id": { "enum": ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo", "qwen3-asr-1.7b", "qwen3-asr-0.6b"] }
       }
     },
     "TranscriptionCancelParams": {
@@ -743,7 +823,6 @@
               "method": {
                 "enum": [
                   "system.health",
-                  "system.environment",
                   "system.metrics",
                   "model.unload",
                   "worker.shutdown"
@@ -752,6 +831,10 @@
             }
           },
           "then": { "properties": { "params": { "$ref": "#/$defs/EmptyObject" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "system.environment" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/ModelLoadParams" } } }
         },
         {
           "if": { "properties": { "method": { "const": "model.load" } } },
@@ -838,7 +921,7 @@
       "properties": {
         "position": { "type": "integer", "minimum": 0 },
         "input_count": { "type": "integer", "minimum": 1 },
-        "model_id": { "enum": ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"] },
+        "model_id": { "enum": ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo", "qwen3-asr-1.7b", "qwen3-asr-0.6b"] },
         "recognition_strategy": {
           "enum": ["stable_primary", "mixed_zh_en", "zh_detail_review"]
         },

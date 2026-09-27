@@ -10,7 +10,8 @@ from contextlib import contextmanager
 from typing import Any
 
 from ..bootstrap import configure_runtime
-from ..infrastructure.hardware import HardwareDetector, HardwareInfo
+from ..infrastructure.hardware import HardwareInfo
+from ..infrastructure.engines import hardware_detector as backend_hardware_detector
 from ..protocol import ErrorCode, EventCode, EventMessage
 from .runtime_types import (
     DEFAULT_MODEL_IDLE_TIMEOUT_SECONDS,
@@ -42,8 +43,8 @@ class ModelCache:
             raise ValueError("idle_timeout_seconds must be non-negative")
         self._emit = emit
         self._configure_runtime = runtime_configurer
-        self._detect_hardware = hardware_detector or HardwareDetector().detect
-        self._resolve_hardware = hardware_resolver or HardwareDetector().resolve
+        self._detect_hardware = hardware_detector
+        self._resolve_hardware = hardware_resolver
         self._load_engine = engine_loader
         self._idle_timeout = float(idle_timeout_seconds)
         self._logger = logger or logging.getLogger(__name__)
@@ -95,6 +96,9 @@ class ModelCache:
         if self._engine is None:
             return False
         model_id = self._model_id
+        close = getattr(self._engine, "close", None)
+        if close is not None:
+            close()
         self._engine = None
         self._hardware = None
         self._model_id = None
@@ -116,9 +120,7 @@ class ModelCache:
         request_id: str | None = None,
     ) -> tuple[Any, HardwareInfo, bool]:
         try:
-            resolved_hardware = hardware or (
-                self._resolve_hardware(execution) if execution else self._detect_hardware()
-            )
+            resolved_hardware = hardware or self._task_hardware(model_id, execution)
         except Exception as exc:
             raise WorkerCommandError(
                 ErrorCode.MODEL_LOAD_FAILED,
@@ -175,6 +177,13 @@ class ModelCache:
         )
         return engine, hardware, True
 
+    def _task_hardware(self, model_id: str, execution: Mapping[str, Any] | None) -> HardwareInfo:
+        if execution and self._resolve_hardware is not None:
+            return self._resolve_hardware(execution)
+        if not execution and self._detect_hardware is not None:
+            return self._detect_hardware()
+        return backend_hardware_detector(model_id).resolve(execution or {})
+
     def load(
         self,
         model_id: str,
@@ -199,13 +208,11 @@ class ModelCache:
     ) -> HardwareInfo:
         """Resolve task hardware and verify a local model without loading it."""
         try:
-            resolved_hardware = (
-                self._resolve_hardware(execution) if execution else self._detect_hardware()
-            )
+            resolved_hardware = self._task_hardware(model_id, execution)
             if self.loaded and self.model_id == model_id and self.hardware == resolved_hardware:
                 return resolved_hardware
             location = self._configure_runtime()
-            require_model = getattr(location, "require_model", None)
+            require_model = getattr(location, "require_bundle", None) or getattr(location, "require_model", None)
             if require_model is not None:
                 require_model(model_id)
         except Exception as exc:

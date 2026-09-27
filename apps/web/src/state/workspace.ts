@@ -28,6 +28,7 @@ import type {
   WorkerEnvironment,
 } from '../contracts/desktop';
 import { getPreset } from '../data/presets';
+import { supportsParameter, supportsLanguage } from '../data/models';
 import { getSubtitlePreset } from '../data/subtitlePresets';
 import {
   applyAppearancePreferences,
@@ -661,6 +662,11 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         : value;
     if (!isParameterValue(key, normalized)) return;
     const state = get();
+    if (
+      !supportsParameter(state.selectedModelId, key) ||
+      (key === 'language' && !supportsLanguage(state.selectedModelId, normalized))
+    )
+      return;
     if (
       key === 'task' &&
       value === 'translate' &&

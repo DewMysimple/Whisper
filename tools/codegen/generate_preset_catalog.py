@@ -40,6 +40,9 @@ SCHEMA_PATH = PROJECT_ROOT / "contracts/desktop_ipc/v1/desktop_ipc.schema.json"
 def ui_parameters(preset: Any, model_id: str) -> dict[str, Any]:
     effective = derive_preset(preset.id, {}, model_id=model_id).transcription_options()
     values = dict(ENGINE_DEFAULTS)
+    # Legacy UI snapshots retain their complete shape; backend capabilities
+    # determine which values are editable and submitted as overrides.
+    values.update({key: value for key, value in preset.transcription_options().items() if key in UI_PARAMETER_KEYS})
     values.update({key: value for key, value in effective.items() if key in UI_PARAMETER_KEYS})
     for key, vad_name in VAD_PARAMETER_NAMES.items():
         if vad_name in effective["vad_parameters"]:

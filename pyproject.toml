@@ -17,6 +17,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["setuptools>=68,<82", "pytest>=7.0"]
+qwen = [
+    "torch==2.11.0",
+    "transformers==5.17.0",
+]
 
 [project.scripts]
 whisper-subtitle = "whisper_subtitle.cli:main"

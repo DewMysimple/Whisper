@@ -5,6 +5,7 @@ import type { ExecutionOptions, HardwareCapabilities } from '../contracts/deskto
 import { EXECUTION_RULES, executionDevice, executionProblem } from '../state/executionOptions';
 import { formatResolvedHardware } from '../state/hardware';
 import { errorMessage } from '../state/workspaceDraft';
+import { isQwenModel } from '../data/models';
 import { useWorkspace } from '../state/workspace';
 import { Button } from './Button';
 import { RoundedSelect } from './RoundedSelect';
@@ -74,6 +75,8 @@ function ThreadControl({
 }
 
 export function HardwareView() {
+  const modelId = useWorkspace((state) => state.selectedModelId);
+  const qwen = isQwenModel(modelId);
   const options = useWorkspace((state) => state.executionOptions);
   const setOptions = useWorkspace((state) => state.setExecutionOptions);
   const model = useWorkspace((state) => state.model);
@@ -87,7 +90,7 @@ export function HardwareView() {
   useEffect(() => {
     let cancelled = false;
     desktopBridge
-      .getHardwareCapabilities()
+      .getHardwareCapabilities(modelId)
       .then((value) => {
         if (!cancelled) {
           setCapabilities(value);
@@ -105,7 +108,7 @@ export function HardwareView() {
     return () => {
       cancelled = true;
     };
-  }, [revision, host.pid]);
+  }, [revision, host.pid, modelId]);
 
   const selectedDevice = capabilities ? executionDevice(options, capabilities) : undefined;
   const gpuDevices = capabilities?.devices.filter((item) => item.device === 'cuda') ?? [];
@@ -126,8 +129,12 @@ export function HardwareView() {
       id === 'compact'
         ? ['int8_float16', 'int8_float32', 'int8']
         : id === 'cpu'
-          ? ['int8', 'int8_float32']
-          : ['float16', 'float32'];
+          ? qwen
+            ? ['float32']
+            : ['int8', 'int8_float32']
+          : qwen
+            ? ['bfloat16', 'float16', 'float32']
+            : ['float16', 'float32'];
     const precision = preferred.find((item) => device.computeTypes.includes(item));
     if (!precision) return null;
     return {
@@ -158,7 +165,13 @@ export function HardwareView() {
                 key={scheme.id}
                 label={scheme.label}
                 value={scheme.title}
-                description={next || loading ? scheme.description : '当前设备不支持'}
+                description={
+                  next || loading
+                    ? qwen && scheme.id === 'cpu'
+                      ? 'CPU · FP32 精度'
+                      : scheme.description
+                    : '当前模型或设备不支持'
+                }
                 selected={selected}
                 disabled={loading || next === null}
                 onClick={() => {
@@ -304,7 +317,9 @@ export function HardwareView() {
               ]}
             />
             <small>
-              FP16 适用于支持半精度的 GPU；INT8 混合精度可降低内存或显存需求，识别结果可能略有差异。
+              {qwen
+                ? 'Qwen 可使用 GPU 的 BF16／FP16／FP32，CPU 使用 FP32；当前不支持 INT8。'
+                : 'FP16 适用于支持半精度的 GPU；INT8 混合精度可降低内存或显存需求，识别结果可能略有差异。'}
             </small>
           </div>
         </section>
