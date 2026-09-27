@@ -6,7 +6,9 @@ param(
     [string]$WebView2Installer = "",
     [string]$OutputRoot = "",
     [switch]$IncludeInstaller,
-    [switch]$WhisperOnly
+    [switch]$WhisperOnly,
+    [switch]$IncludeArchive,
+    [switch]$KeepBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,31 +20,7 @@ $StageRoot = Join-Path $BuildRoot "stage"
 $DistRoot = Join-Path $RepositoryRoot "dist"
 $IncludeQwen = -not $WhisperOnly
 
-function Send-ToRecycleBin([string]$Path) {
-    if (-not (Test-Path -LiteralPath $Path)) { return }
-    Add-Type -AssemblyName Microsoft.VisualBasic
-    $resolved = (Resolve-Path -LiteralPath $Path).Path
-    $allowedRoots = @(
-        (Join-Path $RepositoryRoot "build\"),
-        (Join-Path $RepositoryRoot "dist\")
-    )
-    if (-not ($allowedRoots | Where-Object { $resolved.StartsWith($_, [System.StringComparison]::OrdinalIgnoreCase) })) {
-        throw "Refusing to recycle generated path outside build/dist: $resolved"
-    }
-    if (Test-Path -LiteralPath $resolved -PathType Container) {
-        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(
-            $resolved,
-            [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,
-            [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin
-        )
-    } else {
-        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile(
-            $resolved,
-            [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,
-            [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin
-        )
-    }
-}
+. (Join-Path $RepositoryRoot "tools\maintenance\generated_paths.ps1")
 
 function Assert-LastExitCode([string]$Step) {
     if ($LASTEXITCODE -ne 0) { throw "$Step failed with exit code $LASTEXITCODE" }
@@ -69,7 +47,7 @@ try {
     & $BootstrapPython "tools/release/stage_models.py" @ModelArguments
     Assert-LastExitCode "local model bundle validation"
 
-    Send-ToRecycleBin $BuildRoot
+    Remove-GeneratedPath -Path $BuildRoot -RepositoryRoot $RepositoryRoot -AllowedRoots @($BuildRoot)
     New-Item -ItemType Directory -Force -Path $BuildRoot, $StageRoot, $DistRoot | Out-Null
 
     $BuildEnv = Join-Path $BuildRoot "environment"
@@ -120,11 +98,11 @@ try {
     & $Python -m cyclonedx_py environment --output-reproducible --spec-version 1.6 --output-format JSON --output-file (Join-Path $DistributionStage "sbom-python.cdx.json") --pyproject "pyproject.toml" $Python
     Assert-LastExitCode "CycloneDX SBOM generation"
     Copy-Item -LiteralPath "tools/release/README.md" -Destination (Join-Path $DistributionStage "README.md")
-    Copy-Item -LiteralPath $WorkerSource -Destination (Join-Path $InternalStage "worker") -Recurse
+    Move-Item -LiteralPath $WorkerSource -Destination (Join-Path $InternalStage "worker")
     & $Python "tools/release/stage_models.py" @ModelArguments --destination (Join-Path $InternalStage "models")
     Assert-LastExitCode "offline model bundles"
 
-    & (Join-Path $PSScriptRoot "assemble.ps1") -BuildRoot $BuildRoot -OutputRoot $OutputRoot -SigningConfig $SigningConfig -WebView2Installer $WebView2Installer -IncludeInstaller:$IncludeInstaller
+    & (Join-Path $PSScriptRoot "assemble.ps1") -BuildRoot $BuildRoot -OutputRoot $OutputRoot -SigningConfig $SigningConfig -WebView2Installer $WebView2Installer -IncludeInstaller:$IncludeInstaller -IncludeArchive:$IncludeArchive -KeepBuild:$KeepBuild
     Assert-LastExitCode "release assembly"
 } finally {
     Pop-Location

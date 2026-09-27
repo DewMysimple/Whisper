@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
-    [switch]$Apply
+    [switch]$Apply,
+    [switch]$PruneReleases,
+    [switch]$KeepArchive
 )
 
 Set-StrictMode -Version Latest
@@ -16,6 +18,8 @@ $gitRoot = [System.IO.Path]::GetFullPath(($gitRootOutput | Select-Object -First 
 if (-not $repositoryRoot.Equals($gitRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "Refusing to clean outside the expected repository root: $repositoryRoot"
 }
+
+. (Join-Path $PSScriptRoot "generated_paths.ps1")
 
 $fixedRelativeTargets = @(
     ".pytest_cache",
@@ -57,33 +61,37 @@ foreach ($relativeSearchRoot in @("src", "tests", "wiki-memory\工具")) {
         ForEach-Object { $candidatePaths.Add($_.FullName) }
 }
 
-$repositoryPrefix = $repositoryRoot.TrimEnd("\") + "\"
+if ($PruneReleases) {
+    $distRoot = Join-Path $repositoryRoot "dist"
+    $applicationRoot = Join-Path $distRoot "WhisperSubtitle"
+    $manifest = Join-Path $applicationRoot "_internal\release-manifest.json"
+    if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+        throw "A current portable release manifest is required before pruning releases."
+    }
+    if ($Apply) {
+        $checksumPath = Join-Path $distRoot "WhisperSubtitle.sha256"
+        $null = Assert-GeneratedPath -Path $checksumPath -RepositoryRoot $repositoryRoot -AllowedRoots @($checksumPath)
+        & python (Join-Path $repositoryRoot "tools\release\generate_release_manifest.py") $applicationRoot $manifest --verify
+        if ($LASTEXITCODE -ne 0) { throw "Current release verification failed; nothing was removed." }
+    }
+    Get-ChildItem -LiteralPath $distRoot -Force | Where-Object {
+        $_.Name -match '^WhisperSubtitle\.previous-[0-9]{8}(\.(zip|sha256))?$'
+    } | ForEach-Object { $candidatePaths.Add($_.FullName) }
+    if (-not $KeepArchive -and (Test-Path -LiteralPath (Join-Path $distRoot "WhisperSubtitle.zip"))) {
+        $candidatePaths.Add((Join-Path $distRoot "WhisperSubtitle.zip"))
+    }
+}
+
 $safeTargets = @(
     $candidatePaths |
         Sort-Object -Unique |
         ForEach-Object {
-            $resolvedPath = [System.IO.Path]::GetFullPath($_)
-            if (
-                $resolvedPath.Equals($repositoryRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
-                -not $resolvedPath.StartsWith($repositoryPrefix, [System.StringComparison]::OrdinalIgnoreCase)
-            ) {
-                throw "Unsafe cleanup target: $resolvedPath"
-            }
-
-            $relativePath = $resolvedPath.Substring($repositoryPrefix.Length).Replace("\", "/")
-            $trackedPaths = @(& git -C $repositoryRoot ls-files -- $relativePath)
-            if ($LASTEXITCODE -ne 0) {
-                throw "Unable to verify cleanup target against Git: $resolvedPath"
-            }
-            if ($trackedPaths.Count -gt 0) {
-                throw "Refusing to delete tracked content below: $resolvedPath"
-            }
-            $resolvedPath
+            Assert-GeneratedPath -Path $_ -RepositoryRoot $repositoryRoot -AllowedRoots @($_)
         } |
         Sort-Object Length -Descending
 )
 
-if ($safeTargets.Count -eq 0) {
+if ($safeTargets.Count -eq 0 -and -not $PruneReleases) {
     Write-Output "Workspace generated artifacts are already clean."
     exit 0
 }
@@ -91,15 +99,22 @@ if ($safeTargets.Count -eq 0) {
 if (-not $Apply) {
     Write-Output "Preview only. The following generated artifacts would be permanently deleted:"
     $safeTargets | ForEach-Object { Write-Output "  $_" }
-    Write-Output "Run 'corepack pnpm workspace:clean:apply' to apply this cleanup."
+    Write-Output "Add -Apply to this command to apply the previewed cleanup."
     exit 0
 }
 
 foreach ($targetPath in $safeTargets) {
     if (Test-Path -LiteralPath $targetPath) {
         Write-Output "Deleting $targetPath"
-        Remove-Item -LiteralPath $targetPath -Recurse -Force
+        Remove-GeneratedPath -Path $targetPath -RepositoryRoot $repositoryRoot -AllowedRoots @($targetPath)
     }
 }
 
+if ($PruneReleases -and -not $KeepArchive) {
+    $checksum = Join-Path $repositoryRoot "dist\WhisperSubtitle.sha256"
+    if (Test-Path -LiteralPath $checksum) {
+        $remaining = @(Get-Content -LiteralPath $checksum | Where-Object { $_ -notmatch '  WhisperSubtitle\.zip$' })
+        $remaining | Set-Content -LiteralPath $checksum -Encoding ascii
+    }
+}
 Write-Output "Workspace generated artifacts were cleaned."

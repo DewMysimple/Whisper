@@ -16,16 +16,21 @@
 - 继续保持：边界清晰、测试覆盖且拆分收益不足的协调模块；稳定的 Desktop IPC v1、Preset 和输出契约。
 - 延后处理：需要产品选择、真实模型/GPU 资源、协议升级、UI 行为变化或独立迁移计划的事项。
 
-`models/`、虚拟环境、`build/`、Rust `target/`、发布产物和用户输出均是受保护的本地资料。即使体积较大，周期维护也不自动删除；只有用户明确授权并确认目标后才能清理。
+2026-09-27 用户已授权日常清理旧发布包与可再生构建缓存，并选择只保留最新可运行目录，ZIP 按需生成。`models/`、开发虚拟环境、Node 依赖、当前正式版和用户输出仍受保护；不因体积较大自动删除。
 
-获得明确清理授权后，先从仓库根目录预览白名单内的可再生产物，再显式执行永久清理：
+每次实质任务完成验证和记忆同步后，从仓库根目录预览并执行收尾：
 
 ```powershell
 corepack pnpm workspace:clean
-corepack pnpm workspace:clean:apply
+corepack pnpm workspace:finish
+corepack pnpm workspace:size
 ```
 
-该入口只清理 `build/`、Rust `target/`、Tauri/Web 测试与构建输出、Vite/Python 缓存；不会删除 `dist/` 中的当前正式版、`models/`、`whisper_env/`、Node 依赖、源码、Git 历史或用户输出。应用清理会永久删除列出的目录，默认命令只预览。
+`workspace:clean` 默认只预览 `build/`、Rust `target/`、Tauri/Web 测试与构建输出及 Vite/Python 缓存；`workspace:clean:apply` 仅应用这个白名单。`workspace:finish` 额外先验证当前发布目录全部文件哈希，再删除 `dist/WhisperSubtitle.previous-YYYYMMDD` 及同名 ZIP／SHA256 和当前可再生 ZIP，并清除 ZIP 校验条目。需要预览发布清理时运行 `powershell -NoProfile -File tools/maintenance/clean_workspace.ps1 -PruneReleases`。未知目录或其他用户压缩包不自动删除。
+
+所有删除使用共同的仓库边界、Git 跟踪、路径联接和进程检查；永久删除，不送入回收站。当前可运行目录、唯一模型、环境、依赖和源码保持。下一次开发会按需重建编译缓存，首次编译较慢。`release:build` 成功后自动移除自己的发布中间态；失败时保留诊断，排障时可用 `-KeepBuild` 保留成功构建中间态。
+
+空间排查使用 `workspace:size`，统计文件字节并跳过符号链接／目录联接，避免重复遍历 pnpm 依赖。先区分发布副本、构建缓存、实际权重和依赖；依赖按声明及传递闭包核对，模型去重先验哈希。一次性深度清理不能变成自动卸载依赖或删除模型的规则。
 
 ## 常规门禁
 

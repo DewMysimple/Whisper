@@ -4,6 +4,8 @@ import runpy
 import zipfile
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE_TOOLS = ROOT / "tools" / "release"
@@ -104,7 +106,7 @@ def test_worker_bundle_is_onedir_and_release_has_no_legacy_gui_dependency():
     assert 'stage_models.py' in build_script
     assert 'hiddenimports = ["pynvml"]' in spec
     assert "PyQt5" not in spec
-    assert "Copy-Item -LiteralPath $WorkerSource" in build_script
+    assert "Move-Item -LiteralPath $WorkerSource" in build_script
     assert "Copy-Item -LiteralPath $BuildEnv" not in build_script
     assert "PyQt5" not in build_requirements
     assert "PyQt5" not in pyproject
@@ -149,12 +151,14 @@ def test_release_output_has_a_shallow_user_facing_layout():
     assert 'Join-Path $DistRoot "WhisperSubtitle"' in assemble_script
     assert 'Join-Path $DistRoot "WhisperSubtitle.zip"' in assemble_script
     assert 'Join-Path $ApplicationRoot "WhisperSubtitle.exe"' in assemble_script
-    assert 'Join-Path $ApplicationRoot "_internal"' in assemble_script
+    assert 'Join-Path $PortableStage "_internal"' in assemble_script
     assert 'Join-Path $InternalStage "models\\*"' in assemble_script
     assert "Resolve-WebView2Installer" in assemble_script
     assert "Get-AuthenticodeSignature" in assemble_script
     assert "MicrosoftEdgeWebView2RuntimeInstallerX64.exe" in assemble_script
-    assert "[Security.Cryptography.SHA256]::Create()" in assemble_script
+    helper = (ROOT / "tools/maintenance/generated_paths.ps1").read_text(encoding="utf-8")
+    assert "[Security.Cryptography.SHA256]::Create()" in helper
+    assert "Get-Sha256 $file" in assemble_script
     assert "Get-FileHash" not in assemble_script
     assert '"Close the running WhisperSubtitle' in assemble_script
     assert '-not $_.HasExited' in assemble_script
@@ -192,3 +196,47 @@ def test_release_powershell_sources_are_safe_for_windows_powershell_5():
     assert '"user_guide.zh-CN.md"' in scripts[1]
     assert "[char]0x4F7F" in scripts[1]
     assert (RELEASE_TOOLS / "user_guide.zh-CN.md").is_file()
+
+
+def test_release_defaults_to_directory_and_removes_intermediates_after_success():
+    build = (RELEASE_TOOLS / "build.ps1").read_text(encoding="utf-8")
+    assemble = (RELEASE_TOOLS / "assemble.ps1").read_text(encoding="utf-8")
+    for script in (build, assemble):
+        assert "SendToRecycleBin" not in script
+        assert "[switch]$IncludeArchive" in script
+        assert "[switch]$KeepBuild" in script
+    assert 'if ($IncludeArchive) {' in assemble
+    assert 'if (-not $KeepBuild) {' in assemble
+    assert assemble.index('Assert-LastExitCode "portable release integrity"') < assemble.index('foreach ($owned')
+    assert assemble.index('$checksums | Set-Content') < assemble.index('Remove-GeneratedPath -Path $BuildRoot')
+
+
+@pytest.mark.parametrize("change", ["unchanged", "corrupt", "missing", "extra", "escape", "duplicate"])
+def test_release_manifest_verification_checks_complete_tree(tmp_path, monkeypatch, change):
+    module = runpy.run_path(str(RELEASE_TOOLS / "generate_release_manifest.py"))
+    root = tmp_path / "portable"
+    manifest = root / "_internal/release-manifest.json"
+    rows = []
+    for name in ("WhisperSubtitle.exe", "_internal/worker/whisper-subtitle-worker.exe",
+                 "_internal/models/large-v3-turbo/model.bin"):
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"runtime")
+        rows.append({"path": name, "size": path.stat().st_size, "sha256": module["sha256"](path)})
+    if change == "corrupt":
+        (root / rows[0]["path"]).write_bytes(b"changed")
+    elif change == "missing":
+        (root / rows[0]["path"]).unlink()
+    elif change == "extra":
+        (root / "unknown").write_bytes(b"extra")
+    elif change == "escape":
+        rows[0]["path"] = "../outside.exe"
+    elif change == "duplicate":
+        rows.append(rows[0].copy())
+    manifest.write_text(json.dumps({"schemaVersion": 1, "product": "WhisperSubtitle", "files": rows}))
+    monkeypatch.chdir(tmp_path)
+    if change == "unchanged":
+        assert module["verify_manifest"](Path("portable"), Path("portable/_internal/release-manifest.json")) == 4
+    else:
+        with pytest.raises((ValueError, FileNotFoundError)):
+            module["verify_manifest"](root, manifest)

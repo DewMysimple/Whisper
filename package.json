@@ -23,6 +23,8 @@
     "e2e": "corepack pnpm --filter @whisper-subtitle/web e2e",
     "release:build": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/build.ps1",
     "release:build:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/build.ps1 -IncludeInstaller",
+    "release:build:archive": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/build.ps1 -IncludeArchive",
+    "release:archive": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/archive.ps1",
     "format": "prettier --write package.json pnpm-workspace.yaml .prettierrc.json apps",
     "format:check": "prettier --check package.json pnpm-workspace.yaml .prettierrc.json apps",
     "lint": "corepack pnpm --filter @whisper-subtitle/web lint",
@@ -30,7 +32,9 @@
     "typecheck": "corepack pnpm --filter @whisper-subtitle/web typecheck",
     "web:dev": "corepack pnpm --filter @whisper-subtitle/web dev",
     "workspace:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/maintenance/clean_workspace.ps1",
-    "workspace:clean:apply": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/maintenance/clean_workspace.ps1 -Apply"
+    "workspace:clean:apply": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/maintenance/clean_workspace.ps1 -Apply",
+    "workspace:finish": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/maintenance/clean_workspace.ps1 -Apply -PruneReleases",
+    "workspace:size": "python tools/maintenance/workspace_size.py"
   },
   "devDependencies": {
     "prettier": "3.9.5"

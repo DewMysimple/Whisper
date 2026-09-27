@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-27 | maintenance | - | archived | workspace-slimming-delivery-cleanup | [[日志/2026-09-27-开发环境深度瘦身与交付收尾.md|开发环境深度瘦身与交付收尾]] |
 | 2026-09-27 | feature | 按用户授权接入前述 Qwen3-ASR，保留以前的模型和使用方式，维护公共边界与可扩展能力来源。 | archived | qwen-backend-integration-2026-09-27 | [[日志/2026-09-27-Qwen本地模型适配与Whisper兼容.md|Qwen 本地模型适配与 Whisper 兼容]] |
 | 2026-09-26 | bug | - | archived | narration-preset-calibration-20260926 | [[日志/2026-09-26-校准四预设并修复配乐旁白漏识别.md|校准四预设并修复配乐旁白漏识别]] |
 | 2026-09-26 | operations | 提供可双击运行的构建入口，用当前本地源码更新完整便携版 `dist`。 | archived | one-click-portable-build-2026-09-26 | [[日志/2026-09-26-新增一键便携构建入口并更新dist.md|新增一键便携构建入口并更新 dist]] |

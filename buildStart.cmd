@@ -15,8 +15,8 @@ echo.
 if not "%buildExitCode%"=="0" goto :build_failed
 echo Build completed successfully:
 echo   %~dp0dist\WhisperSubtitle\WhisperSubtitle.exe
-echo   %~dp0dist\WhisperSubtitle.zip
 echo   %~dp0dist\WhisperSubtitle.sha256
+echo ZIP distribution: corepack pnpm release:archive
 goto :finish
 
 :build_failed

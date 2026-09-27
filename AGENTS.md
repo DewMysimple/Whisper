@@ -18,6 +18,13 @@
 - `models/`、虚拟环境、`build/`、`target/`、发布产物和用户输出不属于源码维护范围；除非任务明确授权，不删除这些本地资料。
 - 历史归档和已封存日志只读；需要更正时新增日志并建立链接。
 
+## 每次完整对话的产物收尾
+
+- 用户已长期授权清理工程拥有的旧发布目录、分发包和可再生构建缓存；此范围内不再重复请求授权。日常只保留最新 `dist/WhisperSubtitle/` 与校验文件，ZIP 在需要分发时用 `corepack pnpm release:archive` 生成。
+- 每次实质修改完成后，同步源码、必要的正式产物与记忆。涉及运行时代码或依赖的更新须重建最新便携版并验收；纯文档修改无需重复构建。发布成功默认删除发布中间态，排障需要时显式使用 `-KeepBuild`。
+- 验证和日志完成后运行 `corepack pnpm workspace:clean` 预览，再运行 `corepack pnpm workspace:finish` 清理构建、测试缓存和旧发布包，最后用 `corepack pnpm workspace:size` 记录最终体积。失败任务先保留诊断，验收结束才收尾；清理完成后不再启动会重建缓存的检查。
+- 当前可运行版、开发环境、唯一模型权重、Node 依赖和用户媒体／输出继续保留。依赖卸载或模型去重须先核对依赖关系／文件哈希并完成真实转录验证，不能按目录大小盲删。未知发布目录不自动删除。
+
 ## 验证路由
 
 - 通用工程检查：`corepack pnpm check`、`python tools/maintenance/check_repository_hygiene.py`、`python wiki-memory/工具/memory_lint.py check`。

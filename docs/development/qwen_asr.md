@@ -80,6 +80,10 @@ CJK 字符／空格分词，避免引入平台相关的日／韩分词运行库�
 
 ## 发布与验收
 
+日常发布只保留最新完整目录和 SHA256；分发时运行 `corepack pnpm release:archive`。
+成功构建默认清除发布中间态，需要复用 stage 时传 `-KeepBuild`，验收后再运行
+`corepack pnpm workspace:finish`。本地权重和开发环境保留。
+
 默认 `buildStart.cmd`／`tools/release/build.ps1` 构建含两个后端的 Worker，并打包当前
 本地已安装的 Qwen ASR 及其共享对齐模型。`-WhisperOnly` 可构建不包含 Torch 的原后端
 版本。无本地 Qwen 权重时仍可构建带 Qwen 运行库的便携版，之后手动安装模型。

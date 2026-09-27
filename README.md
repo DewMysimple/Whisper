@@ -176,7 +176,7 @@ The frontend's Vite/Playwright loopback server exists only for development and t
 
 ## Windows packaging
 
-Build the complete portable directory and adjacent ZIP:
+Build the complete portable directory (ZIP is optional):
 
 ```powershell
 corepack pnpm release:build
@@ -186,10 +186,10 @@ The two user-facing artifacts are deliberately shallow:
 
 ```text
 dist/WhisperSubtitle/WhisperSubtitle.exe
-dist/WhisperSubtitle.zip
+dist/WhisperSubtitle.sha256
 ```
 
-The directory and ZIP contain the same complete runtime. Technical Worker, CUDA, model, manifest, and SBOM files are grouped below `WhisperSubtitle/_internal/`; do not distribute the raw executable from Cargo `target/`. To additionally create the offline current-user NSIS medium under `dist/installer/`, run `corepack pnpm release:build:installer`. Target machines do not need Python, Node.js, or Rust, but they still need Windows 11, WebView2, and a compatible NVIDIA GPU/driver. See [the release guide](tools/release/README.md).
+The directory contains the complete runtime. Generate a ZIP for distribution with `corepack pnpm release:archive`, or build both with `corepack pnpm release:build:archive`. Successful builds remove their temporary environments and staged copies; `corepack pnpm workspace:finish` clears remaining build caches and old releases after task verification. Technical Worker, CUDA, model, manifest, and SBOM files are grouped below `WhisperSubtitle/_internal/`; do not distribute the raw executable from Cargo `target/`. To additionally create the offline current-user NSIS medium under `dist/installer/`, run `corepack pnpm release:build:installer`. Target machines do not need Python, Node.js, or Rust, but they still need Windows 11, WebView2, and a compatible NVIDIA GPU/driver. See [the release guide](tools/release/README.md).
 
 ## Repository layout
 
