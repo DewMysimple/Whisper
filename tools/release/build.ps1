@@ -8,7 +8,8 @@ param(
     [switch]$IncludeInstaller,
     [switch]$WhisperOnly,
     [switch]$IncludeArchive,
-    [switch]$KeepBuild
+    [switch]$KeepBuild,
+    [switch]$CheckOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,6 +22,7 @@ $DistRoot = Join-Path $RepositoryRoot "dist"
 $IncludeQwen = -not $WhisperOnly
 
 . (Join-Path $RepositoryRoot "tools\maintenance\generated_paths.ps1")
+. (Join-Path $PSScriptRoot "prerequisites.ps1")
 
 function Assert-LastExitCode([string]$Step) {
     if ($LASTEXITCODE -ne 0) { throw "$Step failed with exit code $LASTEXITCODE" }
@@ -39,14 +41,20 @@ try {
         throw "Release version $Version is not synchronized across Python, Tauri, Cargo and npm metadata"
     }
 
-    if (-not $BootstrapPython) { $BootstrapPython = Join-Path $RepositoryRoot "whisper_env\Scripts\python.exe" }
-    $BootstrapPython = (Resolve-Path -LiteralPath $BootstrapPython).Path
-    $ModelSource = if ($ModelDir) { (Resolve-Path -LiteralPath $ModelDir).Path } else { Join-Path $RepositoryRoot "models\huggingface" }
+    try {
+        $prerequisites = Test-ReleasePrerequisites -RepositoryRoot $RepositoryRoot -BootstrapPython $BootstrapPython -ModelDir $ModelDir -IncludeQwen $IncludeQwen
+    } catch {
+        [Console]::Error.WriteLine($_.Exception.Message)
+        exit 1
+    }
+    if ($CheckOnly) {
+        Write-Host "Local prerequisite check passed. No build was started."
+        return
+    }
+    $BootstrapPython = $prerequisites.Python
+    $ModelSource = $prerequisites.ModelSource
     $ModelArguments = @("--source", $ModelSource)
     if ($IncludeQwen) { $ModelArguments += "--include-qwen" }
-    & $BootstrapPython "tools/release/stage_models.py" @ModelArguments
-    Assert-LastExitCode "local model bundle validation"
-
     Remove-GeneratedPath -Path $BuildRoot -RepositoryRoot $RepositoryRoot -AllowedRoots @($BuildRoot)
     New-Item -ItemType Directory -Force -Path $BuildRoot, $StageRoot, $DistRoot | Out-Null
 

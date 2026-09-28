@@ -13,14 +13,13 @@ set "buildExitCode=%errorlevel%"
 
 echo.
 if not "%buildExitCode%"=="0" goto :build_failed
-echo Build completed successfully:
-echo   %~dp0dist\WhisperSubtitle\WhisperSubtitle.exe
-echo   %~dp0dist\WhisperSubtitle.sha256
-echo ZIP distribution: corepack pnpm release:archive
+echo Release command completed successfully.
 goto :finish
 
 :build_failed
-echo Build failed with exit code %buildExitCode%.
+echo Release command failed with exit code %buildExitCode%.
+echo See the details above. This command builds the desktop release.
+echo For a browser UI preview, use runStart.cmd.
 
 :finish
 echo.
