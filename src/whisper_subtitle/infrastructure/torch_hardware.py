@@ -9,10 +9,14 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..domain.execution import normalize_execution_settings
-from .hardware import HardwareInfo
+from ..domain.execution import HardwareInfo
+from .cuda_runtime import configure_cuda_runtime
 
 
 def load_torch() -> Any:
+    # Both backends share this process. Register/preload the CUDA wheel before
+    # Torch loads its bundled DLLs, so a later Whisper task sees a matched pair.
+    configure_cuda_runtime()
     try:
         return importlib.import_module("torch")
     except (ImportError, OSError) as exc:

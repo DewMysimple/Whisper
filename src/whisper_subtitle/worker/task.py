@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..domain.contracts import Preset
-from ..infrastructure.hardware import HardwareInfo
+from ..domain.execution import HardwareInfo
 from ..infrastructure.output_store import OutputConflict, OutputPlan
 
 

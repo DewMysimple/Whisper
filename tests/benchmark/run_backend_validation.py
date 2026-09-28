@@ -30,6 +30,8 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--model-dir", required=True, type=Path)
     parser.add_argument("--worker-executable", type=Path)
+    parser.add_argument("--qwen-first", action="store_true",
+                        help="Exercise Qwen startup before any Whisper CUDA initialization")
     args = parser.parse_args()
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -80,6 +82,8 @@ def main() -> None:
                  ("qwen3-asr-1.7b", "en_v1", ROOT / "tests/fixtures/english_short.wav", True),
                  ("qwen3-asr-0.6b", "cn", long_media, True),
                  ("large-v3-turbo", "cn2", source, False)]
+        if args.qwen_first:
+            cases = cases[1:] + cases[:1]
         for number, (model, preset, media, srt) in enumerate(cases):
             request = f"backend-{number}"
             target = output / request
@@ -123,7 +127,11 @@ def main() -> None:
                             "outputs":[str(p) for p in paths]})
             print(json.dumps(results[-1], ensure_ascii=False), flush=True)
         ready = [m for m in observed if m.get("event") == "model.ready"]
-        assert [m["data"]["model_id"] for m in ready] == ["large-v3-turbo", "qwen3-asr-1.7b", "qwen3-asr-0.6b", "large-v3-turbo"]
+        expected_loads = []
+        for model, *_ in cases:
+            if not expected_loads or expected_loads[-1] != model:
+                expected_loads.append(model)
+        assert [m["data"]["model_id"] for m in ready] == expected_loads
         send("stop", "worker.shutdown", {})
         while receive().get("request_id") != "stop":
             pass

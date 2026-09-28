@@ -53,6 +53,10 @@ CLI 示例：
 - `infrastructure/engines.py` 选择模型适配器及实际硬件探测器。Whisper 继续使用
   CTranslate2；Qwen 使用 PyTorch。Worker 的缓存、队列、冻结快照、原子输出和后处理
   继续共用原流程。
+- 两种探测器共用 `domain.execution.HardwareInfo`。Qwen 将单窗识别、强制对齐和
+  线程作用域分开维护；成功、推理失败与对齐失败均在交出控制权前恢复 Torch 线程数。
+  Windows 下 `load_torch()` 先调用公共 CUDA 初始化，避免先加载 Torch 后再加载
+  NVIDIA wheel 时出现 cuBLAS DLL 入口不匹配。
 - `audio_chunks.py` 复用已有 PyAV 解码和 Silero VAD，保留原媒体时间偏移，每个识别
   窗口最多 30 秒。关闭 VAD 后仍按窗口处理；不会拼接移除静音后再错误累计时间。
 - `domain/transcription.py` 提供后端中立的片段、词和识别信息。Qwen 不伪造 Whisper
@@ -100,6 +104,9 @@ corepack pnpm e2e
 
 # 明确执行真实离线模型验证；可追加 --worker-executable 指向冻结 Worker
 .\whisper_env\Scripts\python.exe tests/benchmark/run_backend_validation.py --model-dir models/huggingface --output-dir build/qwen-validation/worker-source
+
+# 冷进程先加载 Qwen，检查反向初始化与切换
+.\whisper_env\Scripts\python.exe tests/benchmark/run_backend_validation.py --model-dir models/huggingface --output-dir build/qwen-validation/qwen-first --qwen-first
 ```
 
 真实验证包括同一 Worker 的 Whisper → Qwen 1.7B → Qwen 0.6B → Whisper，连续任务缓存

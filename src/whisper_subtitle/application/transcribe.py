@@ -33,7 +33,8 @@ from ..domain.quality import build_recognition_quality_diagnostics
 from ..domain.transcription import TranscriptionEngine
 from ..domain.subtitles import build_srt_document
 from ..domain.transcript_layout import build_transcript_document
-from ..infrastructure.hardware import HardwareDetector, HardwareInfo
+from ..domain.execution import HardwareInfo
+from ..infrastructure.hardware import HardwareDetector
 from ..infrastructure.engines import hardware_detector as backend_hardware_detector, load_engine
 from ..infrastructure.media_files import MediaDiscoveryError, discover_media_files
 from ..infrastructure.output_store import (

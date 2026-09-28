@@ -36,6 +36,12 @@ CLI choices、桌面 preset 卡片、设置恢复和进程参数都从同一注�
 5. 在模型注册表和 `domain/backend_parameters.py` 声明能力范围，生成 Web／Rust／schema 投影，避免复制任务、缓存或输出流程。
 6. 增加适配器单元测试、真实端到端回归和切回旧后端的验证。Qwen 实例见 [本地后端说明](qwen_asr.md)。
 
+硬件快照统一使用 `domain.execution.HardwareInfo`；硬件探测器实现
+`infrastructure.engines.BackendHardwareDetector` 的 `capabilities()` 和 `resolve()`。
+设备能力与自动精度选择仍由具体后端负责，共用契约不复制 CTranslate2／Torch 算法。
+Windows 上加载推理依赖前先调用 `configure_cuda_runtime()`，并覆盖不同后端的首次加载顺序。
+模型缓存统一由 Worker 管理；空闲计时器须校验代次，防止已经取消的旧回调释放新模型。
+
 ## 新增 UI 或自动化入口
 
 1. 将用户输入转换为 `TranscriptionRequest`。

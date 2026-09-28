@@ -6,10 +6,10 @@ import importlib
 import os
 import platform
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Any, Callable
 
-from ..domain.execution import EXECUTION_COMPUTE_TYPES, normalize_execution_settings
+from ..domain.execution import EXECUTION_COMPUTE_TYPES, HardwareInfo, normalize_execution_settings
 from .cuda_runtime import configure_cuda_runtime
 
 
@@ -37,37 +37,6 @@ def _supported_compute_types(runtime: Any, device: str, index: int = 0) -> set[s
         return set(runtime.get_supported_compute_types(device, index))
     except TypeError:
         return set(runtime.get_supported_compute_types(device))
-
-
-@dataclass(frozen=True, slots=True)
-class HardwareInfo:
-    """Structured inference settings selected from the current hardware."""
-
-    device: str
-    compute_type: str
-    cuda_available: bool
-    gpu_name: str | None
-    cuda_version: str | None
-    cpu_threads: int
-    device_index: int = 0
-
-    def __post_init__(self) -> None:
-        if self.device not in {"cpu", "cuda"}:
-            raise ValueError("device must be 'cpu' or 'cuda'")
-        if not self.compute_type:
-            raise ValueError("compute_type must be non-empty")
-        if type(self.cuda_available) is not bool:
-            raise TypeError("cuda_available must be bool")
-        if self.device == "cuda" and not self.cuda_available:
-            raise ValueError("cuda device requires cuda_available=True")
-        if self.device == "cpu" and self.cuda_available:
-            raise ValueError("cpu device requires cuda_available=False")
-        if self.gpu_name is not None and not self.gpu_name:
-            raise ValueError("gpu_name must be non-empty when provided")
-        if type(self.cpu_threads) is not int or self.cpu_threads < 0:
-            raise ValueError("cpu_threads must be a non-negative integer")
-        if type(self.device_index) is not int or self.device_index < 0:
-            raise ValueError("device_index must be a non-negative integer")
 
 
 class HardwareDetector:

@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import gc
 import importlib
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from itertools import chain
 from typing import Any
 
 from ..domain.alignment import aligned_words
 from ..domain.backend_parameters import QWEN_ALIGNMENT_LANGUAGES, QWEN_LANGUAGES, qwen_defaults
 from ..domain.models import MODELS_BY_ID
-from ..domain.transcription import TranscribedSegment, TranscriptionInfo
+from ..domain.transcription import TranscribedSegment, TranscribedWord, TranscriptionInfo
 from ..paths import ModelLocation
 from .audio_chunks import SAMPLE_RATE, decode_media, speech_windows
-from .hardware import HardwareInfo
+from ..domain.execution import HardwareInfo
 from .torch_hardware import load_torch
 
 
@@ -72,59 +74,91 @@ class QwenASREngine:
         first = next(iterator, None)
         return (chain((first,), iterator) if first is not None else iter(())), info
 
-    def _segments(self, audio, params, info):
-        torch = self._torch
-        windows = speech_windows(audio, chunk_length=params["chunk_length"],
-                                 vad_filter=params["vad_filter"], vad_parameters=params["vad_parameters"])
-        prompt = "\n".join(str(params[key]) for key in ("initial_prompt", "hotwords") if params.get(key)) or None
+    @contextmanager
+    def _inference_threads(self) -> Iterator[None]:
+        """Restore process-wide Torch settings before yielding a segment."""
+        previous = self._torch.get_num_threads()
+        try:
+            if self.hardware.cpu_threads > 0:
+                self._torch.set_num_threads(self.hardware.cpu_threads)
+            yield
+        finally:
+            if self._torch.get_num_threads() != previous:
+                self._torch.set_num_threads(previous)
+
+    def _recognize_chunk(
+        self, chunk: Any, params: Mapping[str, Any], prompt: str | None,
+    ) -> tuple[str, str | None, str | None]:
+        inputs = self._processor.apply_transcription_request(
+            audio=chunk,
+            language=QWEN_LANGUAGES.get(params["language"]),
+            prompt=prompt,
+        ).to(self._model.device, self._model.dtype)
+        with self._torch.inference_mode():
+            ids = self._model.generate(
+                **inputs, max_new_tokens=params["max_new_tokens"], do_sample=False,
+            )
+        generated = ids[:, inputs["input_ids"].shape[1]:]
+        # A full token budget without EOS means the transcript is incomplete.
+        eos = self._model.generation_config.eos_token_id
+        eos = [eos] if isinstance(eos, int) else eos
+        if (
+            generated.shape[1] >= params["max_new_tokens"]
+            and int(generated[0, -1]) not in (eos or [])
+        ):
+            raise ValueError("Qwen 转录达到 token 上限，请缩短音频窗口或提高最大 token 数")
+        parsed = self._processor.decode(generated, return_format="parsed")[0]
+        text = parsed["transcription"].strip()
+        detected = parsed.get("language") or params["language"]
+        code = next(
+            (code for code, name in QWEN_LANGUAGES.items() if detected in (code, name)),
+            None,
+        )
+        return text, detected, code
+
+    def _align_chunk(
+        self, chunk: Any, text: str, *, offset: float, duration: float,
+    ) -> tuple[TranscribedWord, ...]:
+        self._load_aligner()
+        # The generic CJK/word splitter avoids optional native tokenizers.
+        alignment, tokens = self._aligner_processor.prepare_forced_aligner_inputs(
+            audio=chunk, transcript=text, language=None,
+        )
+        alignment = alignment.to(self._aligner.device, self._aligner.dtype)
+        with self._torch.inference_mode():
+            output = self._aligner(**alignment)
+        stamps = self._aligner_processor.decode_forced_alignment(
+            logits=output.logits,
+            input_ids=alignment["input_ids"],
+            word_lists=tokens,
+            timestamp_token_id=self._aligner.config.timestamp_token_id,
+        )[0]
+        return aligned_words(text, stamps, offset=offset, duration=duration)
+
+    def _segments(
+        self, audio: Any, params: Mapping[str, Any], info: TranscriptionInfo,
+    ) -> Iterator[TranscribedSegment]:
+        windows = speech_windows(
+            audio, chunk_length=params["chunk_length"],
+            vad_filter=params["vad_filter"], vad_parameters=params["vad_parameters"],
+        )
+        prompt = "\n".join(
+            str(params[key]) for key in ("initial_prompt", "hotwords") if params.get(key)
+        ) or None
         for start, end in windows:
-            previous_threads = torch.get_num_threads()
-            try:
-                if self.hardware.cpu_threads > 0:
-                    torch.set_num_threads(self.hardware.cpu_threads)
+            with self._inference_threads():
                 chunk = audio[start:end]
-                inputs = self._processor.apply_transcription_request(
-                    audio=chunk, language=QWEN_LANGUAGES.get(params["language"]), prompt=prompt,
-                ).to(self._model.device, self._model.dtype)
-                with torch.inference_mode():
-                    ids = self._model.generate(**inputs, max_new_tokens=params["max_new_tokens"], do_sample=False)
-                generated = ids[:, inputs["input_ids"].shape[1]:]
-                # Report truncation instead of silently producing incomplete text.
-                eos = self._model.generation_config.eos_token_id
-                eos = [eos] if isinstance(eos, int) else eos
-                if generated.shape[1] >= params["max_new_tokens"] and int(generated[0, -1]) not in (eos or []):
-                    raise ValueError("Qwen 转录达到 token 上限，请缩短音频窗口或提高最大 token 数")
-                parsed = self._processor.decode(generated, return_format="parsed")[0]
-                text = parsed["transcription"].strip()
-                detected = parsed.get("language") or params["language"]
-                code = next((code for code, name in QWEN_LANGUAGES.items()
-                             if detected in (code, name)), None)
+                text, detected, code = self._recognize_chunk(chunk, params, prompt)
                 if info.language is None:
                     info.language = code
                 words = None
                 if text and params["word_timestamps"]:
                     if code not in QWEN_ALIGNMENT_LANGUAGES:
                         raise ValueError(f"Qwen 对齐模型不支持检测到的语言 {detected}，请仅输出 TXT/Markdown")
-                    self._load_aligner()
-                    # The aligner supports arbitrary units. Its generic CJK/word
-                    # splitter avoids optional language-specific native tokenizers.
-                    alignment, tokens = self._aligner_processor.prepare_forced_aligner_inputs(
-                        audio=chunk, transcript=text, language=None,
+                    words = self._align_chunk(
+                        chunk, text, offset=start / SAMPLE_RATE,
+                        duration=(end - start) / SAMPLE_RATE,
                     )
-                    alignment = alignment.to(self._aligner.device, self._aligner.dtype)
-                    with torch.inference_mode():
-                        output = self._aligner(**alignment)
-                    stamps = self._aligner_processor.decode_forced_alignment(
-                        logits=output.logits, input_ids=alignment["input_ids"], word_lists=tokens,
-                        timestamp_token_id=self._aligner.config.timestamp_token_id,
-                    )[0]
-                    words = aligned_words(text, stamps, offset=start / SAMPLE_RATE,
-                                          duration=(end - start) / SAMPLE_RATE)
-                    del alignment, output
-                del inputs, ids, generated
-            finally:
-                if torch.get_num_threads() != previous_threads:
-                    torch.set_num_threads(previous_threads)
             yield TranscribedSegment(start / SAMPLE_RATE, end / SAMPLE_RATE, text, words)
 
     def close(self) -> None:

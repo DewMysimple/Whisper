@@ -2,13 +2,25 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any, Protocol
+
 from ..domain.models import DEFAULT_MODEL_ID, MODELS_BY_ID
 from ..domain.transcription import TranscriptionEngine
 from ..paths import ModelLocation
-from .hardware import HardwareDetector, HardwareInfo
+from ..domain.execution import HardwareInfo
+from .hardware import HardwareDetector
 
 
-def hardware_detector(model_id: str = DEFAULT_MODEL_ID):
+class BackendHardwareDetector(Protocol):
+    """Shared probe surface; precision selection belongs to each runtime."""
+
+    def capabilities(self) -> dict[str, Any]: ...
+
+    def resolve(self, execution: Mapping[str, Any]) -> HardwareInfo: ...
+
+
+def hardware_detector(model_id: str = DEFAULT_MODEL_ID) -> BackendHardwareDetector:
     if MODELS_BY_ID[model_id].backend == "qwen3-asr":
         from .torch_hardware import TorchHardwareDetector
         return TorchHardwareDetector()

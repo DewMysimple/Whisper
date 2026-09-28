@@ -40,7 +40,7 @@ src/whisper_subtitle/
 ├── domain/
 │   ├── contracts.py           # Preset、请求、结果、进度事件
 │   ├── models.py              # 模型身份、能力与仓库映射唯一注册表
-│   ├── execution.py           # 桌面任务执行设置校验
+│   ├── execution.py           # 后端中立 HardwareInfo 与任务执行设置校验
 │   ├── presets.py             # 四 preset 的唯一注册表
 │   ├── transcription.py       # 引擎协议
 │   └── postprocess/           # 纯文本与片段后处理
@@ -104,7 +104,7 @@ CLI 或 Desktop IPC 输入
   → TranscriptionService
   → 解析 preset
   → 发现媒体
-  → HardwareDetector + FasterWhisperEngine
+  → engines 工厂 → 后端硬件探测器 + Whisper/Qwen 引擎
   → engine.transcribe
   → domain.postprocess strategy
   → output_store 原子写入

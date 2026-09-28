@@ -111,9 +111,12 @@ def test_alignment_never_fabricates_timestamps(stamps):
 
 
 def test_chunk_windows_are_bounded_and_preserve_silence_offsets(monkeypatch):
-    import faster_whisper.vad as vad
-    monkeypatch.setattr(vad, "get_speech_timestamps", lambda *a, **kw: [
-        {"start": 32000, "end": 600000}, {"start": 640000, "end": 660000}])
+    vad = SimpleNamespace(
+        VadOptions=lambda **options: options,
+        get_speech_timestamps=lambda *a, **kw: [
+            {"start": 32000, "end": 600000}, {"start": 640000, "end": 660000}],
+    )
+    monkeypatch.setitem(sys.modules, "faster_whisper.vad", vad)
     audio = [0] * 700000
     assert list(speech_windows(audio, chunk_length=30, vad_filter=True, vad_parameters={})) == [
         (32000, 512000), (512000, 600000), (640000, 660000)]

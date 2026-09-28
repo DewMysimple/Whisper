@@ -3,9 +3,10 @@ type: knowledge
 status: active
 kind: module
 importance: high
-updated: 2026-09-27
+updated: 2026-09-28
 topic: python-transcription-core
 source_logs:
+  - "[[日志/2026-09-28-公共契约与后端生命周期维护]]"
   - "[[日志/2026-09-27-Qwen本地模型适配与Whisper兼容]]"
   - "[[日志/2026-09-26-校准四预设并修复配乐旁白漏识别]]"
   - "[[日志/2026-08-23-项目记忆重建]]"
@@ -18,6 +19,8 @@ supersedes: null
 # Python 转录核心
 
 ## 职责
+
+- `domain/execution.py` 统一后端中立 `HardwareInfo`；硬件工厂通过 `BackendHardwareDetector` 表达共同接口。Qwen 单窗识别、对齐与线程作用域分别维护；Windows 推理依赖加载前统一初始化 CUDA。Worker 空闲释放以计时器代次拒绝过期回调。
 
 - `domain/contracts.py` 定义请求、Preset、结果和进度契约。
 - `domain/models.py` 是模型身份、能力和仓库映射的唯一注册表。

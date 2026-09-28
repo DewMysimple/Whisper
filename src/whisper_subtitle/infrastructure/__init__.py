@@ -6,7 +6,8 @@ from .media_files import (
     discover_media_files,
     is_supported_media_file,
 )
-from .hardware import HardwareDetector, HardwareInfo
+from ..domain.execution import HardwareInfo
+from .hardware import HardwareDetector
 from .environment_check import REQUIRED_MODULES, check_environment
 from .output_store import (
     OutputPlan,

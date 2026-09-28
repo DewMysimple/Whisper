@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from ..bootstrap import configure_runtime
-from ..infrastructure.hardware import HardwareInfo
+from ..domain.execution import HardwareInfo
 from ..infrastructure.engines import hardware_detector as backend_hardware_detector
 from ..protocol import ErrorCode, EventCode, EventMessage
 from .runtime_types import (
@@ -50,6 +50,7 @@ class ModelCache:
         self._logger = logger or logging.getLogger(__name__)
         self._lock = threading.RLock()
         self._timer: threading.Timer | None = None
+        self._timer_generation = 0
         self._engine: Any | None = None
         self._hardware: HardwareInfo | None = None
         self._model_id: str | None = None
@@ -71,6 +72,9 @@ class ModelCache:
             return self._active_users
 
     def _cancel_timer_locked(self) -> None:
+        # cancel() cannot stop a callback that has already begun waiting for
+        # our lock. Invalidate it before scheduling a new idle period.
+        self._timer_generation += 1
         if self._timer is not None:
             self._timer.cancel()
             self._timer = None
@@ -81,13 +85,17 @@ class ModelCache:
             if self._engine is not None and not self._active_users and self._idle_timeout == 0:
                 self._release_locked("zero idle timeout")
             return
-        timer = threading.Timer(self._idle_timeout, self._release_if_idle)
+        timer = threading.Timer(
+            self._idle_timeout, self._release_if_idle, args=(self._timer_generation,)
+        )
         timer.daemon = True
         self._timer = timer
         timer.start()
 
-    def _release_if_idle(self) -> None:
+    def _release_if_idle(self, generation: int) -> None:
         with self._lock:
+            if generation != self._timer_generation:
+                return
             self._timer = None
             if self._active_users == 0:
                 self._release_locked("idle timeout")

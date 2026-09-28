@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from ..domain.mixed_language import LanguageDetectionRegion
 from ..domain.models import DEFAULT_MODEL_ID
-from .hardware import HardwareInfo
+from ..domain.execution import HardwareInfo
 from ..paths import AppPaths, ModelLocation
 
 

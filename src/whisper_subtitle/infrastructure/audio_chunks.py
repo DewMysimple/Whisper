@@ -5,11 +5,14 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from typing import Any
 
+from .cuda_runtime import configure_cuda_runtime
+
 SAMPLE_RATE = 16000
 
 
 def decode_media(path: str):
     # Reuse the established PyAV decoder: every backend accepts the same media.
+    configure_cuda_runtime()
     from faster_whisper.audio import decode_audio
     return decode_audio(path, sampling_rate=SAMPLE_RATE)
 

@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from ..infrastructure.hardware import HardwareInfo
+from ..domain.execution import HardwareInfo
 from ..infrastructure.engines import load_engine
 from ..domain.transcription import TranscriptionEngine
 from ..paths import ModelLocation
