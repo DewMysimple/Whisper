@@ -19,6 +19,22 @@ corepack pnpm release:build
 
 On Windows, double-click the repository-root `buildStart.cmd` for the same portable build. The window stays open to show the result. It builds the current local source tree and refreshes `dist/WhisperSubtitle/` and `dist/WhisperSubtitle.sha256`.
 
+For a browser UI preview on a machine that does not package desktop releases, use `runStart.cmd`. A Git checkout does not include local Python environments, model weights or `dist/`; those are ignored artifacts. Their absence on another development machine does not mean workspace cleanup deleted them.
+
+The build no longer requires an environment named `whisper_env`. It uses an explicit `-BootstrapPython` first, then the active `VIRTUAL_ENV`, existing repository environments (`whisper_env`, `.venv`, `venv`, `env`), `python.exe` on PATH, or the Windows `py -3` launcher. Candidates must be working Windows x64 Python 3.10+ interpreters with `venv` and `ensurepip`; an invalid explicit override fails instead of silently choosing another interpreter. Release dependencies are still installed into the disposable build environment, not the selected interpreter.
+
+Before creating or clearing build files, the script checks Python, local model bundles, Node/Corepack and Cargo availability. Models come from `-ModelDir`, then `WHISPER_SUBTITLE_MODEL_DIR`, then `models/huggingface`. Missing prerequisites are reported together; the script does not recreate a deleted development environment or download models. Cargo lookup is shared with assembly and respects PATH and `CARGO_HOME`.
+
+```powershell
+# Check this machine without starting a build or downloading dependencies
+.\buildStart.cmd -CheckOnly
+
+# Use existing resources elsewhere on a packaging machine
+.\buildStart.cmd -BootstrapPython "C:\path\to\python.exe" -ModelDir "D:\path\to\models"
+```
+
+`-CheckOnly` checks local discovery and model structure, not compilation or inference. A full desktop build also needs the pinned Rust toolchain, Visual Studio C++ Build Tools, project Node dependencies and access to the pinned Python build dependencies.
+
 The command creates a clean release environment, builds and freezes the headless Worker, copies validated offline model bundles, builds the Tauri desktop host, and verifies every file in a staged portable directory before replacing the current version. Generated artifacts are permanently removed through a shared path guard, without accumulating them in the Windows Recycle Bin. Close the application before replacement; assembly checks for running processes, tracked files and linked directories.
 
 Successful builds remove `build/release/` and the extra Worker resources copied into Cargo output. Pass `-KeepBuild` to retain them temporarily for debugging. Failed builds retain diagnostics; finish cleanup after verification. The release directory keeps its complete independent model and runtime copies and remains portable.

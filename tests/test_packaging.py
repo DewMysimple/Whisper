@@ -137,7 +137,8 @@ def test_release_commands_use_project_tool_versions_and_portable_paths():
     )
     assert "corepack pnpm" in web_package["scripts"]["e2e"]
     assert "C:\\Users\\Administrator" not in finish_script
-    assert "CARGO_HOME" in finish_script
+    assert "Resolve-ReleaseCargo" in finish_script
+    assert "CARGO_HOME" in (RELEASE_TOOLS / "prerequisites.ps1").read_text(encoding="utf-8")
 
 
 def test_release_output_has_a_shallow_user_facing_layout():
@@ -191,6 +192,7 @@ def test_release_powershell_sources_are_safe_for_windows_powershell_5():
     scripts = [
         (RELEASE_TOOLS / "build.ps1").read_text(encoding="utf-8"),
         (RELEASE_TOOLS / "assemble.ps1").read_text(encoding="utf-8"),
+        (RELEASE_TOOLS / "prerequisites.ps1").read_text(encoding="utf-8"),
     ]
     assert all(script.isascii() for script in scripts)
     assert '"user_guide.zh-CN.md"' in scripts[1]

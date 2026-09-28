@@ -15,7 +15,9 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-28 | maintenance | - | archived | merge-release-prerequisites-maintenance | [[日志/2026-09-28-合并构建入口维护并复验发布.md|合并构建入口维护并复验发布]] |
 | 2026-09-28 | maintenance | - | archived | shared-contract-backend-lifecycle-maintenance | [[日志/2026-09-28-公共契约与后端生命周期维护.md|公共契约与后端生命周期维护]] |
+| 2026-09-28 | bug | - | archived | portable-build-environment-discovery | [[日志/2026-09-28-修复跨开发环境的构建入口.md|修复跨开发环境的构建入口]] |
 | 2026-09-27 | maintenance | - | archived | workspace-slimming-delivery-cleanup | [[日志/2026-09-27-开发环境深度瘦身与交付收尾.md|开发环境深度瘦身与交付收尾]] |
 | 2026-09-27 | feature | 按用户授权接入前述 Qwen3-ASR，保留以前的模型和使用方式，维护公共边界与可扩展能力来源。 | archived | qwen-backend-integration-2026-09-27 | [[日志/2026-09-27-Qwen本地模型适配与Whisper兼容.md|Qwen 本地模型适配与 Whisper 兼容]] |
 | 2026-09-26 | bug | - | archived | narration-preset-calibration-20260926 | [[日志/2026-09-26-校准四预设并修复配乐旁白漏识别.md|校准四预设并修复配乐旁白漏识别]] |

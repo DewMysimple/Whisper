@@ -39,6 +39,7 @@ $package = Get-Content -Encoding utf8 -Raw (Join-Path $RepositoryRoot "package.j
 $Version = [string]$package.version
 
 . (Join-Path $RepositoryRoot "tools\maintenance\generated_paths.ps1")
+. (Join-Path $PSScriptRoot "prerequisites.ps1")
 $BuildRoot = Assert-GeneratedPath -Path $BuildRoot -RepositoryRoot $RepositoryRoot -AllowedRoots @((Join-Path $RepositoryRoot "build"))
 $PortableStage = Join-Path $BuildRoot "portable"
 
@@ -114,11 +115,7 @@ try {
     $generated | ConvertTo-Json -Depth 20 | Set-Content -Encoding utf8 $ReleaseConfig
 
     if (-not (Get-Command cargo.exe -ErrorAction SilentlyContinue)) {
-        $CargoRoot = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path ([Environment]::GetFolderPath("UserProfile")) ".cargo" }
-        $CargoExecutable = Join-Path $CargoRoot "bin\cargo.exe"
-        if (-not (Test-Path -LiteralPath $CargoExecutable)) {
-            throw "cargo.exe was not found on PATH or below CARGO_HOME"
-        }
+        $CargoExecutable = Resolve-ReleaseCargo
         $env:PATH = "$(Split-Path -Parent $CargoExecutable);$env:PATH"
     }
     corepack pnpm --filter @whisper-subtitle/web build
