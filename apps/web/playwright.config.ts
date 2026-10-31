@@ -15,6 +15,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'line',
   use: {
     baseURL,
+    timezoneId: 'Asia/Shanghai',
     channel: 'msedge',
     headless: true,
     viewport: { width: 1440, height: 900 },
