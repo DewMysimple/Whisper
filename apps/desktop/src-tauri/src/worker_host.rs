@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
@@ -220,7 +220,7 @@ pub struct WorkerManager {
     child: Mutex<Option<Child>>,
     stdin: Mutex<Option<ChildStdin>>,
     pending: Mutex<HashMap<String, mpsc::SyncSender<PendingResult>>>,
-    active_tasks: Mutex<HashSet<String>>,
+    active_tasks: Mutex<HashMap<String, String>>,
     logs: Mutex<VecDeque<String>>,
     request_sequence: AtomicU64,
     generation: AtomicU64,
@@ -237,7 +237,7 @@ impl WorkerManager {
             child: Mutex::new(None),
             stdin: Mutex::new(None),
             pending: Mutex::new(HashMap::new()),
-            active_tasks: Mutex::new(HashSet::new()),
+            active_tasks: Mutex::new(HashMap::new()),
             logs: Mutex::new(VecDeque::new()),
             request_sequence: AtomicU64::new(1),
             generation: AtomicU64::new(0),
@@ -824,7 +824,11 @@ impl WorkerManager {
                     .or_else(|| message.get("taskId").and_then(Value::as_str))
                     && let Ok(mut active_tasks) = self.active_tasks.lock()
                 {
-                    active_tasks.insert(task_id.to_owned());
+                    let model_id = message
+                        .pointer("/data/model_id")
+                        .and_then(Value::as_str)
+                        .unwrap_or(DEFAULT_MODEL_ID);
+                    active_tasks.insert(task_id.to_owned(), model_id.to_owned());
                 }
             }
             Some("task.completed" | "task.failed" | "task.cancelled") => {
@@ -851,7 +855,11 @@ impl WorkerManager {
         if let Some(summary) = worker_log_summary(&message) {
             self.push_log(summary);
         }
-        for line in worker_quality_diagnostic_log_lines(&message) {
+        let task_model = message
+            .get("task_id")
+            .and_then(Value::as_str)
+            .and_then(|task_id| self.active_tasks.lock().ok()?.get(task_id).cloned());
+        for line in worker_quality_diagnostic_log_lines(&message, task_model.as_deref()) {
             self.push_log(line);
         }
         (self.sink)(WORKER_MESSAGE_EVENT, message);
@@ -1578,7 +1586,7 @@ mod tests {
             }
         });
 
-        let lines = worker_quality_diagnostic_log_lines(&progress);
+        let lines = worker_quality_diagnostic_log_lines(&progress, Some("large-v3-turbo"));
         assert_eq!(lines.len(), 5);
         assert!(lines[0].contains("复杂中英混合"));
         assert!(lines[0].contains("需复核 1"));
@@ -1651,6 +1659,54 @@ mod tests {
             generation,
         );
         assert!(!manager.has_active_tasks());
+    }
+
+    #[test]
+    fn qwen_worker_logs_preserve_language_and_terms_without_claiming_decode_assessment() {
+        let manager = WorkerManager::new(PathBuf::from("."), Arc::new(|_, _| {}));
+        let generation = manager.generation.load(std::sync::atomic::Ordering::SeqCst);
+        for model_id in ["qwen3-asr-0.6b", "qwen3-asr-1.7b"] {
+            manager.clear_logs();
+            manager.handle_worker_message(
+                json!({
+                    "schema_version": 1, "type": "event", "event": "task.queued",
+                    "request_id": "request-quality", "task_id": "task-quality",
+                    "data": {"model_id": model_id}
+                }),
+                generation,
+            );
+            manager.handle_worker_message(json!({
+                "schema_version": 1, "type": "event", "event": "task.progress",
+                "task_id": "task-quality",
+                "data": {"quality_diagnostics": {
+                    "detected_language": "zh", "language_probability": null,
+                    "segment_count": 1, "fallback_segment_count": 0,
+                    "max_temperature": 0.0, "low_confidence_count": 0, "segments": [],
+                    "hotword_audit": {"term_count": 2, "matched_terms": ["拟态"], "missing_terms": ["李普曼"]}
+                }}
+            }), generation);
+            let logs = manager.logs().join("\n");
+            assert!(logs.contains("当前模型未提供这些解码质量指标"), "{logs}");
+            assert!(!logs.contains("温度回退 0"), "{logs}");
+            assert!(!logs.contains("需复核 0"), "{logs}");
+            assert!(logs.contains("language zh"), "{logs}");
+            assert!(logs.contains("matched [拟态]"), "{logs}");
+            assert!(logs.contains("missing [李普曼]"), "{logs}");
+        }
+    }
+
+    #[test]
+    fn late_quality_without_a_queued_model_does_not_assume_whisper_assessment() {
+        let message = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../tests/fixtures/qwen_quality_progress.json"
+        )))
+        .unwrap();
+        let logs = worker_quality_diagnostic_log_lines(&message, None).join("\n");
+        assert!(logs.contains("缺少任务模型信息"), "{logs}");
+        assert!(!logs.contains("需复核 0"), "{logs}");
+        assert!(!logs.contains("温度回退 0"), "{logs}");
+        assert!(logs.contains("matched [拟态]"), "{logs}");
     }
 
     #[test]

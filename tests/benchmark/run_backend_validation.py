@@ -21,6 +21,7 @@ from dataclasses import asdict
 
 from whisper_subtitle.protocol import parse_protocol_line
 from whisper_subtitle.domain.subtitles import SubtitleOptions
+from whisper_subtitle.domain.models import DECODING_DIAGNOSTIC_MODEL_IDS
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -109,6 +110,23 @@ def main() -> None:
             else:
                 raise TimeoutError(request)
             paths = [Path(p) for p in message["data"]["outputs"]]
+            quality_events = [
+                item for item in observed
+                if item.get("task_id") == task_id
+                and "quality_diagnostics" in item.get("data", {})
+            ]
+            assert quality_events, "Worker did not report recognition diagnostics"
+            quality_event = quality_events[-1]
+            diagnostics = quality_event["data"]["quality_diagnostics"]
+            assert diagnostics["detected_language"], "Detected language was lost"
+            if model in DECODING_DIAGNOSTIC_MODEL_IDS:
+                assert "需复核" in quality_event.get("message", "")
+                assert "当前模型未提供" not in quality_event.get("message", "")
+            else:
+                assert "当前模型未提供这些解码质量指标" in quality_event.get("message", "")
+                assert "需复核 0" not in quality_event.get("message", "")
+                assert "温度回退 0" not in quality_event.get("message", "")
+                assert diagnostics["language_probability"] is None, "Qwen confidence was fabricated"
             assert {p.suffix for p in paths} == ({".txt", ".md", ".srt"} if srt else {".txt", ".md"})
             assert all(p.is_file() and p.stat().st_size for p in paths)
             text = next(p for p in paths if p.suffix == ".txt").read_text(encoding="utf-8")
@@ -124,6 +142,8 @@ def main() -> None:
                     assert text.count("今天天气很好") == 3, text
             results.append({"model":model, "preset":preset, "media":media.name,
                             "elapsed_seconds":round(time.monotonic()-started,3), "text":text,
+                            "decoding_diagnostics_available":model in DECODING_DIAGNOSTIC_MODEL_IDS,
+                            "diagnostic_message":quality_event.get("message"),
                             "outputs":[str(p) for p in paths]})
             print(json.dumps(results[-1], ensure_ascii=False), flush=True)
         ready = [m for m in observed if m.get("event") == "model.ready"]

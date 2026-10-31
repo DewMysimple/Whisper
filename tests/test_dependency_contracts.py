@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import ast
-import tomllib
+from array import array
 from pathlib import Path
+import wave
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 development environments
+    import tomli as tomllib
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -39,3 +45,24 @@ def test_windows_cuda_runtime_is_declared_without_pytorch():
     ).lower()
 
     assert "nvidia-cublas-cu12>=12.0,<13" in declarations
+
+
+def test_real_shared_audio_decoder_reads_pcm_without_models(tmp_path):
+    """Exercise faster-whisper/PyAV together, including av.open's keyword API."""
+    import numpy as np
+
+    from whisper_subtitle.infrastructure.audio_chunks import decode_media
+
+    samples = array("h", [-16384, 0, 16384, 0] * 400)
+    media = tmp_path / "decoder-compatibility.wav"
+    with wave.open(str(media), "wb") as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(16000)
+        stream.writeframes(samples.tobytes())
+
+    decoded = decode_media(str(media))
+
+    assert decoded.dtype == np.float32
+    assert decoded.shape == (len(samples),)
+    np.testing.assert_array_equal(decoded, np.array(samples, dtype=np.float32) / 32768)

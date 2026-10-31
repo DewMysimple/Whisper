@@ -9,6 +9,10 @@ export function isQwenModel(modelId: ModelId): boolean {
   return MODEL_CAPABILITIES[modelId].backend === 'qwen3-asr';
 }
 
+export function supportsDecodingDiagnostics(modelId: ModelId): boolean {
+  return MODEL_CAPABILITIES[modelId].decodingDiagnostics;
+}
+
 export function supportsParameter(modelId: ModelId, name: string): boolean {
   const parameters: readonly string[] | null = MODEL_CAPABILITIES[modelId].parameters;
   return parameters === null || parameters.includes(name);

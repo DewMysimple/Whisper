@@ -1,6 +1,6 @@
 # WhisperSubtitle
 
-WhisperSubtitle is a local, offline-first subtitle transcription application for Windows 11 x64. It combines a Tauri 2 desktop shell, a React/TypeScript workbench, and a persistent Python Worker powered by `faster-whisper`/CTranslate2.
+WhisperSubtitle is a local, offline-first subtitle transcription application for Windows 11 x64. It combines a Tauri 2 desktop shell, a React/TypeScript workbench, and a persistent Python Worker powered by `faster-whisper`/CTranslate2 or Qwen3-ASR/PyTorch.
 
 It is designed for people who want to transcribe their own audio and video files without uploading media to a web service. The application has no account system, no backend server, and no production localhost service. A compatible local Whisper model and NVIDIA runtime are external prerequisites for the packaged Windows workflow.
 
@@ -16,6 +16,8 @@ It is designed for people who want to transcribe their own audio and video files
 - Keeps the inference model warm in a persistent Worker, with task queueing, cancellation, progress events, and idle model release.
 - Supports both an interactive Tauri desktop workflow and a headless JSON-lines Worker for controlled integration.
 - Performs bounded output previews and keeps the production WebView disconnected from arbitrary network endpoints.
+- Provides model/parameter and hardware workbenches; settings apply to the next task while queued/running tasks keep their frozen configuration.
+- Supports local Qwen3-ASR 1.7B/0.6B models with a shared ForcedAligner, alongside the existing Whisper models and default Large V3 Turbo.
 
 ## Presets
 
@@ -26,7 +28,7 @@ It is designed for people who want to transcribe their own audio and video files
 | `en` | English standard | English speech with the standard context and post-processing strategy |
 | `en2` | English anti-hallucination | English speech with stricter thresholds and trailing hallucination cleanup |
 
-The default CLI preset is `en`. Desktop preset selection and Worker requests are derived from the same Python registry in `src/whisper_subtitle/domain/presets.py`. Supported model identities are maintained separately in `src/whisper_subtitle/domain/models.py` and projected into TypeScript and Rust by `tools/codegen/generate_model_catalog.py`. The desktop currently has no standalone model-switching or inference-parameter workbench; task model snapshots and runtime model validation remain supported.
+The default CLI preset is `en`. Desktop preset selection and Worker requests are derived from the same Python registry in `src/whisper_subtitle/domain/presets.py`. Supported model identities are maintained separately in `src/whisper_subtitle/domain/models.py` and projected into TypeScript and Rust by `tools/codegen/generate_model_catalog.py`. The desktop model/parameter workbench offers the settings supported by the selected backend, saved independently for each model/preset. Local model validation and frozen task snapshots remain enforced. See [Qwen setup and capabilities](docs/development/qwen_asr.md).
 
 ## Architecture
 
@@ -40,7 +42,7 @@ Tauri 2 / Rust Host
 persistent Python Worker
           │
           ▼
-TranscriptionService → faster-whisper / CTranslate2 → TXT / Markdown / SRT
+TranscriptionService → faster-whisper / CTranslate2 or Qwen / PyTorch → TXT / Markdown / SRT
 ```
 
 The runtime boundary is deliberate:
@@ -113,7 +115,11 @@ The same commands can be invoked without installing the console script:
 python -m whisper_subtitle transcribe "input.mp4" --preset en2
 ```
 
-By default, results are organized into `Text`, `Markdown`, and `SRT` directories beside the input media. A custom `--output` directory and the optional `--desktop` output are available for workflows that need a separate export location.
+The CLI keeps its compatibility layout: `Text`, `Markdown`, and `SRT` directories beside the input media. A custom `--output` directory and the optional `--desktop` output are available for workflows that need a separate export location.
+
+Desktop output offers **source** (beside each media file), **folders** (TXT/Markdown in `Text`, subtitles in `SRT`), or **custom** (directly in the chosen folder). Overwrite confirmation applies to old files on disk. Different media in one batch and queued/running tasks cannot reserve the same output, even with overwrite enabled; choose automatic renaming or a different destination. Automatic renaming avoids both existing files and reserved targets, using the same suffix across a media file's formats. Skip records skipped media without counting old files as generated output.
+
+Whisper decoding diagnostics identify segments that trigger review rules; zero flagged segments means the rules were evaluated, not that recognition is guaranteed correct. Qwen does not provide these Whisper probability/temperature metrics, so its task details show that the metrics are unavailable, including for older Qwen history with zero-valued diagnostic objects. Language and terminology checks remain available independently.
 
 ### Desktop application
 
@@ -174,6 +180,8 @@ corepack pnpm e2e
 
 The frontend's Vite/Playwright loopback server exists only for development and tests. It is not part of the production runtime. The Tauri host keeps `connect-src 'none'` in its production CSP, and the Worker communicates over controlled stdin/stdout JSON-lines rather than an HTTP endpoint.
 
+GitHub Actions runs repository/catalog/style checks, Web checks/build, model-free Python tests (including Python 3.10), Rust Host checks on Windows, and browser E2E on push/PR/manual dispatch. Hosted CI does not certify Windows 11 desktop behavior, GPU/model inference, or frozen releases; see [CI and real acceptance commands](docs/development/continuous_integration.md).
+
 ## Windows packaging
 
 Build the complete portable directory (ZIP is optional):
@@ -221,13 +229,15 @@ Local models, virtual environments, caches, generated build output, and local Ag
 
 ## 中文说明
 
-WhisperSubtitle 是面向 Windows 11 x64 的本地离线字幕转录工具。它使用 Tauri 2 + React/TypeScript 构建桌面界面，使用常驻 Python Worker 调用 `faster-whisper`/CTranslate2 推理，并输出 TXT、Markdown 和带真实片段时间戳的 SRT。
+WhisperSubtitle 是面向 Windows 11 x64 的本地离线字幕转录工具。它使用 Tauri 2 + React/TypeScript 构建桌面界面，使用常驻 Python Worker 调用 `faster-whisper`/CTranslate2 或 Qwen3-ASR/PyTorch 推理，并输出 TXT、Markdown 和带真实片段时间戳的 SRT。
 
 它不是在线网页服务：媒体文件和转录结果留在本机，生产桌面不启动 localhost 服务，也不依赖账号或后端。运行时需要本地 Whisper 模型；目标发布环境还需要兼容的 NVIDIA 驱动/GPU。
 
 四种预设为：`cn` 中文标准、`cn2` 中文防幻觉、`en` 英文标准、`en2` 英文防幻觉。CLI、桌面界面和 Web 参数展示都从 `src/whisper_subtitle/domain/presets.py` 的同一注册表派生，避免界面参数与实际推理参数漂移。
 
-默认情况下，结果会写到输入媒体旁的 `Text`、`Markdown`、`SRT` 文件夹。开发者可以先运行 `python -m whisper_subtitle check` 检查依赖、CUDA 和模型路径，再使用 `corepack pnpm desktop:dev` 启动桌面开发环境。
+桌面提供模型与参数、硬件优化工作台，支持原有 Whisper 和本地 Qwen3-ASR 两档，默认仍为 Turbo。CLI 保留原目录布局；桌面可选“跟随／文件夹／自定义”。覆盖只允许替换磁盘旧文件，不能绕过批内或活跃任务的输出占用。Qwen 未提供 Whisper 解码质量指标，详情明确说明不适用，保留语言与术语核查信息。
+
+开发者可以先运行 `python -m whisper_subtitle check` 检查依赖、CUDA 和模型路径，再使用 `corepack pnpm desktop:dev` 启动桌面开发环境。普通 CI 与真实 GPU／冻结 Worker／正式 EXE 验收分别执行，见[持续集成说明](docs/development/continuous_integration.md)。
 
 ## License
 

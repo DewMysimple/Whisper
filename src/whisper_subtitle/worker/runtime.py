@@ -20,6 +20,7 @@ from ..infrastructure.environment_check import check_worker_environment
 from ..infrastructure.engines import hardware_detector as backend_hardware_detector
 from ..infrastructure.output_store import (
     OutputConflictError,
+    OutputReservationError,
     select_configurable_outputs,
 )
 from ..infrastructure.performance import collect_performance_sample
@@ -339,7 +340,9 @@ class WorkerRuntime:
                 )
         except OutputConflictError as exc:
             raise WorkerCommandError(
-                ErrorCode.OUTPUT_FAILED,
+                ErrorCode.TASK_CONFLICT
+                if isinstance(exc, OutputReservationError)
+                else ErrorCode.OUTPUT_FAILED,
                 str(exc),
                 data={
                     "exception": type(exc).__name__,

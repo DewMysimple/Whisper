@@ -18,6 +18,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from whisper_subtitle.domain.models import (  # noqa: E402
     CALIBRATED_MODEL_IDS,
     DEFAULT_MODEL_ID,
+    DECODING_DIAGNOSTIC_MODEL_IDS,
     MODEL_DEFINITIONS,
     SECONDARY_RECOGNITION_MODEL_IDS,
     SUPPORTED_MODEL_IDS,
@@ -69,6 +70,7 @@ def render_typescript() -> str:
             _typescript_array("TRANSLATION_MODEL_IDS", _ordered(TRANSLATION_MODEL_IDS)),
             "export const MODEL_CAPABILITIES = " + json.dumps({
                 model.id: {"label": model.label, "backend": model.backend,
+                           "decodingDiagnostics": model.decoding_diagnostics,
                            "parameters": sorted(QWEN_PARAMETER_NAMES) if model.backend == "qwen3-asr" else None,
                            "languages": list(QWEN_LANGUAGES) if model.backend == "qwen3-asr" else None,
                            "companionId": model.companion_id}
@@ -156,6 +158,7 @@ def render_rust() -> str:
             _ordered(SECONDARY_RECOGNITION_MODEL_IDS),
         ),
         _rust_array("TRANSLATION_MODEL_IDS", _ordered(TRANSLATION_MODEL_IDS)),
+        _rust_array("DECODING_DIAGNOSTIC_MODEL_IDS", _ordered(DECODING_DIAGNOSTIC_MODEL_IDS)),
         _rust_array("QWEN_MODEL_IDS", [m.id for m in MODEL_DEFINITIONS if m.backend == "qwen3-asr"]),
         _rust_array("QWEN_PARAMETER_NAMES", sorted(QWEN_PARAMETER_NAMES)),
         _rust_array("QWEN_LANGUAGES", QWEN_LANGUAGES),

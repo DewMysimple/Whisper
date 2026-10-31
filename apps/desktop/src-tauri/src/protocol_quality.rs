@@ -60,7 +60,12 @@ pub(crate) fn validate_quality_diagnostics(value: &Value) -> Result<(), Protocol
     ] {
         require_nonnegative_integer(diagnostics, name)?;
     }
-    validate_nullable_bounded_number(diagnostics, "max_temperature", Some(0.0), Some(1.0))?;
+    let max_temperature = require_nonnegative_number(diagnostics, "max_temperature")?;
+    if max_temperature > 1.0 {
+        return Err(invalid(
+            "quality_diagnostics max_temperature must not exceed 1",
+        ));
+    }
     let segments = diagnostics
         .get("segments")
         .and_then(Value::as_array)

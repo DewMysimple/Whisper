@@ -21,7 +21,11 @@ from .recognition_passes import (
 )
 
 from ..domain.mixed_language import hotword_audit
-from ..domain.models import DEFAULT_MODEL_ID, SECONDARY_RECOGNITION_MODEL_IDS
+from ..domain.models import (
+    DEFAULT_MODEL_ID,
+    DECODING_DIAGNOSTIC_MODEL_IDS,
+    SECONDARY_RECOGNITION_MODEL_IDS,
+)
 from ..domain.postprocess import (
     apply_strategy,
     merge_chinese_segments_to_sentences,
@@ -309,7 +313,9 @@ class TranscriptionService:
                 )
             )
         quality_diagnostics = dict(
-            build_recognition_quality_diagnostics(quality_source_segments, info, params)
+            build_recognition_quality_diagnostics(
+                quality_source_segments, info, params, model_id=model_id
+            )
         )
         if mixed_recognition:
             quality_diagnostics["recognition_strategy"] = "mixed_zh_en"
@@ -341,13 +347,15 @@ class TranscriptionService:
         )
         if term_audit is not None:
             quality_diagnostics["hotword_audit"] = term_audit
+        quality_message = (
+            f"需复核 {quality_diagnostics['low_confidence_count']} 段；"
+            f"温度回退 {quality_diagnostics['fallback_segment_count']} 段"
+            if model_id in DECODING_DIAGNOSTIC_MODEL_IDS
+            else "当前模型未提供这些解码质量指标"
+        )
         self._emit(
             "segments_collected",
-            (
-                f"🧩 原始片段数: {len(segment_list)}；"
-                f"需复核 {quality_diagnostics['low_confidence_count']} 段；"
-                f"温度回退 {quality_diagnostics['fallback_segment_count']} 段"
-            ),
+            f"🧩 原始片段数: {len(segment_list)}；{quality_message}",
             current=current,
             total=total,
             preset_id=preset.id,

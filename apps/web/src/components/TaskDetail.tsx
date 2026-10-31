@@ -2,7 +2,7 @@ import { FileText, FolderOpen, RotateCcw, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import type { TaskSnapshot } from '../contracts/desktop';
-import { getModelLabel } from '../data/models';
+import { getModelLabel, supportsDecodingDiagnostics } from '../data/models';
 import { getPreset, transcriptionTaskLabel } from '../data/presets';
 import { formatResolvedHardware } from '../state/hardware';
 import {
@@ -41,7 +41,11 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
   const qualityMedia = (task.mediaStates ?? []).filter(
     (media) => media.qualityDiagnostics !== undefined,
   );
-  const lowConfidenceSegments = qualityMedia
+  const decodingDiagnosticsAvailable = supportsDecodingDiagnostics(task.modelId);
+  // Old Qwen history also contains zero-filled v1 carriers for language/terms.
+  // Their required numeric fields do not represent a decoding assessment.
+  const assessedMedia = decodingDiagnosticsAvailable ? qualityMedia : [];
+  const lowConfidenceSegments = assessedMedia
     .flatMap((media) =>
       (media.qualityDiagnostics?.segments ?? []).map((segment) => ({
         mediaPath: media.path,
@@ -49,11 +53,11 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
       })),
     )
     .slice(0, 50);
-  const totalLowConfidence = qualityMedia.reduce(
+  const totalLowConfidence = assessedMedia.reduce(
     (total, media) => total + (media.qualityDiagnostics?.lowConfidenceCount ?? 0),
     0,
   );
-  const totalFallbackSegments = qualityMedia.reduce(
+  const totalFallbackSegments = assessedMedia.reduce(
     (total, media) => total + (media.qualityDiagnostics?.fallbackSegmentCount ?? 0),
     0,
   );
@@ -195,33 +199,43 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
 
         <section className="detail-section quality-diagnostics">
           <h3>识别质量诊断</h3>
+          {!decodingDiagnosticsAvailable && (
+            <p className="quality-disclaimer">当前模型未提供这些解码质量指标。</p>
+          )}
           {qualityMedia.length === 0 ? (
             <span>旧任务或尚未完成识别的媒体没有质量诊断。</span>
           ) : (
             <>
-              <p className="quality-disclaimer">
-                以下片段仅表示解码指标触发复核条件，不等同于已经识别错误，正文不会被自动修改。
-              </p>
-              <div className="quality-summary-grid">
-                <span>
-                  已诊断媒体 <strong>{qualityMedia.length}</strong>
-                </span>
-                <span>
-                  需复核片段 <strong>{totalLowConfidence}</strong>
-                </span>
-                <span>
-                  温度回退片段 <strong>{totalFallbackSegments}</strong>
-                </span>
-                <span>
-                  自动采用候选 <strong>{totalReplacedRegions}</strong>
-                </span>
-                <span>
-                  保留原文区间 <strong>{totalReviewRegions}</strong>
-                </span>
-                <span>
-                  拒绝候选 <strong>{totalRejectedRegions}</strong>
-                </span>
-              </div>
+              {assessedMedia.length > 0 && (
+                <p className="quality-disclaimer">
+                  以下片段仅表示解码指标触发复核条件，不等同于已经识别错误，正文不会被自动修改。
+                </p>
+              )}
+              {assessedMedia.length > 0 && (
+                <div className="quality-summary-grid">
+                  <span>
+                    已诊断媒体 <strong>{assessedMedia.length}</strong>
+                  </span>
+                  <span>
+                    需复核片段 <strong>{totalLowConfidence}</strong>
+                  </span>
+                  <span>
+                    温度回退片段 <strong>{totalFallbackSegments}</strong>
+                  </span>
+                  <span>
+                    自动采用候选 <strong>{totalReplacedRegions}</strong>
+                  </span>
+                  <span>
+                    保留原文区间 <strong>{totalReviewRegions}</strong>
+                  </span>
+                  <span>
+                    拒绝候选 <strong>{totalRejectedRegions}</strong>
+                  </span>
+                </div>
+              )}
+              {assessedMedia.length > 0 && totalLowConfidence === 0 && (
+                <p>未发现触发复核规则的片段。</p>
+              )}
               {qualityMedia.map((media) => {
                 const diagnostics = media.qualityDiagnostics!;
                 return (
@@ -234,10 +248,14 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
                         : ` · 置信度 ${(diagnostics.languageProbability * 100).toFixed(1)}%`}
                     </span>
                     <span>
-                      {diagnostics.segmentCount} 段 · 最高温度{' '}
-                      {diagnostics.maxTemperature.toFixed(1)}
+                      {diagnostics.segmentCount} 段
+                      {decodingDiagnosticsAvailable && (
+                        <> · 最高温度 {diagnostics.maxTemperature.toFixed(1)}</>
+                      )}
                     </span>
-                    <span>{diagnostics.secondaryPassCount ?? 0} 次局部复识别</span>
+                    {diagnostics.secondaryPassCount !== undefined && (
+                      <span>{diagnostics.secondaryPassCount} 次局部复识别</span>
+                    )}
                     {diagnostics.languageRegions?.length ? (
                       <div className="language-region-list">
                         {diagnostics.languageRegions.map((region) => (

@@ -3,9 +3,10 @@ type: knowledge
 status: active
 kind: module
 importance: high
-updated: 2026-09-28
+updated: 2026-10-31
 topic: python-transcription-core
 source_logs:
+  - "[[日志/2026-10-31-输出安全诊断语义与持续集成]]"
   - "[[日志/2026-09-28-公共契约与后端生命周期维护]]"
   - "[[日志/2026-09-27-Qwen本地模型适配与Whisper兼容]]"
   - "[[日志/2026-09-26-校准四预设并修复配乐旁白漏识别]]"
@@ -19,6 +20,8 @@ supersedes: null
 # Python 转录核心
 
 ## 职责
+
+- `models.py` 的 `decoding_diagnostics` 表达模型是否提供 Whisper 解码指标，由现有生成器投影。`quality.py` 对 Qwen 保留语言／术语共用的 v1 兼容载体，但数字占位不代表评估；`transcribe.py` 共享 CLI／Worker 进度明确说明未提供指标。Whisper 的真实复核、回退和零值语义保留。
 
 - `domain/execution.py` 统一后端中立 `HardwareInfo`；硬件工厂通过 `BackendHardwareDetector` 表达共同接口。Qwen 单窗识别、对齐与线程作用域分别维护；Windows 推理依赖加载前统一初始化 CUDA。Worker 空闲释放以计时器代次拒绝过期回调。
 

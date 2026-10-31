@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::protocol::event_code;
 
-use super::model_catalog::DEFAULT_MODEL_ID;
+use super::model_catalog::{DECODING_DIAGNOSTIC_MODEL_IDS, DEFAULT_MODEL_ID};
 
 pub(super) fn worker_log_summary(message: &Value) -> Option<String> {
     if message.get("type").and_then(Value::as_str) == Some("error") {
@@ -135,7 +135,10 @@ pub(super) fn worker_log_summary(message: &Value) -> Option<String> {
     }
 }
 
-pub(super) fn worker_quality_diagnostic_log_lines(message: &Value) -> Vec<String> {
+pub(super) fn worker_quality_diagnostic_log_lines(
+    message: &Value,
+    model_id: Option<&str>,
+) -> Vec<String> {
     if event_code(message) != Some("task.progress") {
         return Vec::new();
     }
@@ -177,11 +180,21 @@ pub(super) fn worker_quality_diagnostic_log_lines(message: &Value) -> Vec<String
             .and_then(Value::as_str)
             .unwrap_or("stable_primary"),
     );
+    let decoding_available = model_id.is_some_and(|id| DECODING_DIAGNOSTIC_MODEL_IDS.contains(&id));
+    let quality_summary = if decoding_available {
+        format!("温度回退 {fallback_count} · 需复核 {low_confidence_count}")
+    } else if model_id.is_some() {
+        "当前模型未提供这些解码质量指标".to_owned()
+    } else {
+        "缺少任务模型信息，无法判断解码质量指标是否可用".to_owned()
+    };
     let mut lines = vec![format!(
         "[TASK {task}] quality · {strategy} · language {language} ({probability}) · \
-         {segment_count} 段 · 温度回退 {fallback_count} · 需复核 {low_confidence_count}"
+         {segment_count} 段 · {quality_summary}"
     )];
-    if let Some(segments) = diagnostics.get("segments").and_then(Value::as_array) {
+    if decoding_available
+        && let Some(segments) = diagnostics.get("segments").and_then(Value::as_array)
+    {
         for segment in segments {
             let start = segment
                 .get("start")

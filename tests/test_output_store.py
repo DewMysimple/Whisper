@@ -9,6 +9,7 @@ import pytest
 from whisper_subtitle.infrastructure import output_store
 from whisper_subtitle.infrastructure.output_store import (
     OutputConflictError,
+    OutputReservationError,
     atomic_write_text,
     build_configurable_output_plans,
     build_output_plan,
@@ -397,3 +398,96 @@ def test_srt_and_txt_targets_are_planned_independently(tmp_path):
     assert plan.primary_srt == root / "lesson (2).srt"
     assert plan.primary_srt_txt is None
     assert plan.primary_txt == root / "lesson (2).txt"
+
+
+@pytest.mark.parametrize(
+    "relative_media",
+    [
+        ("A/lesson.mp4", "B/lesson.mp4"),
+        ("A/lesson.mp4", "A/lesson.wav"),
+        ("A/Lesson.mp4", "B/lesson.wav"),
+    ],
+)
+@pytest.mark.parametrize("conflict", ["fail", "overwrite"])
+@pytest.mark.parametrize("existing_disk_output", [False, True])
+def test_batch_duplicate_outputs_cannot_be_confirmed_as_disk_overwrites(
+    tmp_path, relative_media, conflict, existing_disk_output
+):
+    media = [tmp_path / value for value in relative_media]
+    root = tmp_path / "output"
+    policy = custom_policy(root, conflict=conflict, preserve_txt=False, preserve_markdown=False)
+    if existing_disk_output:
+        root.mkdir()
+        (root / "lesson.txt").write_text("old result", encoding="utf-8")
+
+    with pytest.raises(OutputReservationError) as captured:
+        build_configurable_output_plans(media, policy)
+
+    assert captured.value.conflicts[-1].media_path == media[1]
+    assert {path.suffix for path in captured.value.paths} == {".txt", ".md"}
+    if existing_disk_output:
+        assert (root / "lesson.txt").read_text(encoding="utf-8") == "old result"
+    else:
+        assert not root.exists()
+
+
+@pytest.mark.parametrize("target", ["primary_txt", "primary_md", "primary_srt", "backup_txt", "backup_md"])
+def test_overwrite_rejects_reserved_targets_for_every_format_and_copy(tmp_path, target):
+    media = tmp_path / "input" / "lesson.wav"
+    policy = custom_policy(tmp_path / "output", conflict="overwrite")
+    policy["srt"] = {"enabled": True}
+    plan = build_configurable_output_plans([media], policy)[0]
+    reserved = getattr(plan, target)
+    assert reserved is not None
+
+    with pytest.raises(OutputReservationError) as captured:
+        build_configurable_output_plans([media], policy, reserved_paths=[reserved])
+
+    assert captured.value.paths == (reserved,)
+
+
+def test_overwrite_still_replaces_old_files_and_allows_same_plan_target_deduplication(tmp_path):
+    media = tmp_path / "input" / "lesson.wav"
+    destination = media.parent / "Text" / "lesson.txt"
+    destination.parent.mkdir(parents=True)
+    destination.write_text("old", encoding="utf-8")
+    policy = custom_policy(destination.parent, conflict="overwrite")
+    plan = build_configurable_output_plans([media], policy)[0]
+
+    assert plan.primary_txt == destination
+    assert plan.backup_txt is None
+    write_primary_outputs(plan, "new", markdown_content="# new")
+    assert destination.read_text(encoding="utf-8") == "new"
+
+
+def test_auto_rename_avoids_disk_and_active_and_batch_targets_with_shared_suffix(tmp_path):
+    root = tmp_path / "output"
+    root.mkdir()
+    (root / "lesson.srt").write_text("old", encoding="utf-8")
+    policy = custom_policy(root, conflict="auto_rename", preserve_txt=False, preserve_markdown=False)
+    policy["srt"] = {"enabled": True}
+
+    plans = build_configurable_output_plans(
+        [tmp_path / "A" / "lesson.wav", tmp_path / "B" / "lesson.mp4"],
+        policy,
+        reserved_paths=[root / "LESSON (2).md"],
+    )
+
+    assert {path.stem for path in plans[0].content_paths} == {"lesson (3)"}
+    assert {path.stem for path in plans[1].content_paths} == {"lesson (4)"}
+    assert (root / "lesson.srt").read_text(encoding="utf-8") == "old"
+
+
+def test_skip_reports_batch_and_active_reservations_without_claiming_generated_outputs(tmp_path):
+    root = tmp_path / "output"
+    media = [tmp_path / "A" / "same.wav", tmp_path / "B" / "same.mp4", tmp_path / "busy.wav"]
+    policy = custom_policy(root, conflict="skip", preserve_txt=False, preserve_markdown=False)
+    selection = output_store.select_configurable_outputs(
+        media, policy, reserved_paths=[root / "BUSY.txt"]
+    )
+
+    assert selection.media_paths == (media[0],)
+    assert len(selection.plans) == 1
+    assert [item.media_path for item in selection.skipped] == media[1:]
+    assert selection.skipped[0].paths == (root / "same.txt", root / "same.md")
+    assert selection.skipped[1].paths == (root / "busy.txt",)

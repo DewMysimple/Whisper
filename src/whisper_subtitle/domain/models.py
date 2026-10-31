@@ -16,6 +16,7 @@ class ModelDefinition:
     calibrated_parameters: bool = False
     secondary_recognition: bool = False
     translation: bool = True
+    decoding_diagnostics: bool = True
     backend: str = "faster-whisper"
     required_files: tuple[str, ...] = ("config.json", "model.bin")
     config_model_type: str | None = None
@@ -48,13 +49,13 @@ MODEL_DEFINITIONS = (
     ),
     ModelDefinition(
         "qwen3-asr-1.7b", "Qwen3-ASR 1.7B", ("Qwen/Qwen3-ASR-1.7B-hf",),
-        translation=False, backend="qwen3-asr",
+        translation=False, decoding_diagnostics=False, backend="qwen3-asr",
         required_files=("config.json", "processor_config.json", "tokenizer_config.json", "tokenizer.json", "chat_template.jinja"),
         config_model_type="qwen3_asr", config_architecture="Qwen3ASRForConditionalGeneration", companion_id="qwen3-forced-aligner-0.6b",
     ),
     ModelDefinition(
         "qwen3-asr-0.6b", "Qwen3-ASR 0.6B", ("Qwen/Qwen3-ASR-0.6B-hf",),
-        translation=False, backend="qwen3-asr",
+        translation=False, decoding_diagnostics=False, backend="qwen3-asr",
         required_files=("config.json", "processor_config.json", "tokenizer_config.json", "tokenizer.json", "chat_template.jinja"),
         config_model_type="qwen3_asr", config_architecture="Qwen3ASRForConditionalGeneration", companion_id="qwen3-forced-aligner-0.6b",
     ),
@@ -65,7 +66,7 @@ COMPANION_DEFINITIONS = (
     ModelDefinition(
         "qwen3-forced-aligner-0.6b", "Qwen3 ForcedAligner 0.6B",
         ("Qwen/Qwen3-ForcedAligner-0.6B-hf",),
-        translation=False, backend="qwen3-asr",
+        translation=False, decoding_diagnostics=False, backend="qwen3-asr",
         required_files=("config.json", "processor_config.json", "tokenizer_config.json", "tokenizer.json", "chat_template.jinja"),
         config_model_type="qwen3_asr", config_architecture="Qwen3ASRForTokenClassification",
     ),
@@ -87,4 +88,7 @@ SECONDARY_RECOGNITION_MODEL_IDS = frozenset(
 )
 TRANSLATION_MODEL_IDS = frozenset(
     model.id for model in MODEL_DEFINITIONS if model.translation
+)
+DECODING_DIAGNOSTIC_MODEL_IDS = frozenset(
+    model.id for model in MODEL_DEFINITIONS if model.decoding_diagnostics
 )

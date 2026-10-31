@@ -250,6 +250,36 @@ def test_translation_guidance_and_repetition_controls_reach_engine_unchanged(tmp
     assert options["temperature"] == 0.0
 
 
+@pytest.mark.parametrize("model_id", ["qwen3-asr-0.6b", "qwen3-asr-1.7b"])
+def test_qwen_reports_unavailable_decode_metrics_but_preserves_language_and_terms(
+    tmp_path, capsys, model_id
+):
+    from whisper_subtitle.presentation.console import ConsoleProgressRenderer
+
+    media = make_media(tmp_path, "lecture.wav")[0]
+    events = []
+    preset = derive_preset("en_v1", {"hotwords": "lecture\nmissing"}, model_id=model_id)
+    result = injected_service(events).transcribe_file(
+        TranscriptionRequest(media, "en_v1"),
+        FakeEngine(),
+        preset=preset,
+        model_id=model_id,
+    )
+    collected = next(event for event in events if event.stage == "segments_collected")
+
+    assert "当前模型未提供这些解码质量指标" in collected.message
+    assert "需复核 0" not in collected.message
+    assert "温度回退 0" not in collected.message
+    diagnostics = collected.quality_diagnostics
+    assert diagnostics["detected_language"] == "en"
+    assert diagnostics["language_probability"] == 0.99
+    assert diagnostics["hotword_audit"]["matched_terms"] == ("lecture",)
+    assert diagnostics["hotword_audit"]["missing_terms"] == ("missing",)
+    assert result.output_path.read_text(encoding="utf-8") == "Lecture transcript.\n"
+    ConsoleProgressRenderer()(collected)
+    assert "当前模型未提供这些解码质量指标" in capsys.readouterr().out
+
+
 def test_mixed_strategy_replaces_only_safe_english_region_and_reports_progress(tmp_path):
     media = make_media(tmp_path, "mixed.wav")[0]
     engine = FakeMixedEngine()

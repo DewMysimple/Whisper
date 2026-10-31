@@ -2,6 +2,7 @@
 
 ## 当前文档
 
+- [持续集成与真实 Windows/GPU 验收](development/continuous_integration.md)
 - [当前架构](architecture/current_architecture.md)
 - [ADR-0001：Tauri 2 + React/TypeScript + Python Worker 桌面架构](architecture/adr/0001-tauri-react-python-worker.md)
 - [批次 3 Tauri/React 工程骨架执行报告](../wiki-memory/历史归档/20-第二阶段-Tauri桌面架构迁移/批次3-TauriReact工程骨架/执行报告.md)

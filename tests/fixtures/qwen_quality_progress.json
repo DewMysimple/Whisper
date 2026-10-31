@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "type": "event",
+  "event": "task.progress",
+  "task_id": "qwen-quality-task",
+  "message": "原始片段数: 1；当前模型未提供这些解码质量指标",
+  "data": {
+    "stage": "transcription.running",
+    "current": 1,
+    "total": 1,
+    "input_path": "C:\\Media\\lecture.wav",
+    "quality_diagnostics": {
+      "detected_language": "zh",
+      "language_probability": null,
+      "segment_count": 1,
+      "fallback_segment_count": 0,
+      "max_temperature": 0.0,
+      "low_confidence_count": 0,
+      "segments": [],
+      "hotword_audit": {
+        "term_count": 2,
+        "matched_count": 1,
+        "missing_count": 1,
+        "matched_terms": ["拟态"],
+        "missing_terms": ["李普曼"],
+        "omitted_term_count": 0
+      }
+    }
+  }
+}

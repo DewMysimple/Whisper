@@ -11,13 +11,15 @@ export default defineConfig({
   timeout: 30_000,
   fullyParallel: false,
   workers: 1,
-  reporter: 'line',
+  forbidOnly: Boolean(process.env.CI),
+  reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'line',
   use: {
     baseURL,
     channel: 'msedge',
     headless: true,
     viewport: { width: 1440, height: 900 },
     trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
   },
   webServer: {
     command: `corepack pnpm exec vite preview --host 127.0.0.1 --port ${port} --strictPort`,

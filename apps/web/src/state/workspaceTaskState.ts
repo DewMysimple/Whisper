@@ -17,7 +17,11 @@ export function taskOutputPaths(task: TaskSnapshot | undefined): string[] {
   return [
     ...new Set([
       ...(task.outputs ?? []),
-      ...(task.mediaStates ?? []).flatMap((media) => media.outputPaths ?? []),
+      // Skipped paths identify the conflict for continuation checks; the task
+      // did not generate them, and an active owner's file may not exist yet.
+      ...(task.mediaStates ?? []).flatMap((media) =>
+        media.status === 'skipped' ? [] : (media.outputPaths ?? []),
+      ),
     ]),
   ];
 }

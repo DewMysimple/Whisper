@@ -18,6 +18,15 @@ pub(super) const SECONDARY_RECOGNITION_MODEL_IDS: &[&str] = &["large-v3", "large
 
 pub(super) const TRANSLATION_MODEL_IDS: &[&str] = &["tiny", "base", "small", "medium", "large-v3"];
 
+pub(super) const DECODING_DIAGNOSTIC_MODEL_IDS: &[&str] = &[
+    "tiny",
+    "base",
+    "small",
+    "medium",
+    "large-v3",
+    "large-v3-turbo",
+];
+
 pub(super) const QWEN_MODEL_IDS: &[&str] = &["qwen3-asr-1.7b", "qwen3-asr-0.6b"];
 
 pub(super) const QWEN_PARAMETER_NAMES: &[&str] = &[

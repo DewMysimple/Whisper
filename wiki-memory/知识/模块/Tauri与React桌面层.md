@@ -3,9 +3,10 @@ type: knowledge
 status: active
 kind: module
 importance: high
-updated: 2026-09-25
+updated: 2026-10-31
 topic: tauri-react-desktop
 source_logs:
+  - "[[日志/2026-10-31-输出安全诊断语义与持续集成]]"
   - "[[日志/2026-09-25-重设计启动操作面板内部布局]]"
   - "[[日志/2026-09-24-文件输出提示与转录操作区稳定化]]"
   - "[[日志/2026-09-24-简化开始转录按钮与下置执行提示]]"
@@ -52,6 +53,8 @@ supersedes: null
 ---
 
 # Tauri 与 React 桌面层
+
+- `TaskDetail` 按生成模型能力区分已评估、未提供指标和未记录诊断。Qwen（包括旧零值历史）不计入已诊断／复核／温度统计，语言与术语继续显示；Rust Host 从任务排队模型快照决定日志指标可用性，不解析中文消息猜后端。磁盘覆盖沿用既有确认，预留占用的 `task.conflict` 直接结束提交，不循环确认。
 
 - `apps/web/src/` 提供页面组件、任务工作区、历史、设置、性能和 bridge；模型与参数由 `ConfigurationView` 提供独立页面，`HardwareView` 提供独立硬件执行设置与实际能力查询，规则见 [[决策/ADR-005-硬件执行设置与工作台]]。
 - `apps/web/src/bridge/mockDesktopBridge.ts` 只用于浏览器测试；`tauriDesktopBridge.ts` 是正式本地 bridge。

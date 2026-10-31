@@ -382,6 +382,58 @@ describe('workspace terminal event notifications', () => {
     inspect.mockRestore();
   });
 
+  it('audits and previews generated media outputs without inspecting a skipped active reservation', async () => {
+    const generated = 'D:\\Text\\clean.txt';
+    const reserved = 'D:\\Text\\busy.txt';
+    const inspect = vi
+      .spyOn(desktopBridge, 'inspectOutputPaths')
+      .mockImplementation(async (paths) =>
+        paths.map((path) => ({ path, exists: path === generated })),
+      );
+    const preview = vi.spyOn(desktopBridge, 'readOutputPreview').mockResolvedValue({
+      path: generated,
+      content: 'new transcript',
+      truncated: false,
+    });
+    useWorkspace.setState({
+      tasks: [
+        {
+          ...RUNNING_TASK,
+          id: 'task-mixed-skip',
+          status: 'completed',
+          mediaStates: [
+            {
+              path: 'D:\\Media\\busy.wav',
+              status: 'skipped',
+              progress: null,
+              stage: '已跳过同名输出',
+              elapsedSeconds: 0,
+              outputPaths: [reserved],
+            },
+            {
+              path: 'D:\\Media\\clean.wav',
+              status: 'completed',
+              progress: 100,
+              stage: '已完成',
+              elapsedSeconds: 1,
+              outputPaths: [generated],
+            },
+          ],
+        },
+      ],
+      outputAuditPending: false,
+    });
+
+    await useWorkspace.getState().auditTaskOutputs();
+    expect(inspect).toHaveBeenCalledWith([generated]);
+    expect(useWorkspace.getState().tasks[0]?.outputAvailability).toBe('available');
+    await useWorkspace.getState().selectTask('task-mixed-skip');
+    expect(preview).toHaveBeenCalledWith(generated);
+    expect(useWorkspace.getState().outputPreview?.content).toBe('new transcript');
+    inspect.mockRestore();
+    preview.mockRestore();
+  });
+
   it('opens the next surviving output directory when an earlier path disappears', async () => {
     const first = 'D:\\Text\\first.txt';
     const second = 'D:\\Text\\second.txt';
@@ -575,6 +627,56 @@ describe('workspace terminal event notifications', () => {
     });
     start.mockRestore();
     listModels.mockRestore();
+  });
+
+  it('closes an overwrite dialog if another task claims its paths before confirmation', async () => {
+    const state = useWorkspace.getState();
+    const draft = {
+      inputs: [
+        {
+          id: 'input-busy',
+          path: 'D:\\Media\\sample.wav',
+          kind: 'file' as const,
+          origin: 'dialog' as const,
+          valid: true,
+        },
+      ],
+      modelId: state.selectedModelId,
+      basePresetId: state.selectedPresetId,
+      profileMode: state.profileMode,
+      overrides: state.overrides,
+      effectiveParameters: state.parameters,
+      subtitleParameters: state.subtitleParameters,
+      output: state.output,
+    };
+    const start = vi.spyOn(desktopBridge, 'startTranscription').mockRejectedValue(
+      Object.assign(new Error('输出目标已被其他任务占用，请使用自动重命名'), {
+        code: 'task.conflict',
+      }),
+    );
+    useWorkspace.setState({
+      inputs: draft.inputs,
+      pendingOverwrite: {
+        draft,
+        paths: ['D:\\Text\\sample.txt'],
+        conflicts: [],
+        mediaPaths: [draft.inputs[0]!.path],
+        mode: 'overwrite',
+        finishAction: 'none',
+        source: 'workspace',
+      },
+    });
+
+    await useWorkspace.getState().confirmOverwrite();
+    expect(useWorkspace.getState()).toMatchObject({
+      pendingOverwrite: null,
+      startingTask: false,
+      inputs: draft.inputs,
+      lastError: '输出目标已被其他任务占用，请使用自动重命名',
+    });
+    await useWorkspace.getState().confirmOverwrite();
+    expect(start).toHaveBeenCalledTimes(1);
+    start.mockRestore();
   });
 
   it('submits the exact en_v2 preset selected in the transcription panel', async () => {

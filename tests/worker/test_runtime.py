@@ -917,7 +917,8 @@ def test_output_conflict_fails_before_model_loading(tmp_path):
     assert destination.read_text(encoding="utf-8") == "existing"
 
 
-def test_fail_policy_detects_an_active_task_reserved_output(tmp_path):
+@pytest.mark.parametrize("conflict", ["fail", "overwrite"])
+def test_output_policy_detects_an_active_task_reserved_output(tmp_path, conflict):
     media = make_media(tmp_path / "input", "reserved.wav")
     root = tmp_path / "outputs"
     started = threading.Event()
@@ -930,7 +931,7 @@ def test_fail_policy_detects_an_active_task_reserved_output(tmp_path):
         ["task-reserved"],
     )
     first_policy = output_policy(mode="custom", root=root, conflict="overwrite")
-    second_policy = output_policy(mode="custom", root=root, conflict="fail")
+    second_policy = output_policy(mode="custom", root=root, conflict=conflict)
     try:
         runtime.handle_command(start_command("req-first", media, policy=first_policy))
         assert started.wait(3)
@@ -943,11 +944,114 @@ def test_fail_policy_detects_an_active_task_reserved_output(tmp_path):
         assert runtime.wait_until_idle()
         assert runtime.close(timeout=3)
 
-    assert captured.value.code is ErrorCode.OUTPUT_FAILED
+    assert captured.value.code is ErrorCode.TASK_CONFLICT
+    assert captured.value.data["exception"] == "OutputReservationError"
     assert captured.value.data["paths"] == [
         str(root / "reserved.txt"),
         str(media.parent / "Text" / "reserved.txt"),
     ]
+
+
+@pytest.mark.parametrize("conflict", ["fail", "overwrite"])
+def test_batch_output_collision_is_rejected_before_loading_or_inference(tmp_path, conflict):
+    first = make_media(tmp_path / "A", "lesson.mp4")
+    second = make_media(tmp_path / "B", "lesson.mp4")
+    events = []
+    engine = FakeEngine()
+    load_calls = []
+    runtime = make_runtime(events, engine, load_calls, ["task-clean"])
+    policy = output_policy(mode="custom", root=tmp_path / "outputs", conflict=conflict)
+    try:
+        with pytest.raises(WorkerCommandError) as captured:
+            runtime.handle_command(start_command("req-collision", first, second, policy=policy))
+        assert captured.value.code is ErrorCode.TASK_CONFLICT
+        assert runtime._reserved_output_paths == {}
+        assert load_calls == []
+        assert engine.calls == []
+        assert not any(event.event is EventCode.TASK_QUEUED for event in events)
+
+        # Failed planning did not reserve any path or consume the task identifier.
+        runtime.handle_command(start_command("req-clean", second, policy=policy))
+        assert runtime.wait_until_idle()
+        assert task_events(events, "task-clean")[-1].data["success_count"] == 1
+    finally:
+        assert runtime.close(timeout=3)
+
+
+@pytest.mark.parametrize("outcome", ["completed", "failed", "cancelled"])
+def test_terminal_task_releases_reservations_for_a_later_overwrite(tmp_path, monkeypatch, outcome):
+    media = make_media(tmp_path / "input", "lesson.wav")
+    started = threading.Event()
+    release = threading.Event()
+    if outcome != "cancelled":
+        release.set()
+    events = []
+    runtime = make_runtime(
+        events, FakeEngine(started=started, release=release), [], ["task-first", "task-next"]
+    )
+    if outcome == "failed":
+        acquire = runtime._model_cache.acquire
+        first_acquisition = True
+
+        def fail_first_acquisition(*args, **kwargs):
+            nonlocal first_acquisition
+            if first_acquisition:
+                first_acquisition = False
+                raise RuntimeError("model acquisition failed")
+            return acquire(*args, **kwargs)
+
+        monkeypatch.setattr(runtime._model_cache, "acquire", fail_first_acquisition)
+    policy = output_policy(mode="custom", root=tmp_path / "outputs", conflict="overwrite")
+    try:
+        runtime.handle_command(start_command("req-first", media, policy=policy))
+        if outcome == "cancelled":
+            assert started.wait(3)
+            runtime.handle_command(CommandMessage(
+                "req-cancel", CommandMethod.TRANSCRIPTION_CANCEL, {"task_id": "task-first"}
+            ))
+            release.set()
+        assert runtime.wait_until_idle()
+        assert task_events(events, "task-first")[-1].event.value == f"task.{outcome}"
+        assert runtime._reserved_output_paths == {}
+        runtime.handle_command(start_command("req-next", media, policy=policy))
+        assert runtime.wait_until_idle()
+        assert task_events(events, "task-next")[-1].data["success_count"] == 1
+        assert runtime._reserved_output_paths == {}
+    finally:
+        release.set()
+        assert runtime.close(timeout=3)
+
+
+def test_queued_cancellation_releases_its_reserved_outputs(tmp_path):
+    blocker = make_media(tmp_path / "input", "blocker.wav")
+    queued = make_media(tmp_path / "input", "lesson.wav")
+    started = threading.Event()
+    release = threading.Event()
+    events = []
+    runtime = make_runtime(
+        events, FakeEngine(started=started, release=release), [],
+        ["task-blocker", "task-cancelled", "task-retry"],
+    )
+    policy = output_policy(mode="custom", root=tmp_path / "outputs", conflict="overwrite")
+    try:
+        runtime.handle_command(start_command("req-blocker", blocker, policy=policy))
+        assert started.wait(3)
+        runtime.handle_command(start_command("req-queued", queued, policy=policy))
+        with pytest.raises(WorkerCommandError) as captured:
+            runtime.handle_command(start_command("req-collision", queued, policy=policy))
+        assert captured.value.code is ErrorCode.TASK_CONFLICT
+        runtime.handle_command(CommandMessage(
+            "req-cancel", CommandMethod.TRANSCRIPTION_CANCEL, {"task_id": "task-cancelled"}
+        ))
+        runtime.handle_command(start_command("req-retry", queued, policy=policy))
+        release.set()
+        assert runtime.wait_until_idle()
+        assert task_events(events, "task-cancelled")[-1].event is EventCode.TASK_CANCELLED
+        assert task_events(events, "task-retry")[-1].data["success_count"] == 1
+        assert runtime._reserved_output_paths == {}
+    finally:
+        release.set()
+        assert runtime.close(timeout=3)
 
 
 def test_skip_policy_queues_only_clean_media_and_reports_skipped_group(tmp_path):

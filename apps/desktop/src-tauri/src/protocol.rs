@@ -717,6 +717,22 @@ mod tests {
     }
 
     #[test]
+    fn accepts_qwen_language_term_carrier_without_extending_strict_v1() {
+        let value: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../tests/fixtures/qwen_quality_progress.json"
+        )))
+        .unwrap();
+        assert_eq!(validate_worker_message(&value), Ok(()));
+        let mut nullable_metric = value.clone();
+        nullable_metric["data"]["quality_diagnostics"]["max_temperature"] = json!(null);
+        assert!(validate_worker_message(&nullable_metric).is_err());
+        let mut extra_field = value.clone();
+        extra_field["data"]["quality_diagnostics"]["supported"] = json!(false);
+        assert!(validate_worker_message(&extra_field).is_err());
+    }
+
+    #[test]
     fn rejects_invalid_task_progress_output_paths() {
         let value = json!({
             "schema_version": 1,

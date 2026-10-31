@@ -24,6 +24,7 @@ export const MODEL_CAPABILITIES = {
   tiny: {
     label: 'Tiny',
     backend: 'faster-whisper',
+    decodingDiagnostics: true,
     parameters: null,
     languages: null,
     companionId: null,
@@ -31,6 +32,7 @@ export const MODEL_CAPABILITIES = {
   base: {
     label: 'Base',
     backend: 'faster-whisper',
+    decodingDiagnostics: true,
     parameters: null,
     languages: null,
     companionId: null,
@@ -38,6 +40,7 @@ export const MODEL_CAPABILITIES = {
   small: {
     label: 'Small',
     backend: 'faster-whisper',
+    decodingDiagnostics: true,
     parameters: null,
     languages: null,
     companionId: null,
@@ -45,6 +48,7 @@ export const MODEL_CAPABILITIES = {
   medium: {
     label: 'Medium',
     backend: 'faster-whisper',
+    decodingDiagnostics: true,
     parameters: null,
     languages: null,
     companionId: null,
@@ -52,6 +56,7 @@ export const MODEL_CAPABILITIES = {
   'large-v3': {
     label: 'Large V3',
     backend: 'faster-whisper',
+    decodingDiagnostics: true,
     parameters: null,
     languages: null,
     companionId: null,
@@ -59,6 +64,7 @@ export const MODEL_CAPABILITIES = {
   'large-v3-turbo': {
     label: 'Large V3 Turbo',
     backend: 'faster-whisper',
+    decodingDiagnostics: true,
     parameters: null,
     languages: null,
     companionId: null,
@@ -66,6 +72,7 @@ export const MODEL_CAPABILITIES = {
   'qwen3-asr-1.7b': {
     label: 'Qwen3-ASR 1.7B',
     backend: 'qwen3-asr',
+    decodingDiagnostics: false,
     parameters: [
       'chunk_length',
       'hotwords',
@@ -118,6 +125,7 @@ export const MODEL_CAPABILITIES = {
   'qwen3-asr-0.6b': {
     label: 'Qwen3-ASR 0.6B',
     backend: 'qwen3-asr',
+    decodingDiagnostics: false,
     parameters: [
       'chunk_length',
       'hotwords',

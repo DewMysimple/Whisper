@@ -6,6 +6,8 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from .models import DEFAULT_MODEL_ID, DECODING_DIAGNOSTIC_MODEL_IDS
+
 MAX_DIAGNOSTIC_EXCERPT_CHARACTERS = 160
 
 
@@ -13,8 +15,16 @@ def build_recognition_quality_diagnostics(
     segments: Sequence[object],
     info: object,
     parameters: Mapping[str, Any],
+    *,
+    model_id: str = DEFAULT_MODEL_ID,
 ) -> dict[str, Any]:
-    """Return transport-safe diagnostics without changing recognized text."""
+    """Return the v1 diagnostic carrier without changing recognized text.
+
+    Language and term-audit information share this carrier with decoding metrics.
+    For models without decoding diagnostics the v1 required numeric fields remain
+    compatibility placeholders, not an assessment. Consumers must consult the
+    canonical model capability before interpreting those fields.
+    """
 
     log_probability_threshold = _finite_number(
         parameters.get("log_prob_threshold")
@@ -27,7 +37,8 @@ def build_recognition_quality_diagnostics(
     fallback_count = 0
     max_temperature = 0.0
 
-    for index, segment in enumerate(segments):
+    decode_segments = segments if model_id in DECODING_DIAGNOSTIC_MODEL_IDS else ()
+    for index, segment in enumerate(decode_segments):
         temperature = _finite_number(getattr(segment, "temperature", None))
         average_log_probability = _finite_number(
             getattr(segment, "avg_logprob", None)

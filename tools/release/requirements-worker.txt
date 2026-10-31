@@ -1,4 +1,7 @@
 faster-whisper==1.2.1
+# PyAV 19 removes metadata_errors used by the pinned faster-whisper decoder.
+av==18.0.0; python_version >= "3.11"
+av==17.0.0; python_version < "3.11"
 ctranslate2==4.8.1
 psutil==7.2.2
 nvidia-ml-py==13.610.43

@@ -128,6 +128,9 @@ Web 工作台的事件归并位于 `apps/web/src/state/workspaceEvents.ts`，任
 
 ## 运行与发布边界
 
+- 输出规划先检查整个批次与活跃任务的预留目标，再加载模型或写文件。`overwrite` 仅覆盖磁盘旧结果；批内／排队／运行中目标占用使用现有 `TASK_CONFLICT` 拒绝，不能经覆盖确认绕过。`fail` 保留旧文件确认，`auto_rename` 同时避开磁盘与预留，`skip` 记录跳过媒体且不计入新输出；任务终态释放预留。所有格式与副本共用归一化路径规则。
+- 解码诊断可用性读取模型注册表生成的后端能力。Qwen 的 v1 质量对象可保留真实语言／术语信息，数字占位不参与诊断统计或温度展示；旧 Qwen 历史同样处理。Whisper 实际评估的零值与没有诊断对象的记录保持不同语义。schema 的必需数字、额外字段限制和 IPC v1 均不变。
+- 普通 GitHub CI 编排现有无模型检查，真实 Windows 11／GPU／冻结 Worker／正式 EXE 验收单独执行，入口见 [持续集成说明](../development/continuous_integration.md)。
 - 默认桌面入口：安装版使用 Windows 快捷方式；完整便携版直接运行 `dist/WhisperSubtitle/WhisperSubtitle.exe`。Cargo `target/release/whisper-subtitle-desktop.exe` 仅是开发产物，VBS 启动层已退役。
 - 便携模式：成品根目录只暴露 `WhisperSubtitle.exe` 与使用说明，Worker、CUDA 运行时、直接模型快照和发布元数据统一位于 `_internal/`。
 - 安装模式：console script 为 `whisper-subtitle`，资源通过 `importlib.resources` 读取。

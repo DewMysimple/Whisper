@@ -612,6 +612,31 @@ describe('TauriDesktopBridge', () => {
     bridge.dispose();
   });
 
+  it.each([false, true])(
+    'does not turn a reserved output into an overwrite confirmation (confirmed=%s)',
+    async (allowOverwrite) => {
+      native.invoke.mockImplementation(async (command: string) => {
+        if (command === 'start_transcription') {
+          throw {
+            code: 'task.conflict',
+            message: '输出目标已被本批次其他媒体或排队／运行中任务占用',
+            data: {
+              exception: 'OutputReservationError',
+              paths: ['D:\\Text\\lesson.txt'],
+            },
+          };
+        }
+        return {};
+      });
+      const bridge = new TauriDesktopBridge();
+      await expect(bridge.startTranscription(DRAFT, { allowOverwrite })).rejects.toMatchObject({
+        code: 'task.conflict',
+        message: '输出目标已被本批次其他媒体或排队／运行中任务占用',
+      });
+      bridge.dispose();
+    },
+  );
+
   it('adds native drag paths through the Rust inspection command', async () => {
     const bridge = new TauriDesktopBridge();
     const events: DesktopEvent[] = [];

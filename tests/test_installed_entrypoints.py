@@ -46,9 +46,14 @@ def test_wheel_install_supports_module_console_resource_and_check(tmp_path):
 
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(prefix / "Lib" / "site-packages")
-    environment["WHISPER_SUBTITLE_MODEL_DIR"] = str(
-        PROJECT_ROOT / "models" / "huggingface"
-    )
+    # `check` inspects model layout only; this test never runs inference. Keep
+    # its structural fixture isolated from the maintainer's real model weights.
+    model_root = tmp_path / "offline-models"
+    model = model_root / "large-v3-turbo"
+    model.mkdir(parents=True)
+    (model / "config.json").write_text("{}", encoding="utf-8")
+    (model / "model.bin").write_bytes(b"structural fixture, not inference weights")
+    environment["WHISPER_SUBTITLE_MODEL_DIR"] = str(model_root)
     module_help = run(
         [str(python), "-m", "whisper_subtitle", "--help"],
         cwd=tmp_path,

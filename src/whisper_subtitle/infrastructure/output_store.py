@@ -83,6 +83,17 @@ class OutputConflictError(FileExistsError):
         super().__init__(f"output destination conflict: {rendered}")
 
 
+class OutputReservationError(OutputConflictError):
+    """An active plan owns a target; confirming an overwrite cannot release it."""
+
+    def __str__(self) -> str:
+        rendered = ", ".join(str(path) for path in self.paths)
+        return (
+            "输出目标已被本批次其他媒体或排队／运行中任务占用，"
+            f"请更换输出目录或使用自动重命名：{rendered}"
+        )
+
+
 def build_output_plan(
     media_path: Path | str,
     forced_output_dir: Path | str | None = None,
@@ -266,6 +277,7 @@ def select_configurable_outputs(
     selected_media: list[Path] = []
     conflicts: list[Path] = []
     conflict_groups: list[OutputConflict] = []
+    reservation_conflict = False
     skipped: list[OutputConflict] = []
     for value in media_paths:
         media_path = Path(value)
@@ -282,9 +294,17 @@ def select_configurable_outputs(
             )
             existing = any(path.exists() for path in candidate.content_paths)
             duplicate = bool(keys & reserved)
-            if conflict_policy == "overwrite" or (not existing and not duplicate):
+            if not duplicate and (conflict_policy == "overwrite" or not existing):
                 break
-            if conflict_policy == "fail":
+            if conflict_policy in {"fail", "overwrite"}:
+                reservation_conflict = reservation_conflict or duplicate
+                if conflict_policy == "overwrite":
+                    # Disk files remain explicitly overwritable; another media's
+                    # destinations do not, even after a desktop confirmation.
+                    conflicting_paths = tuple(
+                        path for path in candidate.content_paths
+                        if str(path.resolve(strict=False)).casefold() in reserved
+                    )
                 conflicts.extend(conflicting_paths)
                 conflict_groups.append(OutputConflict(media_path, conflicting_paths))
                 break
@@ -303,7 +323,8 @@ def select_configurable_outputs(
         selected_media.append(media_path)
         plans.append(candidate)
     if conflicts:
-        raise OutputConflictError(
+        error_type = OutputReservationError if reservation_conflict else OutputConflictError
+        raise error_type(
             conflicts,
             conflicts=conflict_groups,
             media_paths=media_paths,

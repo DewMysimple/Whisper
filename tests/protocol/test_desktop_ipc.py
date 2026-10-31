@@ -827,6 +827,21 @@ def test_task_progress_accepts_structured_quality_diagnostics():
         )
 
 
+def test_qwen_language_term_carrier_round_trips_through_strict_v1():
+    fixture = PROJECT_ROOT / "tests" / "fixtures" / "qwen_quality_progress.json"
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    parsed = parse_protocol_line(json.dumps(payload, ensure_ascii=False))
+    assert json.loads(encode_protocol_message(parsed)) == payload
+    assert payload["data"]["quality_diagnostics"]["language_probability"] is None
+    assert payload["data"]["quality_diagnostics"]["hotword_audit"]["matched_terms"] == ["拟态"]
+
+    for invalid_metrics in ({"max_temperature": None}, {"supported": False}):
+        invalid = json.loads(json.dumps(payload))
+        invalid["data"]["quality_diagnostics"].update(invalid_metrics)
+        with pytest.raises(ProtocolValidationError):
+            parse_protocol_line(json.dumps(invalid))
+
+
 def test_human_message_is_optional_and_machine_data_drives_state():
     event = completed()
     without_message = EventMessage(
