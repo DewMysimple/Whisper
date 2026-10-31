@@ -15,6 +15,7 @@ export default defineConfig({
   test: {
     // History fixtures assert local clock values in this explicit test zone.
     env: { TZ: 'Asia/Shanghai' },
+    maxWorkers: 2,
     include: ['src/**/*.test.{ts,tsx}'],
     environment: 'jsdom',
     globals: true,

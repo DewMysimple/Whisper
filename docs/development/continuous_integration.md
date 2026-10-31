@@ -16,6 +16,8 @@ Web 与 Python 的目录一致性检查都会执行真实生成器，因此两�
 
 历史日期夹具约定在 `Asia/Shanghai` 下断言本地时间，因此 Vitest 的测试环境和 Playwright 的浏览器上下文均显式设置该时区，本地与 UTC runner 使用同一条件。固定的是测试夹具环境；正式产品继续按用户机器的本地时间显示，不更改保存的 ISO 时间或日期展示规则。
 
+Vitest 在本地与 CI 均最多使用两个 worker，避免多个 JSDOM 工作台实例争用托管 runner 的资源；保留默认五秒用例超时、全部断言，不使用自动重试。
+
 测试不下载真实模型，也不依赖维护者模型目录。安装入口测试使用临时目录中的结构模型夹具，仅验证模型发现和 `check`，从不把夹具传入推理。Qwen 单元测试使用后端假对象。`tests/benchmark/run_*.py` 需要显式执行，不会被普通 pytest 收集。
 
 无模型测试还会用临时 PCM 音频执行真实的共享解码器，检查 faster-whisper 与 PyAV 的调用兼容性。[PyAV 19 移除了 `metadata_errors`](https://github.com/PyAV-Org/PyAV/releases/tag/v19.0.0)，当前解码器仍使用该参数，源码依赖限制为 `<19`；发布固定已验的 PyAV 18.0.0，Python 3.10 使用仍支持该解释器的 17.0.0。该测试不加载识别模型，也不需要 GPU。
