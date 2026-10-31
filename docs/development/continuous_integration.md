@@ -12,6 +12,8 @@
 
 `pnpm check` 已包括仓库卫生、记忆、模型／预设生成投影、样式归属、Prettier、ESLint、TypeScript 与 Vitest，不再为这些内容另建重复检查。Python 3.10 使用开发依赖的条件 `tomli` backport；生产 Python 支持声明继续是 3.10+。可选 Qwen 后端的运行环境和真实识别由专门验收负责，基础 Python 矩阵不承诺 Qwen 支持每个矩阵版本。
 
+Web 与 Python 的目录一致性检查都会执行真实生成器，因此两类任务均安装锁定的 Node／pnpm 依赖（包括 Prettier），并通过 `rustup show` 准备根 `rust-toolchain.toml` 指定的 Rust／rustfmt。完整 pytest 也需要这些生成工具，不能只安装 Python 依赖。toolchain 的 channel 只写编译器版本，Windows 目标通过 `targets` 单独声明，兼容当前 rustup。
+
 测试不下载真实模型，也不依赖维护者模型目录。安装入口测试使用临时目录中的结构模型夹具，仅验证模型发现和 `check`，从不把夹具传入推理。Qwen 单元测试使用后端假对象。`tests/benchmark/run_*.py` 需要显式执行，不会被普通 pytest 收集。
 
 无模型测试还会用临时 PCM 音频执行真实的共享解码器，检查 faster-whisper 与 PyAV 的调用兼容性。[PyAV 19 移除了 `metadata_errors`](https://github.com/PyAV-Org/PyAV/releases/tag/v19.0.0)，当前解码器仍使用该参数，源码依赖限制为 `<19`；发布固定已验的 PyAV 18.0.0，Python 3.10 使用仍支持该解释器的 17.0.0。该测试不加载识别模型，也不需要 GPU。
