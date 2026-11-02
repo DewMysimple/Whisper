@@ -193,6 +193,7 @@ def test_release_powershell_sources_are_safe_for_windows_powershell_5():
         (RELEASE_TOOLS / "build.ps1").read_text(encoding="utf-8"),
         (RELEASE_TOOLS / "assemble.ps1").read_text(encoding="utf-8"),
         (RELEASE_TOOLS / "prerequisites.ps1").read_text(encoding="utf-8"),
+        (RELEASE_TOOLS / "archive.ps1").read_text(encoding="utf-8"),
     ]
     assert all(script.isascii() for script in scripts)
     assert '"user_guide.zh-CN.md"' in scripts[1]
@@ -242,3 +243,159 @@ def test_release_manifest_verification_checks_complete_tree(tmp_path, monkeypatc
     else:
         with pytest.raises((ValueError, FileNotFoundError)):
             module["verify_manifest"](root, manifest)
+
+
+def _write_model_asset(model_root, model_id):
+    from whisper_subtitle.domain.models import ASSETS_BY_ID
+
+    definition = ASSETS_BY_ID[model_id]
+    target = model_root / model_id
+    target.mkdir(parents=True)
+    for name in definition.required_files:
+        (target / name).write_bytes(b"artifact")
+    if definition.config_model_type:
+        (target / "config.json").write_text(json.dumps({
+            "model_type": definition.config_model_type,
+            "architectures": [definition.config_architecture],
+        }))
+        (target / "model.safetensors").write_bytes(b"weights")
+    return target
+
+
+def _write_portable_runtime(root):
+    for name in ("WhisperSubtitle.exe", "_internal/worker/whisper-subtitle-worker.exe",
+                 "_internal/worker/_internal/shared.dll"):
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"runtime")
+
+
+@pytest.mark.parametrize("change", [
+    "unchanged", "missing-companion", "missing-weights", "invalid-config", "extra-model",
+    "empty-selection", "unknown-model", "duplicate-model", "companion-as-model", "wrong-type",
+])
+def test_selected_manifest_requires_exact_complete_registered_bundles(tmp_path, change):
+    module = runpy.run_path(str(RELEASE_TOOLS / "generate_release_manifest.py"))
+    root = tmp_path / "portable"
+    _write_portable_runtime(root)
+    model_root = root / "_internal/models"
+    model = _write_model_asset(model_root, "qwen3-asr-1.7b")
+    if change != "missing-companion":
+        _write_model_asset(model_root, "qwen3-forced-aligner-0.6b")
+    if change == "missing-weights":
+        (model / "model.safetensors").unlink()
+    elif change == "invalid-config":
+        (model / "config.json").write_text('{}')
+    elif change == "extra-model":
+        _write_model_asset(model_root, "large-v3-turbo")
+    manifest = root / "_internal/release-manifest.json"
+    # Hash the complete tree before attaching the explicit selection, so the
+    # negative cases exercise catalog validation rather than incidental hashes.
+    module["generate_manifest"](root, manifest, "0.1.0")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["modelIds"] = {
+        "empty-selection": [], "unknown-model": ["unknown"],
+        "duplicate-model": ["qwen3-asr-1.7b", "qwen3-asr-1.7b"],
+        "companion-as-model": ["qwen3-forced-aligner-0.6b"],
+        "wrong-type": "qwen3-asr-1.7b",
+    }.get(change, ["qwen3-asr-1.7b"])
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    if change == "unchanged":
+        assert module["verify_manifest"](root, manifest) == len(payload["files"]) + 1
+        assert not (model_root / "large-v3-turbo").exists()
+    else:
+        with pytest.raises((ValueError, FileNotFoundError)):
+            module["verify_manifest"](root, manifest)
+
+
+def test_selected_manifest_can_share_one_catalog_companion(tmp_path):
+    module = runpy.run_path(str(RELEASE_TOOLS / "generate_release_manifest.py"))
+    root = tmp_path / "portable"
+    _write_portable_runtime(root)
+    for model in ("qwen3-asr-1.7b", "qwen3-asr-0.6b", "qwen3-forced-aligner-0.6b"):
+        _write_model_asset(root / "_internal/models", model)
+    manifest = root / "_internal/release-manifest.json"
+    selected = ["qwen3-asr-1.7b", "qwen3-asr-0.6b"]
+    module["generate_manifest"](root, manifest, "0.1.0", selected)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    assert payload["modelIds"] == selected
+    assert module["verify_manifest"](root, manifest) == len(payload["files"]) + 1
+
+
+def _selected_release_fixture(tmp_path):
+    module = runpy.run_path(str(RELEASE_TOOLS / "prepare_selected_portable.py"))
+    source = tmp_path / "dist/WhisperSubtitle"
+    stage = tmp_path / "build/release-selected/WhisperSubtitle-qwen3-asr-1.7b"
+    _write_portable_runtime(source)
+    (source / "使用说明.md").write_text(
+        (RELEASE_TOOLS / "user_guide.zh-CN.md").read_text(encoding="utf-8"), encoding="utf-8",
+    )
+    for model in ("large-v3-turbo", "qwen3-asr-1.7b", "qwen3-asr-0.6b", "qwen3-forced-aligner-0.6b"):
+        _write_model_asset(source / "_internal/models", model)
+    module["generate_manifest"](source, source / module["MANIFEST"], "0.1.0")
+    return module, source, stage
+
+
+def test_selected_portable_preserves_source_and_reuses_only_intact_stage(tmp_path, monkeypatch):
+    module, source, stage = _selected_release_fixture(tmp_path)
+    original = {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()}
+    prepare = module["prepare_selected_portable"]
+    assert prepare(source, stage, "qwen3-asr-1.7b", repository_root=tmp_path) == stage
+    assert {p.name for p in (stage / "_internal/models").iterdir()} == {
+        "qwen3-asr-1.7b", "qwen3-forced-aligner-0.6b",
+    }
+    assert {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()} == original
+    for relative, content in original.items():
+        if relative.parts[:2] != ("_internal", "models") and relative not in (
+            Path("使用说明.md"), module["MANIFEST"],
+        ):
+            assert (stage / relative).read_bytes() == content
+    guide = (stage / "使用说明.md").read_text(encoding="utf-8")
+    assert "首次启动请在“模型与参数”中选择“Qwen3-ASR 1.7B”" in guide
+    assert "Qwen3-ASR 提供 1.7B 和 0.6B 两档" not in guide
+    assert "WhisperSubtitle-qwen3-asr-1.7b.zip" in guide
+    assert "`WhisperSubtitle.zip`" not in guide
+    manifest = json.loads((stage / module["MANIFEST"]).read_text(encoding="utf-8"))
+    assert manifest["modelIds"] == ["qwen3-asr-1.7b"]
+    monkeypatch.setattr(module["shutil"], "copy2", lambda *_: pytest.fail("intact stage should be reused"))
+    assert prepare(source, stage, "qwen3-asr-1.7b", repository_root=tmp_path) == stage
+
+
+@pytest.mark.parametrize("change", ["unknown-stage", "stale-stage", "corrupt-source", "outside-stage", "source-stage"])
+def test_selected_portable_refuses_unowned_or_unverified_paths_without_removing_them(tmp_path, change):
+    module, source, stage = _selected_release_fixture(tmp_path)
+    prepare = module["prepare_selected_portable"]
+    if change == "unknown-stage":
+        stage.mkdir(parents=True)
+        (stage / "keep.txt").write_bytes(b"unrelated")
+    elif change == "stale-stage":
+        prepare(source, stage, "qwen3-asr-1.7b", repository_root=tmp_path)
+        marker = json.loads((stage / module["MARKER"]).read_text(encoding="utf-8"))
+        marker["sourceManifestSha256"] = "0" * 64
+        (stage / module["MARKER"]).write_text(json.dumps(marker), encoding="utf-8")
+        module["generate_manifest"](stage, stage / module["MANIFEST"], "0.1.0", ["qwen3-asr-1.7b"])
+    elif change == "corrupt-source":
+        (source / "WhisperSubtitle.exe").write_bytes(b"changed")
+    elif change == "outside-stage":
+        stage = tmp_path / "unrelated"
+    elif change == "source-stage":
+        stage = source
+    original = {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    with pytest.raises((ValueError, FileNotFoundError)):
+        prepare(source, stage, "qwen3-asr-1.7b", repository_root=tmp_path)
+    assert {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == original
+
+
+def test_selected_portable_rejects_linked_stage_ancestor(tmp_path):
+    module, source, stage = _selected_release_fixture(tmp_path)
+    target = tmp_path / "keep"
+    target.mkdir()
+    stage.parent.mkdir(parents=True)
+    try:
+        stage.symlink_to(target, target_is_directory=True)
+    except OSError:
+        pytest.skip("Creating directory symlinks requires Windows developer mode or permission")
+    with pytest.raises(ValueError, match="Linked release path"):
+        module["prepare_selected_portable"](source, stage, "qwen3-asr-1.7b", repository_root=tmp_path)
+    assert stage.is_symlink()
+    assert not list(target.iterdir())

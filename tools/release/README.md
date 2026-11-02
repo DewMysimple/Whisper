@@ -45,6 +45,16 @@ To distribute the current verified release without rebuilding:
 corepack pnpm release:archive
 ```
 
+To distribute only Qwen3-ASR 1.7B and its required timestamp aligner from the current verified release:
+
+```powershell
+corepack pnpm release:archive -ModelId qwen3-asr-1.7b
+```
+
+This creates `dist/WhisperSubtitle-qwen3-asr-1.7b.zip` and its separate `.sha256` without replacing the complete portable directory. The selected package excludes Whisper weights and Qwen3-ASR 0.6B, retains the shared ForcedAligner 0.6B, and includes model-specific instructions. The application still starts with its existing default: select Qwen3-ASR 1.7B in “模型与参数” before the first task. The runtime and model catalog are unchanged. A declared `modelIds` inventory in the derived manifest validates the selected model and its companion against the canonical model registry; manifests without that field keep the standard Turbo requirement.
+
+The derived directory under `build/release-selected/` remains available for EXE and real-model validation. Run `workspace:finish` after acceptance to remove it. The explicitly requested selected-model ZIP and its checksum remain in `dist/`.
+
 Use `corepack pnpm release:build:archive` (or `buildStart.cmd -IncludeArchive`) to build with a ZIP. At the end of a completed maintenance task, `corepack pnpm workspace:finish` verifies the current directory and removes generated build/test caches, old dated release backups and the optional ZIP. Models, the development environment and the current runnable directory are preserved.
 
 The default Worker includes Whisper and Qwen3-ASR. It bundles Turbo plus any complete local Qwen ASR bundles and their shared ForcedAligner. Qwen adds the PyTorch CUDA and Transformers runtime; the initial dependency download and final package are substantially larger. Model files must already be present: the application does not download them.

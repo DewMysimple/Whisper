@@ -93,6 +93,12 @@ CJK 字符／空格分词，避免引入平台相关的日／韩分词运行库�
 成功构建默认清除发布中间态，需要复用 stage 时传 `-KeepBuild`，验收后再运行
 `corepack pnpm workspace:finish`。本地权重和开发环境保留。
 
+仅分发 Qwen3-ASR 1.7B 时，运行 `corepack pnpm release:archive -ModelId qwen3-asr-1.7b`。
+该入口从已校验完整版派生 `dist/WhisperSubtitle-qwen3-asr-1.7b.zip` 及独立 SHA256，
+只保留 1.7B 与必需的 ForcedAligner 0.6B，不含 Whisper 或 ASR 0.6B 权重。
+完整版和运行时保持原样；首次使用需在“模型与参数”选择 1.7B，包内有对应说明。
+派生目录在 `build/release-selected/`，验收后随 `workspace:finish` 清理，分发 ZIP 保留。
+
 默认 `buildStart.cmd`／`tools/release/build.ps1` 构建含两个后端的 Worker，并打包当前
 本地已安装的 Qwen ASR 及其共享对齐模型。`-WhisperOnly` 可构建不包含 Torch 的原后端
 版本。无本地 Qwen 权重时仍可构建带 Qwen 运行库的便携版，之后手动安装模型。
