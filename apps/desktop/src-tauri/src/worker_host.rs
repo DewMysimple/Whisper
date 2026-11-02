@@ -3,7 +3,7 @@ use std::env;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::thread;
@@ -31,10 +31,12 @@ mod media;
 mod model_catalog;
 mod models;
 mod option_validation;
+mod process;
 use self::logs::{worker_log_summary, worker_quality_diagnostic_log_lines};
 pub use self::media::{apply_media_inspections, inspect_input_paths};
 use self::model_catalog::DEFAULT_MODEL_ID;
 use self::models::{inspect_local_models, model_directory_target, packaged_worker_environment};
+use self::process::WorkerProcess;
 
 pub type EventSink = Arc<dyn Fn(&str, Value) + Send + Sync + 'static>;
 type PendingResult = Result<Value, HostError>;
@@ -217,7 +219,8 @@ pub struct WorkerManager {
     sink: EventSink,
     status: Mutex<HostStatus>,
     status_changed: Condvar,
-    child: Mutex<Option<Child>>,
+    lifecycle: Mutex<()>,
+    child: Mutex<Option<WorkerProcess>>,
     stdin: Mutex<Option<ChildStdin>>,
     pending: Mutex<HashMap<String, mpsc::SyncSender<PendingResult>>>,
     active_tasks: Mutex<HashMap<String, String>>,
@@ -234,6 +237,7 @@ impl WorkerManager {
             sink,
             status: Mutex::new(HostStatus::stopped()),
             status_changed: Condvar::new(),
+            lifecycle: Mutex::new(()),
             child: Mutex::new(None),
             stdin: Mutex::new(None),
             pending: Mutex::new(HashMap::new()),
@@ -289,6 +293,12 @@ impl WorkerManager {
     }
 
     pub fn start(self: &Arc<Self>) -> Result<HostStatus, HostError> {
+        // Serialize publication of the process/pipes with shutdown and other
+        // start requests. Do not hold this while waiting for Worker readiness.
+        let lifecycle = self
+            .lifecycle
+            .lock()
+            .map_err(|_| HostError::new("host.internal", "Worker lifecycle lock was poisoned"))?;
         let current = self.status();
         if matches!(current.state.as_str(), "starting" | "ready") {
             return Ok(current);
@@ -323,7 +333,7 @@ impl WorkerManager {
             command.creation_flags(CREATE_NO_WINDOW);
         }
 
-        let mut child = command.spawn().map_err(|error| {
+        let mut child = WorkerProcess::spawn(&mut command).map_err(|error| {
             let failure = HostError::new(
                 "host.worker_spawn_failed",
                 format!("failed to start controlled Worker: {error}"),
@@ -373,6 +383,7 @@ impl WorkerManager {
             .spawn(move || stderr_manager.read_stderr(stderr, generation))
             .map_err(|error| HostError::new("host.thread_failed", error.to_string()))?;
 
+        drop(lifecycle);
         self.wait_until_ready(READY_TIMEOUT)
     }
 
@@ -499,10 +510,11 @@ impl WorkerManager {
     }
 
     pub fn shutdown(&self, timeout: Duration) {
+        let deadline = Instant::now() + timeout;
+        let Ok(_lifecycle) = self.lifecycle.lock() else {
+            return;
+        };
         let current = self.status();
-        if current.state == "ready" {
-            let _ = self.send_generated_command("worker.shutdown", json!({}), COMMAND_TIMEOUT);
-        }
         self.stopping.store(true, Ordering::SeqCst);
         self.update_status(HostStatus {
             state: "stopping".to_owned(),
@@ -510,39 +522,52 @@ impl WorkerManager {
             launch_kind: current.launch_kind,
             error: None,
         });
+        let has_child = self.child.lock().is_ok_and(|child| child.is_some());
+        if has_child && current.state == "ready" {
+            // The acknowledgement is part of the same shutdown budget, rather
+            // than an additional COMMAND_TIMEOUT before process cleanup.
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if !remaining.is_zero() {
+                let _ = self.send_generated_command("worker.shutdown", json!({}), remaining);
+            }
+        }
         if let Ok(mut stdin) = self.stdin.lock() {
             stdin.take();
         }
 
-        let deadline = Instant::now() + timeout;
-        loop {
-            let exited = self
-                .child
-                .lock()
-                .ok()
-                .and_then(|mut child| {
-                    child
-                        .as_mut()
-                        .and_then(|value| value.try_wait().ok())
-                        .flatten()
-                })
-                .is_some();
-            if exited {
-                break;
-            }
-            if Instant::now() >= deadline {
-                if let Ok(mut child) = self.child.lock()
-                    && let Some(value) = child.as_mut()
-                {
-                    let _ = value.kill();
-                    let _ = value.wait();
+        if has_child {
+            loop {
+                let exited = self
+                    .child
+                    .lock()
+                    .ok()
+                    .and_then(|mut child| {
+                        child
+                            .as_mut()
+                            .and_then(|value| value.try_wait().ok())
+                            .flatten()
+                    })
+                    .is_some();
+                if exited {
+                    break;
                 }
-                break;
+                if Instant::now() >= deadline {
+                    if let Ok(mut child) = self.child.lock()
+                        && let Some(value) = child.as_mut()
+                    {
+                        self.push_log("[HOST] Worker shutdown deadline exceeded; requesting process-tree termination without waiting for driver teardown");
+                        value.terminate();
+                    }
+                    break;
+                }
+                thread::sleep(Duration::from_millis(50));
             }
-            thread::sleep(Duration::from_millis(50));
         }
         if let Ok(mut child) = self.child.lock() {
             child.take();
+        }
+        if let Ok(mut tasks) = self.active_tasks.lock() {
+            tasks.clear();
         }
         self.fail_pending(HostError::new(
             "host.worker_stopped",
@@ -569,7 +594,10 @@ impl WorkerManager {
         params: Value,
         timeout: Duration,
     ) -> Result<Value, HostError> {
-        if self.status().state != "ready" {
+        let state = self.status().state;
+        let shutting_down =
+            method == "worker.shutdown" && matches!(state.as_str(), "ready" | "stopping");
+        if !shutting_down && (state != "ready" || self.stopping.load(Ordering::SeqCst)) {
             return Err(HostError::new(
                 "host.worker_not_ready",
                 "Python Worker is not ready",
@@ -710,6 +738,12 @@ impl WorkerManager {
                             .unwrap_or_else(|| "Worker failed before ready".to_owned()),
                     ));
                 }
+                "stopping" | "stopped" => {
+                    return Err(HostError::new(
+                        "host.worker_stopped",
+                        "Worker stopped before becoming ready",
+                    ));
+                }
                 _ => {}
             }
             let now = Instant::now();
@@ -783,6 +817,9 @@ impl WorkerManager {
             return;
         }
         if event_code(&message) == Some("worker.ready") {
+            if self.stopping.load(Ordering::SeqCst) {
+                return;
+            }
             let capabilities = message
                 .pointer("/data/capabilities/methods")
                 .and_then(Value::as_array);
@@ -809,11 +846,25 @@ impl WorkerManager {
                 .pointer("/data/pid")
                 .and_then(Value::as_u64)
                 .map(|value| value as u32);
-            let mut status = self.status();
-            status.state = "ready".to_owned();
-            status.pid = pid;
-            status.error = None;
-            self.update_status(status);
+            let status = {
+                let Ok(mut status) = self.status.lock() else {
+                    return;
+                };
+                // Check while holding the same lock used to publish stopping,
+                // so a late ready event cannot reopen the command channel.
+                if self.stopping.load(Ordering::SeqCst) {
+                    return;
+                }
+                status.state = "ready".to_owned();
+                status.pid = pid;
+                status.error = None;
+                self.status_changed.notify_all();
+                status.clone()
+            };
+            (self.sink)(
+                HOST_STATUS_EVENT,
+                serde_json::to_value(status).unwrap_or(Value::Null),
+            );
         }
 
         match event_code(&message) {
@@ -921,7 +972,7 @@ impl WorkerManager {
         if let Ok(mut child) = self.child.lock()
             && let Some(value) = child.as_mut()
         {
-            let _ = value.kill();
+            value.terminate();
         }
     }
 
@@ -1659,6 +1710,45 @@ mod tests {
             generation,
         );
         assert!(!manager.has_active_tasks());
+    }
+
+    #[test]
+    fn shutdown_without_a_process_is_immediate_and_repeatable() {
+        let manager = WorkerManager::new(PathBuf::from("."), Arc::new(|_, _| {}));
+        let started = Instant::now();
+        manager.shutdown(Duration::from_secs(10));
+        manager.shutdown(Duration::from_secs(10));
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert_eq!(manager.status().state, "stopped");
+    }
+
+    #[test]
+    fn shutdown_budget_includes_an_unresponsive_command_and_process() {
+        let manager = WorkerManager::new(PathBuf::from("."), Arc::new(|_, _| {}));
+        let mut child = super::process::tests::sleeper();
+        *manager.stdin.lock().unwrap() = child.stdin.take();
+        *manager.child.lock().unwrap() = Some(child);
+        manager.update_status(super::HostStatus {
+            state: "ready".to_owned(),
+            pid: None,
+            launch_kind: Some("test".to_owned()),
+            error: None,
+        });
+        let started = Instant::now();
+        manager.shutdown(Duration::from_millis(150));
+        // Previously the command alone could wait 30s, followed by another
+        // timeout and an unbounded wait after forcibly killing the Worker.
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(manager.status().state, "stopped");
+        assert!(manager.child.lock().unwrap().is_none());
+        assert!(manager.stdin.lock().unwrap().is_none());
+        assert!(manager.pending.lock().unwrap().is_empty());
+        assert!(
+            manager
+                .logs()
+                .iter()
+                .any(|line| line.contains("deadline exceeded"))
+        );
     }
 
     #[test]

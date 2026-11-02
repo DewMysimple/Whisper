@@ -3,7 +3,7 @@ type: moc
 status: active
 kind: process
 importance: high
-updated: 2026-10-31
+updated: 2026-11-02
 topic: work-log-index
 source_logs: []
 supersedes: null
@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-02 | bug | - | archived | shutdown-kernel-stall | [[日志/2026-11-02-退出卡顿内核诊断与Host回收修复.md|退出卡顿内核诊断与 Host 回收修复]] |
 | 2026-10-31 | maintenance | - | archived | output-safety-diagnostics-ci | [[日志/2026-10-31-输出安全诊断语义与持续集成.md|输出安全、诊断语义与持续集成]] |
 | 2026-09-28 | maintenance | - | archived | merge-release-prerequisites-maintenance | [[日志/2026-09-28-合并构建入口维护并复验发布.md|合并构建入口维护并复验发布]] |
 | 2026-09-28 | maintenance | - | archived | shared-contract-backend-lifecycle-maintenance | [[日志/2026-09-28-公共契约与后端生命周期维护.md|公共契约与后端生命周期维护]] |

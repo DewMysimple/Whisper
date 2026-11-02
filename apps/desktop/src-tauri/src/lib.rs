@@ -521,16 +521,34 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building WhisperSubtitle desktop host");
 
-    app.run(|handle, event| {
-        if matches!(event, tauri::RunEvent::ExitRequested { .. })
-            && let Some(state) = handle.try_state::<HostState>()
-        {
-            state.0.shutdown(Duration::from_secs(15));
-        }
-        if matches!(event, tauri::RunEvent::ExitRequested { .. })
-            && let Some(state) = handle.try_state::<PowerState>()
-        {
-            state.0.cancel();
+    let shutdown_started = AtomicBool::new(false);
+    let shutdown_complete = Arc::new(AtomicBool::new(false));
+    app.run(move |handle, event| {
+        if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+            if shutdown_complete.load(Ordering::SeqCst) {
+                return;
+            }
+            api.prevent_exit();
+            if shutdown_started.swap(true, Ordering::SeqCst) {
+                return;
+            }
+            if let Some(state) = handle.try_state::<PowerState>() {
+                state.0.cancel();
+            }
+            let manager = handle
+                .try_state::<HostState>()
+                .map(|state| Arc::clone(&state.0));
+            let exit_handle = handle.clone();
+            let complete = Arc::clone(&shutdown_complete);
+            // Keep the Tauri event loop responsive while the Worker releases
+            // GPU resources, including when the driver delays process exit.
+            tauri::async_runtime::spawn_blocking(move || {
+                if let Some(manager) = manager {
+                    manager.shutdown(Duration::from_secs(15));
+                }
+                complete.store(true, Ordering::SeqCst);
+                exit_handle.exit(code.unwrap_or(0));
+            });
         }
     });
 }
