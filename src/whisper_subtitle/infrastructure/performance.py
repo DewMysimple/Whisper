@@ -10,6 +10,8 @@ from collections.abc import Callable
 from functools import lru_cache
 from typing import Any
 
+from .nvml_session import NvmlSession
+
 
 ModuleLoader = Callable[[], Any]
 CpuNameLoader = Callable[[], str | None]
@@ -71,7 +73,58 @@ def collect_performance_sample(
     cpu_name_loader: CpuNameLoader = _read_cpu_name,
     clock: Callable[[], float] = time.time,
 ) -> dict[str, int | float | str | None]:
-    """Return one bounded metrics snapshot without changing runtime state."""
+    """Collect one standalone snapshot, releasing NVML before returning."""
+    session = NvmlSession(nvml_loader)
+    try:
+        return _collect_performance_sample(
+            psutil_loader=psutil_loader,
+            nvml_session=session,
+            cpu_name_loader=cpu_name_loader,
+            clock=clock,
+        )
+    finally:
+        session.close()
+
+
+class PerformanceMonitor:
+    """Worker-owned sampler retaining one NVML session between metrics ticks."""
+
+    def __init__(
+        self,
+        *,
+        psutil_loader: ModuleLoader = _load_psutil,
+        nvml_loader: ModuleLoader = _load_nvml,
+        cpu_name_loader: CpuNameLoader = _read_cpu_name,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self._session = NvmlSession(nvml_loader)
+        self._psutil_loader = psutil_loader
+        self._cpu_name_loader = cpu_name_loader
+        self._clock = clock
+
+    def __call__(self) -> dict[str, int | float | str | None]:
+        return self.sample()
+
+    def sample(self) -> dict[str, int | float | str | None]:
+        return _collect_performance_sample(
+            psutil_loader=self._psutil_loader,
+            nvml_session=self._session,
+            cpu_name_loader=self._cpu_name_loader,
+            clock=self._clock,
+        )
+
+    def close(self) -> None:
+        self._session.close()
+
+
+def _collect_performance_sample(
+    *,
+    psutil_loader: ModuleLoader,
+    nvml_session: NvmlSession,
+    cpu_name_loader: CpuNameLoader,
+    clock: Callable[[], float],
+) -> dict[str, int | float | str | None]:
+    """Shared getter implementation for standalone and persistent samplers."""
     psutil = psutil_loader()
     memory = psutil.virtual_memory()
     cpu_frequency = _optional(psutil.cpu_freq)
@@ -127,9 +180,9 @@ def collect_performance_sample(
         "gpu_performance_state": None,
     }
     try:
-        nvml = nvml_loader()
-        nvml.nvmlInit()
-        try:
+        with nvml_session.use() as nvml:
+            if nvml is None:
+                return sample
             handle = nvml.nvmlDeviceGetHandleByIndex(0)
             utilization = nvml.nvmlDeviceGetUtilizationRates(handle)
             gpu_memory = nvml.nvmlDeviceGetMemoryInfo(handle)
@@ -197,8 +250,6 @@ def collect_performance_sample(
                     ),
                 }
             )
-        finally:
-            nvml.nvmlShutdown()
     except Exception:
         # GPU metadata is diagnostic only; a transient NVML failure must not
         # affect transcription or turn the Worker into an error state.

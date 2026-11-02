@@ -2,6 +2,8 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from tests.benchmark import run_shutdown_validation as validation
 
 
@@ -60,3 +62,39 @@ def test_failed_case_stops_subsequent_model_launches(monkeypatch, tmp_path):
     assert validation.main() == 1
     assert cases == [("large-v3-turbo", "command")]
     assert (tmp_path / "shutdown-validation.json").is_file()
+
+
+def test_metrics_correlates_completion_and_keeps_interleaved_task_event():
+    task_event = {"event": "task.completed", "task_id": "task-1"}
+    unrelated_completion = {"event": "command.completed", "request_id": "other"}
+    snapshot = {"cpu_percent": 17.5, "gpu_percent": None}
+    metrics_event = {
+        "event": "command.completed", "request_id": "metrics-1",
+        "data": {"method": "system.metrics", "result": snapshot},
+    }
+    incoming = iter([task_event, unrelated_completion, metrics_event])
+    archived = []
+    sent = []
+
+    def receive(deadline):
+        message = next(incoming)
+        archived.append(message)
+        return message
+
+    result = validation.request_metrics(
+        lambda *args: sent.append(args), receive, "metrics-1", 100,
+    )
+
+    assert sent == [("metrics-1", "system.metrics", {})]
+    assert result == snapshot  # GPU metrics remain optional.
+    assert archived == [task_event, unrelated_completion, metrics_event]
+
+
+def test_metrics_rejects_mismatched_method_in_matching_completion():
+    response = {
+        "event": "command.completed", "request_id": "metrics-1",
+        "data": {"method": "system.health", "result": {}},
+    }
+
+    with pytest.raises(RuntimeError, match="Invalid system.metrics completion"):
+        validation.request_metrics(lambda *_args: None, lambda _deadline: response, "metrics-1", 100)

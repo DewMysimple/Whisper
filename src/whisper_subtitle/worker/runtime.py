@@ -23,7 +23,7 @@ from ..infrastructure.output_store import (
     OutputReservationError,
     select_configurable_outputs,
 )
-from ..infrastructure.performance import collect_performance_sample
+from ..infrastructure.performance import PerformanceMonitor
 from ..infrastructure.whisper_engine import DEFAULT_MODEL_NAME
 from ..protocol import (
     CommandMessage,
@@ -98,7 +98,7 @@ class WorkerRuntime:
         hardware_resolver: HardwareResolver | None = None,
         hardware_capabilities_probe: HardwareCapabilitiesProbe | None = None,
         engine_loader: EngineLoader = _default_engine_loader,
-        performance_sampler: PerformanceSampler = collect_performance_sample,
+        performance_sampler: PerformanceSampler | None = None,
         media_duration_probe: MediaDurationProbe = default_media_duration_probe,
     ) -> None:
         self._emit = emit
@@ -107,7 +107,12 @@ class WorkerRuntime:
         self._task_id_factory = task_id_factory or (
             lambda: f"task-{uuid.uuid4().hex}"
         )
-        self._performance_sampler = performance_sampler
+        self._performance_monitor = (
+            PerformanceMonitor() if performance_sampler is None else None
+        )
+        self._performance_sampler = (
+            self._performance_monitor if performance_sampler is None else performance_sampler
+        )
         self._media_duration_probe = media_duration_probe
         self._media_duration_cache: dict[
             str, tuple[int, int, tuple[bool, float | None, str | None]]
@@ -671,7 +676,11 @@ class WorkerRuntime:
         self._dispatcher.join(timeout)
         stopped = not self._dispatcher.is_alive()
         if stopped:
-            self._model_cache.close()
+            try:
+                self._model_cache.close()
+            finally:
+                if self._performance_monitor is not None:
+                    self._performance_monitor.close()
         return stopped
 
     def command_error(

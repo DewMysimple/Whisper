@@ -87,6 +87,18 @@ def cleanup_worker(process: subprocess.Popen, errors: list[str]) -> dict:
     return diagnostics
 
 
+def request_metrics(send, receive, request_id: str, deadline: float) -> dict:
+    """Use the common event-archiving receiver so interleaved events survive."""
+    send(request_id, "system.metrics", {})
+    while True:
+        message = receive(deadline)
+        if message.get("event") == "command.completed" and message.get("request_id") == request_id:
+            data = message.get("data", {})
+            if data.get("method") != "system.metrics" or not isinstance(data.get("result"), dict):
+                raise RuntimeError("Invalid system.metrics completion")
+            return data["result"]
+
+
 def run_case(args, model: str, exit_method: str) -> dict:
     output = args.output_dir / f"{model}-{exit_method}"
     output.mkdir(parents=True, exist_ok=True)
@@ -183,12 +195,18 @@ def run_case(args, model: str, exit_method: str) -> dict:
         }, ensure_ascii=False) + "\n")
         process.stdin.flush()
 
-    report = {"model": model, "exit_method": exit_method, "worker_pid": process.pid}
+    metrics_samples = []
+    report = {"model": model, "exit_method": exit_method, "worker_pid": process.pid,
+              "metrics_samples": metrics_samples, "metrics_received_count": 0}
     shutdown_cpu_baseline: float | None = None
     try:
         deadline = time.monotonic() + args.task_timeout
         if receive(deadline).get("event") != "worker.ready":
             raise RuntimeError("Expected worker.ready")
+        metrics_samples.append({"stage": "before_task", "result": request_metrics(
+            send, receive, "metrics-before-task", deadline,
+        )})
+        report["metrics_received_count"] = len(metrics_samples)
         send("transcribe", "transcription.start", {
             "model_id": model,
             "inputs": [{"path": str(ROOT / "tests/fixtures/chinese_short.wav"),
@@ -211,6 +229,10 @@ def run_case(args, model: str, exit_method: str) -> dict:
                     raise RuntimeError("No successful media")
                 break
         report["transcription_seconds"] = round(time.monotonic() - started, 4)
+        metrics_samples.append({"stage": "after_task", "result": request_metrics(
+            send, receive, "metrics-after-task", deadline,
+        )})
+        report["metrics_received_count"] = len(metrics_samples)
         phase = "idle"
         cpu_before = worker.cpu_times()
         idle_started = time.monotonic()
