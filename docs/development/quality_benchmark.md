@@ -11,6 +11,10 @@ python -m tests.benchmark.run_quality_benchmark --model-dir models/huggingface -
 
 每次使用新的输出目录，拒绝覆盖旧结果。可用 `--models large-v3-turbo qwen3-asr-1.7b` 限定模型，`--worker-executable` 验收冻结 Worker。运行全程离线，所有输出写入显式目录，原媒体和旧 golden 只读。
 
+Windows 控制台运行既有后端验收时先设置 `$env:PYTHONIOENCODING='utf-8'`，避免控制台GBK不能输出Worker诊断中的字符。
+`python -m tests.benchmark.run_backend_validation --output-dir tests/benchmark/runs/<new-run> --model-dir models/huggingface --worker-executable dist/WhisperSubtitle/_internal/worker/whisper-subtitle-worker.exe --qwen-first --cancel-qwen`
+会在原模型切换／golden检查后额外执行三次Qwen取消及下一次正常任务，正常退出必须等待Windows进程HANDLE完成。
+
 ## 语料及参考
 
 `tests/benchmark/quality_corpus.json` 提供八类固定清单。现有两段语音夹具及来源见 `tests/fixtures/README.md`；120 秒静音由精确零 PCM 生成。其他五类缺少可提交的授权音频和逐字参考，`path: null` 会产生 blocked 记录，绝不冒充已测试。长媒体、真实音乐和混合语音不能由重复短夹具代替验收。

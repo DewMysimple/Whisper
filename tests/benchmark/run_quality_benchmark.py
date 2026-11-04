@@ -226,9 +226,13 @@ def main():
             packages[package] = None
     report = {"schema_version": 1, "code_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
               "dirty_worktree": bool(subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT)),
-              "environment": {"python": platform.python_version(), "platform": platform.platform(), "packages": packages},
+              "environment": {"scope": "benchmark runner; frozen Worker dependencies are identified by worker_sbom_sha256",
+                              "python": platform.python_version(), "platform": platform.platform(), "packages": packages},
               "model_fingerprints": {}, "worker_sha256": digest(args.worker_executable) if args.worker_executable else None,
               "results": []}
+    if args.worker_executable:
+        sbom = args.worker_executable.resolve().parents[1] / "distribution/sbom-python.cdx.json"
+        report["worker_sbom_sha256"] = digest(sbom) if sbom.is_file() else None
     gpu = None
     initialized = False
     try:

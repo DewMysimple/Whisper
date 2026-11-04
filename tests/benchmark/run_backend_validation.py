@@ -23,6 +23,11 @@ from whisper_subtitle.protocol import parse_protocol_line
 from whisper_subtitle.domain.subtitles import SubtitleOptions
 from whisper_subtitle.domain.models import DECODING_DIAGNOSTIC_MODEL_IDS
 
+if __package__:
+    from .run_shutdown_validation import wait_for_exit
+else:
+    from run_shutdown_validation import wait_for_exit
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -31,6 +36,7 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--model-dir", required=True, type=Path)
     parser.add_argument("--worker-executable", type=Path)
+    parser.add_argument("--cancel-qwen", action="store_true", help="Cancel three real Qwen tasks, then verify model reuse")
     parser.add_argument("--qwen-first", action="store_true",
                         help="Exercise Qwen startup before any Whisper CUDA initialization")
     args = parser.parse_args()
@@ -152,14 +158,53 @@ def main() -> None:
             if not expected_loads or expected_loads[-1] != model:
                 expected_loads.append(model)
         assert [m["data"]["model_id"] for m in ready] == expected_loads
+        if args.cancel_qwen:
+            for number in range(4):
+                request = f"cancel-check-{number}"
+                target = output / request
+                send(request, "transcription.start", {
+                    "model_id": "qwen3-asr-1.7b",
+                    "inputs": [{"path": str(long_media if number < 3 else source), "kind": "file", "origin": "manual"}],
+                    "profile": {"base_preset_id": "cn", "overrides": {}},
+                    "output": {"mode": "custom", "root_directory": str(target), "txt": {"enabled": True},
+                               "markdown": {"enabled": True}, "srt": {"enabled": True}, "subtitle": asdict(SubtitleOptions()),
+                               "preserve_source_txt": False, "conflict_policy": "fail"}})
+                task_id, cancel_at = None, None
+                while True:
+                    message = receive()
+                    if message.get("event") == "task.queued" and message.get("request_id") == request:
+                        task_id = message["task_id"]
+                    if message.get("task_id") != task_id or task_id is None:
+                        continue
+                    if number < 3 and cancel_at is None and message.get("event") == "task.progress" and message.get("data", {}).get("media_status") == "running":
+                        time.sleep(.25)
+                        cancel_at = time.monotonic()
+                        send(f"cancel-{number}", "transcription.cancel", {"task_id": task_id})
+                    if message.get("event") in {"task.completed", "task.failed", "task.cancelled"}:
+                        expected = "task.cancelled" if number < 3 else "task.completed"
+                        assert message["event"] == expected, message
+                        if number < 3:
+                            assert cancel_at is not None and not list(target.glob("*.*")), "Cancelled task left official outputs"
+                        else:
+                            assert message["data"]["failure_count"] == 0
+                            assert {Path(p).suffix for p in message["data"]["outputs"]} == {".txt", ".md", ".srt"}
+                        results.append({"model": "qwen3-asr-1.7b", "case": request, "terminal": expected,
+                                        "cancel_to_terminal_seconds": time.monotonic()-cancel_at if cancel_at else None})
+                        print(json.dumps(results[-1]), flush=True)
+                        break
         send("stop", "worker.shutdown", {})
         while receive().get("request_id") != "stop":
             pass
-        assert process.wait(timeout=30) == 0
+        assert wait_for_exit(process, 30) and process.returncode == 0
     finally:
         if process.poll() is None:
-            process.kill()
-            process.wait(timeout=10)
+            try:
+                send("cleanup-stop", "worker.shutdown", {})
+            except (OSError, ValueError):
+                pass
+            if not wait_for_exit(process, 30):
+                process.kill()
+                assert wait_for_exit(process, 10), "Worker teardown stuck; preserve diagnostics"
         reader.join(timeout=2)
         (output / "worker-stderr.log").write_text("".join(stderr), encoding="utf-8")
         (output / "events.json").write_text(json.dumps(observed, ensure_ascii=False, indent=2), encoding="utf-8")
