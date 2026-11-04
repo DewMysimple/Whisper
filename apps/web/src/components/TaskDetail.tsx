@@ -17,6 +17,8 @@ import { taskOutputPaths } from '../state/workspaceTaskState';
 import { TaskRestoreDialog } from './tasks/TaskRestoreDialog';
 import { useDialogFocus } from './useDialogFocus';
 import { Button, IconButton } from './Button';
+import { QualityReviewActions } from './QualityReviewActions';
+import { diagnosticRange } from '../state/diagnosticTime';
 
 export function TaskDetail() {
   const task = useWorkspace((state) =>
@@ -308,6 +310,12 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
                             {region.reason ? (
                               <small>处理依据：{languageRegionReasonLabel(region.reason)}</small>
                             ) : null}
+                            <QualityReviewActions
+                              mediaPath={media.path}
+                              text={region.primaryText}
+                              start={region.start}
+                              end={region.end}
+                            />
                           </article>
                         ))}
                       </div>
@@ -353,6 +361,12 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
                                 处理依据：{detailCandidateReasonLabel(candidate.reason)}
                               </small>
                             ) : null}
+                            <QualityReviewActions
+                              mediaPath={media.path}
+                              text={candidate.primaryText}
+                              start={candidate.start}
+                              end={candidate.end}
+                            />
                           </article>
                         ))}
                       </div>
@@ -389,12 +403,19 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
                         <span>{segment.reasons.map(qualityReasonLabel).join(' · ')}</span>
                       </header>
                       <p>{segment.text || '（该片段没有可显示文字）'}</p>
+                      <small>源媒体：{mediaPath.split(/[\\/]/).pop()}</small>
                       <small>
                         temperature {formatDiagnosticNumber(segment.temperature)} · avg logprob{' '}
                         {formatDiagnosticNumber(segment.avgLogProbability)} · compression{' '}
                         {formatDiagnosticNumber(segment.compressionRatio)} · no-speech{' '}
                         {formatDiagnosticNumber(segment.noSpeechProbability)}
                       </small>
+                      <QualityReviewActions
+                        mediaPath={mediaPath}
+                        text={segment.text}
+                        start={segment.start}
+                        end={segment.end}
+                      />
                     </article>
                   ))}
                   {totalLowConfidence > lowConfidenceSegments.length && (
@@ -443,16 +464,7 @@ function countHotwords(value: string): number {
 }
 
 function formatDiagnosticRange(start: number | null, end: number | null): string {
-  if (start === null && end === null) return '时间未知';
-  return `${formatDiagnosticTime(start)}–${formatDiagnosticTime(end)}`;
-}
-
-function formatDiagnosticTime(value: number | null): string {
-  if (value === null) return '??:??';
-  const seconds = Math.max(0, Math.floor(value));
-  return `${Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
+  return diagnosticRange(start, end) ?? '时间未知';
 }
 
 function formatDiagnosticNumber(value: number | null): string {

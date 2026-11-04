@@ -1388,6 +1388,13 @@ textarea::placeholder {
   gap: 8px;
   margin-top: 12px;
 }
+
+.quality-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
 .quality-segment {
   padding: 11px;
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
