@@ -15,7 +15,8 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
-| 2026-11-04 | bug | - | archived | - | [[日志/2026-11-04-A持久化容错.md|A：配置与任务历史恢复容错]] |
+| 2026-11-04 | test | - | archived | quality-corpus-2026-11-04 | [[日志/2026-11-04-B音频质量基准.md|B：可复现音频质量与资源基准]] |
+| 2026-11-04 | bug | - | archived | workspace-recovery-2026-11-04 | [[日志/2026-11-04-A持久化容错.md|A：配置与任务历史恢复容错]] |
 | 2026-11-02 | bug | - | archived | shutdown-kernel-stall | [[日志/2026-11-02-退出卡顿内核诊断与Host回收修复.md|退出卡顿内核诊断与 Host 回收修复]] |
 | 2026-11-02 | operations | - | archived | qwen17b-selected-portable-archive | [[日志/2026-11-02-Qwen17B专用应用压缩包.md|Qwen 1.7B 专用应用压缩包]] |
 | 2026-11-02 | bug | - | archived | nvml-session-resource-growth | [[日志/2026-11-02-NVML会话资源累积根因与修复.md|NVML 会话资源累积根因与修复]] |

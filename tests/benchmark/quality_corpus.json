@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "samples": [
+    {"id":"mandarin", "category":"clear-mandarin", "path":"../fixtures/chinese_short.wav", "preset_id":"cn", "reference_text":"今天天气很好，我们一起测试中文语音转录。"},
+    {"id":"english", "category":"clear-english", "path":"../fixtures/english_short.wav", "preset_id":"en_v1", "reference_text":"Hello, this is a whisper transcription regression test. The quick brown fox jumps over the lazy dog."},
+    {"id":"narration-music", "category":"mandarin-with-music", "path":null, "preset_id":"cn", "reference_text":null},
+    {"id":"code-switch", "category":"mixed-mandarin-english", "path":null, "preset_id":"cn2", "reference_text":null},
+    {"id":"music", "category":"music-only", "path":null, "preset_id":"cn", "reference_text":""},
+    {"id":"silence", "category":"silence", "generate_silence_seconds":120, "preset_id":"cn", "reference_text":""},
+    {"id":"fast-technical", "category":"fast-technical", "path":null, "preset_id":"cn2", "reference_text":null},
+    {"id":"long-media", "category":"long-media", "path":null, "preset_id":"cn", "reference_text":null}
+  ]
+}
