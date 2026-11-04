@@ -2,6 +2,7 @@ import type { DesktopEvent } from '../contracts/desktop';
 import { notifyPowerCountdown, notifyTaskFinished } from '../notifications';
 import { appendPerformanceSample } from './performanceWindow';
 import { elapsedTextSeconds } from './taskTiming';
+import { appendWorkerLog } from './workerLogBuffer';
 import { mergeUniqueInputs } from './workspaceDraft';
 import type { WorkspaceState } from './workspace';
 import {
@@ -56,11 +57,19 @@ export function handleWorkspaceEvent(
     return;
   }
   if (event.type === 'worker.log') {
-    set((state) => ({ logs: [...state.logs, event.line] }));
+    set((state) => {
+      const { clipped, ...buffer } = appendWorkerLog(
+        state.logs,
+        state.logsOffset,
+        state.latestErrorLog,
+        event.line,
+      );
+      return { ...buffer, clippedLogLines: state.clippedLogLines + Number(clipped) };
+    });
     return;
   }
   if (event.type === 'worker.logs_cleared') {
-    set({ logs: [] });
+    set({ logs: [], logsOffset: 0, latestErrorLog: null, clippedLogLines: 0 });
     return;
   }
   if (event.type === 'worker.error') {

@@ -269,6 +269,9 @@ export interface WorkspaceState {
   powerActionStatus: PowerActionStatus;
   shutdownArmed: boolean;
   logs: string[];
+  logsOffset: number;
+  latestErrorLog: string | null;
+  clippedLogLines: number;
   lastError: string | null;
   startingTask: boolean;
   activeView: WorkspaceViewId;
@@ -421,6 +424,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
   shutdownArmed: false,
   logs: [],
+  logsOffset: 0,
+  latestErrorLog: null,
+  clippedLogLines: 0,
   lastError: null,
   startingTask: false,
   activeView: 'workspace',

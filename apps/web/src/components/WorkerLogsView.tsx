@@ -10,7 +10,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
-import { useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
+import { WORKER_LOG_LIMIT, WORKER_LOG_LINE_LIMIT } from '../state/workerLogBuffer';
 
 import { desktopBridge } from '../bridge';
 import { useWorkspace } from '../state/workspace';
@@ -53,6 +54,9 @@ export function parseWorkerLogLine(line: string): ParsedWorkerLogLine {
 
 export function WorkerLogsView() {
   const logs = useWorkspace((state) => state.logs);
+  const logsOffset = useWorkspace((state) => state.logsOffset);
+  const latestErrorLog = useWorkspace((state) => state.latestErrorLog);
+  const clippedLogLines = useWorkspace((state) => state.clippedLogLines);
   const hostStatus = useWorkspace((state) => state.hostStatus);
   const model = useWorkspace((state) => state.model);
   const isReady = hostStatus.state === 'ready';
@@ -61,7 +65,7 @@ export function WorkerLogsView() {
   const [confirmation, setConfirmation] = useTimedConfirmation<{ key: string }>();
   const clearArmed = confirmation !== null;
   const reducedMotion = useReducedMotion();
-  const logText = logs.length === 0 ? '' : `${logs.join('\r\n')}\r\n`;
+  const logText = () => (logs.length === 0 ? '' : `${logs.join('\r\n')}\r\n`);
 
   const followLatest = useCallback(() => {
     const stream = streamRef.current;
@@ -78,12 +82,12 @@ export function WorkerLogsView() {
   const logFollowHandlers = useAutoFollow({
     enabled: true,
     follow: followLatest,
-    targetKey: logs.length,
+    targetKey: logsOffset + logs.length,
   });
 
   const copyLogs = async () => {
     try {
-      await desktopBridge.copyWorkerLogs(logText);
+      await desktopBridge.copyWorkerLogs(logText());
       setFeedback(`已复制 ${logs.length} 行日志`);
     } catch {
       setFeedback('复制失败，请检查系统剪贴板权限');
@@ -108,8 +112,8 @@ export function WorkerLogsView() {
 
   const exportLogs = async () => {
     try {
-      const path = await desktopBridge.exportWorkerLogs(logText);
-      if (path !== null) setFeedback(`日志已导出：${path}`);
+      const path = await desktopBridge.exportWorkerLogs(logText());
+      if (path !== null) setFeedback(`已导出当前缓冲区 ${logs.length} 行：${path}`);
     } catch {
       setFeedback('导出失败，请重新选择可写入的位置');
     }
@@ -129,14 +133,14 @@ export function WorkerLogsView() {
             return parsed.scope.toUpperCase() === 'WORKER';
           });
     stream.focus({ preventScroll: true });
-    const row = stream.querySelector<HTMLElement>(`[data-log-index="${index}"]`);
+    const row = stream.querySelector<HTMLElement>(`[data-log-index="${logsOffset + index}"]`);
     if (row) {
       stream.scrollTo?.({
         top:
           stream.scrollTop + row.getBoundingClientRect().top - stream.getBoundingClientRect().top,
         behavior: reducedMotion ? 'auto' : 'smooth',
       });
-      setFeedback(`已定位第 ${index + 1} 行日志`);
+      setFeedback(`已定位第 ${logsOffset + index + 1} 行日志`);
     } else setFeedback('当前会话暂无对应日志，后续事件会自动显示。');
   };
 
@@ -184,7 +188,7 @@ export function WorkerLogsView() {
           <SummaryText
             label="BUFFER"
             value={`${logs.length} 行日志`}
-            description="仅保留当前桌面会话"
+            description={`最近 ${WORKER_LOG_LIMIT} 行 · 已移除 ${logsOffset} 行`}
           />
         </CardButton>
       </section>
@@ -207,7 +211,7 @@ export function WorkerLogsView() {
             </span>
             <div>
               <Button disabled={logs.length === 0} onClick={() => void copyLogs()} type="button">
-                <Copy size={15} /> 复制全部
+                <Copy size={15} /> 复制缓冲区
               </Button>
               <Button disabled={logs.length === 0} onClick={() => void exportLogs()} type="button">
                 <Download size={15} /> 导出 TXT
@@ -250,38 +254,45 @@ export function WorkerLogsView() {
               </div>
             </div>
           ) : (
-            logs.map((line, index) => {
-              const parsed = parseWorkerLogLine(line);
-              return (
-                <code key={`${index}-${line}`} data-log-index={index}>
-                  <span className="worker-log-line-number">
-                    {String(index + 1).padStart(3, '0')}
-                  </span>
-                  <time
-                    className="worker-log-timestamp"
-                    dateTime={
-                      parsed.date && parsed.time ? `${parsed.date}T${parsed.time}` : undefined
-                    }
-                  >
-                    {parsed.date ? <small>{parsed.date}</small> : <small>LOCAL</small>}
-                    <strong>{parsed.time ?? '--:--:--'}</strong>
-                  </time>
-                  <span className="worker-log-source" data-tone={parsed.tone}>
-                    {parsed.scope}
-                  </span>
-                  <span className="worker-log-message diagnostic-text">{parsed.message}</span>
-                </code>
-              );
-            })
+            logs.map((line, index) => (
+              <WorkerLogRow key={logsOffset + index} line={line} index={logsOffset + index} />
+            ))
           )}
         </div>
         <div className="worker-log-footer">
           <p className="worker-log-footnote">
-            保留当前会话全部有效日志；人工滚动后暂停追踪，8 秒无操作自动恢复到最新处。
+            仅复制或导出当前缓冲区，最多 {WORKER_LOG_LIMIT} 行，每行最多 {WORKER_LOG_LINE_LIMIT}{' '}
+            字符；已截断 {clippedLogLines} 行。人工滚动后暂停追踪，8 秒无操作恢复。
           </p>
           <span aria-live="polite">{feedback}</span>
         </div>
+        {latestErrorLog && !logs.includes(latestErrorLog) && (
+          <details open>
+            <summary>最近错误（已超出当前缓冲区）</summary>
+            <pre className="diagnostic-text">{latestErrorLog}</pre>
+          </details>
+        )}
       </section>
     </div>
   );
 }
+
+const WorkerLogRow = memo(function WorkerLogRow({ line, index }: { line: string; index: number }) {
+  const parsed = parseWorkerLogLine(line);
+  return (
+    <code data-log-index={index}>
+      <span className="worker-log-line-number">{String(index + 1).padStart(3, '0')}</span>
+      <time
+        className="worker-log-timestamp"
+        dateTime={parsed.date && parsed.time ? `${parsed.date}T${parsed.time}` : undefined}
+      >
+        <small>{parsed.date ?? 'LOCAL'}</small>
+        <strong>{parsed.time ?? '--:--:--'}</strong>
+      </time>
+      <span className="worker-log-source" data-tone={parsed.tone}>
+        {parsed.scope}
+      </span>
+      <span className="worker-log-message diagnostic-text">{parsed.message}</span>
+    </code>
+  );
+});

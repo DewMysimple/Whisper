@@ -99,5 +99,5 @@ test('diagnostic owners control the rendered rules and long messages stay readab
   }));
   expect(dimensions.overflow).toBeLessThanOrEqual(1);
   expect(dimensions.height).toBeGreaterThan(dimensions.line * 2);
-  await expect(page.getByRole('button', { name: '复制全部' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '复制缓冲区' })).toBeEnabled();
 });

@@ -80,7 +80,7 @@ describe('WorkerLogsView', () => {
     const copy = vi.spyOn(desktopBridge, 'copyWorkerLogs').mockResolvedValue();
     const exportFile = vi.spyOn(desktopBridge, 'exportWorkerLogs').mockResolvedValue(null);
     render(<WorkerLogsView />);
-    await user.click(screen.getByRole('button', { name: '复制全部' }));
+    await user.click(screen.getByRole('button', { name: '复制缓冲区' }));
     await user.click(screen.getByRole('button', { name: '导出 TXT' }));
     const raw = `${logs.join('\r\n')}\r\n`;
     expect(copy).toHaveBeenCalledExactlyOnceWith(raw);
