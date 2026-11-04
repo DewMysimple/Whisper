@@ -157,6 +157,31 @@ function TaskDetailContent({ task }: { task: TaskSnapshot }) {
           </section>
         )}
 
+        {(task.mediaStates?.length ?? 0) > 0 && (
+          <section className="detail-section" aria-label="恢复前核验">
+            <h3>媒体与输出状态</h3>
+            {task.mediaStates?.map((media) => (
+              <div key={media.path}>
+                <strong>{media.path.split(/[\\/]/).pop()}</strong>
+                <p>
+                  {media.status === 'skipped'
+                    ? '已明确跳过'
+                    : media.status === 'completed'
+                      ? media.outputAudit === 'available'
+                        ? '已完成，输出格式核验通过'
+                        : media.outputAudit === 'missing'
+                          ? '输出丢失、不完整或格式无效，需要重跑'
+                          : '历史输出尚无法确认'
+                      : media.status === 'failed'
+                        ? '失败，需要重新处理'
+                        : '上次未完成，需要重新处理'}
+                </p>
+                {media.status === 'failed' && <small>{media.stage}</small>}
+              </div>
+            ))}
+          </section>
+        )}
+
         <section className="detail-section preview-section">
           <h3>
             <FileText size={16} /> 输出预览

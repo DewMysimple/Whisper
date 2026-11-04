@@ -1,4 +1,10 @@
-import type { DesktopEvent, TaskSnapshot, TaskStatus } from '../contracts/desktop';
+import type {
+  DesktopEvent,
+  TaskSnapshot,
+  TaskStatus,
+  TaskMediaSnapshot,
+  OutputPathStatus,
+} from '../contracts/desktop';
 
 export function isTerminalTaskStatus(status: TaskStatus): boolean {
   return status === 'completed' || status === 'failed' || status === 'cancelled';
@@ -27,18 +33,43 @@ export function taskOutputPaths(task: TaskSnapshot | undefined): string[] {
 }
 
 export function canResumeTask(task: TaskSnapshot): boolean {
-  if (task.status !== 'failed' && task.status !== 'cancelled') return false;
+  if (!isTerminalTaskStatus(task.status)) return false;
   const mediaStates = task.mediaStates ?? [];
-  const hasReliableCompletion = mediaStates.some(
-    (media) =>
-      (media.status === 'completed' || media.status === 'skipped') &&
-      (media.outputPaths?.length ?? 0) > 0,
+  if (
+    task.mediaPaths?.some(
+      (path) => !mediaStates.some((m) => m.path.toLowerCase() === path.toLowerCase()),
+    )
+  )
+    return false;
+  return (
+    task.draft !== undefined &&
+    mediaStates.some((m) => m.status !== 'skipped') &&
+    (task.status !== 'completed' || task.outputAvailability === 'missing')
   );
-  const hasUnfinishedMedia = mediaStates.some(
-    (media) =>
-      media.status === 'pending' || media.status === 'running' || media.status === 'failed',
-  );
-  return task.draft !== undefined && hasReliableCompletion && hasUnfinishedMedia;
+}
+
+export function auditMediaOutputs(
+  task: TaskSnapshot,
+  media: TaskMediaSnapshot,
+  statuses: Map<string, OutputPathStatus>,
+): 'available' | 'missing' | 'unconfirmed' {
+  const outputs = media.outputPaths ?? [];
+  if (!task.draft || outputs.length === 0) return 'unconfirmed';
+  const policy = task.draft.output;
+  const required = [
+    policy.txtEnabled ? '.txt' : null,
+    policy.markdownEnabled ? '.md' : null,
+    policy.srtEnabled ? '.srt' : null,
+  ].filter((x) => x !== null);
+  if (required.some((ext) => !outputs.some((path) => path.toLowerCase().endsWith(ext))))
+    return 'missing';
+  if (outputs.some((path) => !statuses.has(path.toLowerCase()))) return 'unconfirmed';
+  return outputs.every((path) => {
+    const status = statuses.get(path.toLowerCase());
+    return status?.exists && status.valid === true;
+  })
+    ? 'available'
+    : 'missing';
 }
 
 export function isAbnormalTask(task: TaskSnapshot): boolean {

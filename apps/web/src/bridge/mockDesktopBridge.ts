@@ -100,7 +100,7 @@ export class MockDesktopBridge implements DesktopBridge {
   }
 
   async inspectOutputPaths(paths: string[]): Promise<OutputPathStatus[]> {
-    return paths.map((path) => ({ path, exists: true }));
+    return paths.map((path) => ({ path, exists: true, valid: true }));
   }
 
   async revealOutput(path: string): Promise<void> {

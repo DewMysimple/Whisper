@@ -62,7 +62,13 @@ import {
 import { parseWindowsClipboardPaths } from './clipboardPaths';
 import type { TaskDateRange, TaskFilter } from './taskHistory';
 import { handleWorkspaceEvent } from './workspaceEvents';
-import { activeTaskId, canResumeTask, isAbnormalTask, taskOutputPaths } from './workspaceTaskState';
+import {
+  activeTaskId,
+  canResumeTask,
+  isAbnormalTask,
+  taskOutputPaths,
+  auditMediaOutputs,
+} from './workspaceTaskState';
 import {
   draftHasUnsupportedTranslation,
   errorMessage,
@@ -1038,17 +1044,22 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
   auditTaskOutputs: async () => {
     if (get().outputAuditPending) return;
-    const completedTasks = get().tasks.filter((task) => task.status === 'completed');
+    const completedTasks = get().tasks.filter((task) =>
+      ['completed', 'failed', 'cancelled'].includes(task.status),
+    );
     if (completedTasks.length === 0) return;
     set({ outputAuditPending: true });
     const auditedTasks = new Map(completedTasks.map((task) => [task.id, taskOutputPaths(task)]));
     const paths = [...new Set([...auditedTasks.values()].flat())];
     try {
       const statuses = paths.length === 0 ? [] : await desktopBridge.inspectOutputPaths(paths);
-      const availability = new Map(statuses.map((status) => [status.path, status.exists]));
+      const availability = new Map(
+        statuses.map((status) => [status.path, status.exists && status.valid === true]),
+      );
+      const statusMap = new Map(statuses.map((status) => [status.path.toLowerCase(), status]));
       set((state) => ({
         tasks: state.tasks.map((task) => {
-          if (task.status !== 'completed') return task;
+          if (!['completed', 'failed', 'cancelled'].includes(task.status)) return task;
           const outputs = auditedTasks.get(task.id);
           const currentOutputs = taskOutputPaths(task);
           if (
@@ -1058,11 +1069,18 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
           )
             return task;
           if (outputs.some((output) => !availability.has(output))) return task;
+          const mediaStates = task.mediaStates?.map((media) => ({
+            ...media,
+            outputAudit:
+              media.status === 'completed' ? auditMediaOutputs(task, media, statusMap) : undefined,
+          }));
           const outputAvailability =
-            outputs.length > 0 && outputs.every((output) => availability.get(output) === true)
+            outputs.length > 0 &&
+            outputs.every((output) => availability.get(output) === true) &&
+            !mediaStates?.some((m) => m.status === 'completed' && m.outputAudit !== 'available')
               ? 'available'
               : 'missing';
-          return { ...task, outputAvailability };
+          return { ...task, outputAvailability, mediaStates };
         }),
       }));
       persistLater(get);
@@ -1076,6 +1094,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const request = ++outputPreviewRequest;
     set({ selectedTaskId: taskId, outputPreview: null, previewLoading: false });
     if (taskId === null) return;
+    await get().auditTaskOutputs();
     const task = get().tasks.find((item) => item.id === taskId);
     const output = taskOutputPaths(task)[0];
     if (
@@ -1182,29 +1201,26 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
       const mediaStates = task.mediaStates ?? [];
       const completedOutputPaths = mediaStates
-        .filter((media) => media.status === 'completed' || media.status === 'skipped')
+        .filter((media) => media.status === 'completed')
         .flatMap((media) => media.outputPaths ?? []);
       const outputStatuses =
         completedOutputPaths.length === 0
           ? []
           : await desktopBridge.inspectOutputPaths([...new Set(completedOutputPaths)]);
-      const existingOutputs = new Set(
-        outputStatuses
-          .filter((status) => status.exists)
-          .map((status) => status.path.toLocaleLowerCase()),
+      const outputStatusMap = new Map(
+        outputStatuses.map((status) => [status.path.toLowerCase(), status]),
       );
       const remainingPaths = mediaStates
         .filter((media) => {
-          if (media.status !== 'completed' && media.status !== 'skipped') return true;
-          const outputs = media.outputPaths ?? [];
+          if (media.status === 'skipped') return false;
           return (
-            outputs.length === 0 ||
-            outputs.some((path) => !existingOutputs.has(path.toLocaleLowerCase()))
+            media.status !== 'completed' ||
+            auditMediaOutputs(task, media, outputStatusMap) !== 'available'
           );
         })
         .map((media) => media.path);
       if (remainingPaths.length === 0) {
-        throw new Error('已完成媒体的输出仍然存在，没有需要继续处理的媒体。');
+        throw new Error('已完成媒体输出核验通过，其余媒体已明确跳过，没有需要继续处理的媒体。');
       }
       const inputs = await desktopBridge.inspectPaths(remainingPaths, 'manual');
       if (inputs.some((input) => !input.valid)) {

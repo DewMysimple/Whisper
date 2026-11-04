@@ -148,6 +148,34 @@ def task_events(events, task_id):
     ]
 
 
+def test_partial_format_failure_reports_successful_paths_and_failure_reason(tmp_path, monkeypatch):
+    from whisper_subtitle.infrastructure import output_store
+    media = make_media(tmp_path, "one.wav")
+    events = []
+    original = output_store.atomic_write_text
+    def write(path, content):
+        if path.suffix == ".md":
+            raise PermissionError("disk denied")
+        return original(path, content)
+    monkeypatch.setattr(output_store, "atomic_write_text", write)
+    runtime = make_runtime(events, FakeEngine(), [], ["partial"])
+    policy = {**output_policy(mode="source"), "markdown": {"enabled": True}, "preserve_source_txt": False}
+    try:
+        runtime.handle_command(start_command("req", media, policy=policy))
+        assert runtime.wait_until_idle()
+    finally:
+        assert runtime.close(timeout=3)
+    sequence = task_events(events, "partial")
+    validate_task_event_sequence(sequence)
+    finished = sequence[-1]
+    assert finished.data["failure_count"] == 1
+    assert finished.data["success_count"] == 0
+    assert tuple(finished.data["outputs"]) == (str(media.with_suffix(".txt")),)
+    failed = next(e for e in sequence if e.data.get("media_status") == "failed")
+    assert "disk denied" in failed.message and ".md" in failed.message
+    assert tuple(failed.data["output_paths"]) == (str(media.with_suffix(".txt")),)
+
+
 def test_progress_boundary_normalizes_third_party_numeric_scalars():
     events = []
     runtime = WorkerRuntime(events.append, environment_checker=lambda: [])

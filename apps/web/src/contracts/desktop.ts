@@ -188,6 +188,7 @@ export interface TaskMediaSnapshot {
   durationSeconds?: number | null;
   outputPaths?: string[];
   qualityDiagnostics?: RecognitionQualityDiagnostics;
+  outputAudit?: 'available' | 'missing' | 'unconfirmed';
 }
 
 export interface TaskSnapshot {
@@ -265,6 +266,8 @@ export interface OutputPreview {
 export interface OutputPathStatus {
   path: string;
   exists: boolean;
+  valid?: boolean;
+  reason?: string | null;
 }
 
 export interface HostStatus {

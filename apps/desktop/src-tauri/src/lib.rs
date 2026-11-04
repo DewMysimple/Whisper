@@ -1,3 +1,4 @@
+mod output_audit;
 mod power;
 mod protocol;
 mod protocol_quality;
@@ -43,6 +44,8 @@ struct OutputPreview {
 struct OutputPathStatus {
     path: String,
     exists: bool,
+    valid: bool,
+    reason: Option<String>,
 }
 
 #[tauri::command]
@@ -224,12 +227,24 @@ async fn inspect_inputs(
 }
 
 #[tauri::command]
-fn inspect_output_paths(paths: Vec<String>) -> Vec<OutputPathStatus> {
+async fn inspect_output_paths(paths: Vec<String>) -> Result<Vec<OutputPathStatus>, HostError> {
+    tauri::async_runtime::spawn_blocking(move || audit_output_paths(paths))
+        .await
+        .map_err(|e| HostError::new("host.output_audit_failed", e.to_string()))
+}
+
+fn audit_output_paths(paths: Vec<String>) -> Vec<OutputPathStatus> {
     paths
         .into_iter()
-        .map(|path| OutputPathStatus {
-            exists: PathBuf::from(&path).is_file(),
-            path,
+        .map(|path| {
+            let target = PathBuf::from(&path);
+            let audit = output_audit::validate(&target);
+            OutputPathStatus {
+                exists: target.is_file(),
+                valid: audit.is_ok(),
+                reason: audit.err(),
+                path,
+            }
         })
         .collect()
 }
@@ -558,7 +573,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        existing_output_directory, inspect_output_paths, read_output_preview, repository_root,
+        audit_output_paths, existing_output_directory, read_output_preview, repository_root,
         write_worker_log_export,
     };
 
@@ -600,7 +615,7 @@ mod tests {
             .join("tests")
             .join("golden")
             .join("missing-output.txt");
-        let results = inspect_output_paths(vec![
+        let results = audit_output_paths(vec![
             existing.to_string_lossy().into_owned(),
             missing.to_string_lossy().into_owned(),
         ]);

@@ -374,6 +374,15 @@ def atomic_write_text(path: Path | str, content: str) -> Path:
             temporary_path.unlink(missing_ok=True)
 
 
+class PartialOutputError(OSError):
+    """Committed files survive; each failed destination remains explicit."""
+
+    def __init__(self, completed_paths: tuple[Path, ...], failures: tuple[tuple[Path, str], ...]):
+        self.completed_paths, self.failures = completed_paths, failures
+        super().__init__("部分输出失败；已保存 " + str(len(completed_paths)) + " 个文件；" +
+                         "；".join(f"{path.suffix.upper()} {path}: {reason}" for path, reason in failures))
+
+
 def write_primary_outputs(
     plan: OutputPlan,
     txt_content: str,
@@ -387,21 +396,23 @@ def write_primary_outputs(
     resolved_markdown = txt_content if markdown_content is None else markdown_content
     if not isinstance(resolved_markdown, str):
         raise TypeError("markdown_content must be str")
-    for path in (plan.primary_txt, plan.backup_txt):
-        if path is None:
-            continue
-        atomic_write_text(path, txt_content)
-    for path in (plan.primary_md, plan.backup_md):
-        if path is None:
-            continue
-        atomic_write_text(path, resolved_markdown)
+    artifacts = [(path, txt_content) for path in (plan.primary_txt, plan.backup_txt)]
+    artifacts += [(path, resolved_markdown) for path in (plan.primary_md, plan.backup_md)]
     if plan.primary_srt is not None or plan.primary_srt_txt is not None:
         if srt_content is None:
             raise ValueError("SRT output requires timestamped subtitle content")
-        if plan.primary_srt is not None:
-            atomic_write_text(plan.primary_srt, srt_content)
-        if plan.primary_srt_txt is not None:
-            atomic_write_text(plan.primary_srt_txt, srt_content)
+        artifacts += [(path, srt_content) for path in (plan.primary_srt, plan.primary_srt_txt)]
+    completed, failures = [], []
+    for path, content in artifacts:
+        if path is None:
+            continue
+        try:
+            atomic_write_text(path, content)
+            completed.append(path)
+        except OSError as exc:
+            failures.append((path, str(exc)))
+    if failures:
+        raise PartialOutputError(tuple(completed), tuple(failures))
 
 
 def copy_utf8_text(source: Path | str, destination: Path | str) -> Path:

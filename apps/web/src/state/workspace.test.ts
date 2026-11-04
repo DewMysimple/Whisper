@@ -343,7 +343,7 @@ describe('workspace terminal event notifications', () => {
 
   it('classifies completed tasks with missing outputs as abnormal history', async () => {
     const inspect = vi.spyOn(desktopBridge, 'inspectOutputPaths').mockResolvedValue([
-      { path: 'D:\\Text\\available.txt', exists: true },
+      { path: 'D:\\Text\\available.txt', exists: true, valid: true },
       { path: 'D:\\Text\\moved.txt', exists: false },
     ]);
     useWorkspace.setState({
@@ -388,7 +388,7 @@ describe('workspace terminal event notifications', () => {
     const inspect = vi
       .spyOn(desktopBridge, 'inspectOutputPaths')
       .mockImplementation(async (paths) =>
-        paths.map((path) => ({ path, exists: path === generated })),
+        paths.map((path) => ({ path, exists: path === generated, valid: path === generated })),
       );
     const preview = vi.spyOn(desktopBridge, 'readOutputPreview').mockResolvedValue({
       path: generated,
@@ -401,6 +401,25 @@ describe('workspace terminal event notifications', () => {
           ...RUNNING_TASK,
           id: 'task-mixed-skip',
           status: 'completed',
+          draft: {
+            inputs: [],
+            modelId: 'large-v3-turbo',
+            basePresetId: 'cn',
+            profileMode: 'transcript',
+            overrides: {},
+            effectiveParameters: { ...getPreset('cn').parameters },
+            subtitleParameters: { ...getSubtitlePreset('cn').subtitleParameters },
+            output: {
+              mode: 'source',
+              rootDirectory: null,
+              txtEnabled: true,
+              markdownEnabled: false,
+              srtEnabled: false,
+              preserveSourceTxt: false,
+              preserveSourceMarkdown: false,
+              conflictPolicy: 'confirm_overwrite',
+            },
+          },
           mediaStates: [
             {
               path: 'D:\\Media\\busy.wav',
@@ -438,8 +457,8 @@ describe('workspace terminal event notifications', () => {
     const first = 'D:\\Text\\first.txt';
     const second = 'D:\\Text\\second.txt';
     const inspect = vi.spyOn(desktopBridge, 'inspectOutputPaths').mockResolvedValue([
-      { path: first, exists: true },
-      { path: second, exists: true },
+      { path: first, exists: true, valid: true },
+      { path: second, exists: true, valid: true },
     ]);
     const open = vi
       .spyOn(desktopBridge, 'openOutputDirectory')
@@ -753,7 +772,7 @@ describe('workspace terminal event notifications', () => {
     ]);
     const inspectOutputs = vi
       .spyOn(desktopBridge, 'inspectOutputPaths')
-      .mockResolvedValue([{ path: completedOutput, exists: true }]);
+      .mockResolvedValue([{ path: completedOutput, exists: true, valid: true }]);
     const inspectInputs = vi.spyOn(desktopBridge, 'inspectPaths').mockResolvedValue([
       {
         id: 'remaining-input',
@@ -780,6 +799,14 @@ describe('workspace terminal event notifications', () => {
           stage: '已完成',
           elapsedSeconds: 5,
           outputPaths: [completedOutput],
+        },
+        {
+          path: 'D:\\Media\\skipped.mp4',
+          status: 'skipped',
+          progress: null,
+          stage: '已跳过',
+          elapsedSeconds: 0,
+          outputPaths: ['D:\\Text\\skipped.txt'],
         },
         {
           path: remainingPath,
@@ -856,101 +883,104 @@ describe('workspace terminal event notifications', () => {
     listModels.mockRestore();
   });
 
-  it('reprocesses a completed media item when its recorded output has disappeared', async () => {
-    const completedPath = 'D:\\Media\\one.mp4';
-    const failedPath = 'D:\\Media\\two.mp4';
-    const missingOutput = 'D:\\Text\\one.txt';
-    const listModels = vi.spyOn(desktopBridge, 'listLocalModels').mockResolvedValue([
-      {
-        id: 'large-v3-turbo',
-        label: 'Large V3 Turbo',
-        installed: true,
-        path: 'F:\\WhisperSubtitle\\models\\large-v3-turbo',
-        sizeBytes: 1,
-        detail: 'installed',
-      },
-    ]);
-    vi.spyOn(desktopBridge, 'inspectOutputPaths').mockResolvedValue([
-      { path: missingOutput, exists: false },
-    ]);
-    const inspectInputs = vi.spyOn(desktopBridge, 'inspectPaths').mockResolvedValue(
-      [completedPath, failedPath].map((path, index) => ({
-        id: `input-${index}`,
-        path,
-        kind: 'file' as const,
-        origin: 'manual' as const,
-        valid: true,
-      })),
-    );
-    const start = vi
-      .spyOn(desktopBridge, 'startTranscription')
-      .mockResolvedValue({ taskId: 'task-resumed-missing' });
-    const draft = {
-      inputs: [],
-      modelId: 'large-v3-turbo' as const,
-      basePresetId: 'cn2' as const,
-      profileMode: 'transcript' as const,
-      overrides: {},
-      effectiveParameters: { ...getPreset('cn2').parameters },
-      subtitleParameters: { ...getSubtitlePreset('cn2').subtitleParameters },
-      output: {
-        mode: 'compatibility' as const,
-        rootDirectory: null,
-        txtEnabled: true,
-        markdownEnabled: false,
-        srtEnabled: false,
-        preserveSourceTxt: false,
-        preserveSourceMarkdown: false,
-        conflictPolicy: 'confirm_overwrite' as const,
-      },
-    };
-    useWorkspace.setState({
-      tasks: [
+  it.each([false, true])(
+    'reprocesses a completed media item when its recorded output is missing or invalid (exists=%s)',
+    async (exists) => {
+      const completedPath = 'D:\\Media\\one.mp4';
+      const failedPath = 'D:\\Media\\two.mp4';
+      const missingOutput = 'D:\\Text\\one.txt';
+      const listModels = vi.spyOn(desktopBridge, 'listLocalModels').mockResolvedValue([
         {
-          ...RUNNING_TASK,
-          id: 'task-missing-completed-output',
-          status: 'failed',
-          sourceCount: 2,
-          mediaStates: [
-            {
-              path: completedPath,
-              status: 'completed',
-              progress: 100,
-              stage: '已完成',
-              elapsedSeconds: 5,
-              outputPaths: [missingOutput],
-            },
-            {
-              path: failedPath,
-              status: 'failed',
-              progress: 10,
-              stage: '失败',
-              elapsedSeconds: 1,
-            },
-          ],
-          draft,
+          id: 'large-v3-turbo',
+          label: 'Large V3 Turbo',
+          installed: true,
+          path: 'F:\\WhisperSubtitle\\models\\large-v3-turbo',
+          sizeBytes: 1,
+          detail: 'installed',
         },
-      ],
-      hostStatus: { state: 'ready', pid: 4242, launchKind: 'mock', error: null },
-      environment: {
-        available: true,
-        errors: [],
-        python: '3.14',
-        platform: 'Windows',
-      },
-    });
+      ]);
+      vi.spyOn(desktopBridge, 'inspectOutputPaths').mockResolvedValue([
+        { path: missingOutput, exists, valid: false },
+      ]);
+      const inspectInputs = vi.spyOn(desktopBridge, 'inspectPaths').mockResolvedValue(
+        [completedPath, failedPath].map((path, index) => ({
+          id: `input-${index}`,
+          path,
+          kind: 'file' as const,
+          origin: 'manual' as const,
+          valid: true,
+        })),
+      );
+      const start = vi
+        .spyOn(desktopBridge, 'startTranscription')
+        .mockResolvedValue({ taskId: 'task-resumed-missing' });
+      const draft = {
+        inputs: [],
+        modelId: 'large-v3-turbo' as const,
+        basePresetId: 'cn2' as const,
+        profileMode: 'transcript' as const,
+        overrides: {},
+        effectiveParameters: { ...getPreset('cn2').parameters },
+        subtitleParameters: { ...getSubtitlePreset('cn2').subtitleParameters },
+        output: {
+          mode: 'compatibility' as const,
+          rootDirectory: null,
+          txtEnabled: true,
+          markdownEnabled: false,
+          srtEnabled: false,
+          preserveSourceTxt: false,
+          preserveSourceMarkdown: false,
+          conflictPolicy: 'confirm_overwrite' as const,
+        },
+      };
+      useWorkspace.setState({
+        tasks: [
+          {
+            ...RUNNING_TASK,
+            id: 'task-missing-completed-output',
+            status: 'failed',
+            sourceCount: 2,
+            mediaStates: [
+              {
+                path: completedPath,
+                status: 'completed',
+                progress: 100,
+                stage: '已完成',
+                elapsedSeconds: 5,
+                outputPaths: [missingOutput],
+              },
+              {
+                path: failedPath,
+                status: 'failed',
+                progress: 10,
+                stage: '失败',
+                elapsedSeconds: 1,
+              },
+            ],
+            draft,
+          },
+        ],
+        hostStatus: { state: 'ready', pid: 4242, launchKind: 'mock', error: null },
+        environment: {
+          available: true,
+          errors: [],
+          python: '3.14',
+          platform: 'Windows',
+        },
+      });
 
-    await useWorkspace.getState().resumeTask('task-missing-completed-output');
+      await useWorkspace.getState().resumeTask('task-missing-completed-output');
 
-    expect(inspectInputs).toHaveBeenCalledWith([completedPath, failedPath], 'manual');
-    expect(start.mock.calls[0]?.[0].inputs.map((input) => input.path)).toEqual([
-      completedPath,
-      failedPath,
-    ]);
+      expect(inspectInputs).toHaveBeenCalledWith([completedPath, failedPath], 'manual');
+      expect(start.mock.calls[0]?.[0].inputs.map((input) => input.path)).toEqual([
+        completedPath,
+        failedPath,
+      ]);
 
-    start.mockRestore();
-    inspectInputs.mockRestore();
-    vi.mocked(desktopBridge.inspectOutputPaths).mockRestore();
-    listModels.mockRestore();
-  });
+      start.mockRestore();
+      inspectInputs.mockRestore();
+      vi.mocked(desktopBridge.inspectOutputPaths).mockRestore();
+      listModels.mockRestore();
+    },
+  );
 });

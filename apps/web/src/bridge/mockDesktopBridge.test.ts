@@ -108,7 +108,7 @@ describe('MockDesktopBridge', () => {
     expect(inputs).toHaveLength(2);
     expect(inputs[0]?.path).toContain('课程目录');
     await expect(bridge.inspectOutputPaths(['D:\\Mock\\output.txt'])).resolves.toEqual([
-      { path: 'D:\\Mock\\output.txt', exists: true },
+      { path: 'D:\\Mock\\output.txt', exists: true, valid: true },
     ]);
     expect(result.taskId).toMatch(/^mock-task-/);
     expect(listener).toHaveBeenCalledWith(

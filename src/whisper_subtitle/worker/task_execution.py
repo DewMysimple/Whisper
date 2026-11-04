@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from ..application.transcribe import TranscriptionCancelled, TranscriptionService
 from ..domain.contracts import TranscriptionRequest
-from ..infrastructure.output_store import OutputConflictError
+from ..infrastructure.output_store import OutputConflictError, PartialOutputError
 from ..protocol import ErrorCode, EventCode, EventMessage, TaskStage
 from .runtime_types import WorkerCommandError
 from .task import WorkerTask
@@ -85,8 +85,10 @@ def execute_task(runtime: "WorkerRuntime", task: WorkerTask) -> None:
                     )
                 except TranscriptionCancelled:
                     raise
-                except Exception:
+                except Exception as exc:
                     failure_count += 1
+                    partial_paths = exc.completed_paths if isinstance(exc, PartialOutputError) else ()
+                    outputs.extend(str(path) for path in partial_paths)
                     runtime._logger.exception("task %s failed for %s", task.task_id, media_path)
                     runtime._emit_progress(
                         task,
@@ -94,8 +96,9 @@ def execute_task(runtime: "WorkerRuntime", task: WorkerTask) -> None:
                         current,
                         len(media_paths),
                         input_path=media_path,
-                        message="当前媒体处理失败，继续队列中的其他媒体",
+                        message=f"当前媒体处理失败：{exc}；继续队列中的其他媒体",
                         media_status="failed",
+                        output_paths=partial_paths,
                     )
                     continue
                 success_count += 1

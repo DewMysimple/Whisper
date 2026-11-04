@@ -8,6 +8,7 @@ import pytest
 
 from whisper_subtitle.infrastructure import output_store
 from whisper_subtitle.infrastructure.output_store import (
+    PartialOutputError,
     OutputConflictError,
     OutputReservationError,
     atomic_write_text,
@@ -19,6 +20,28 @@ from whisper_subtitle.infrastructure.output_store import (
     write_desktop_outputs,
     write_primary_outputs,
 )
+
+
+@pytest.mark.parametrize("failed_suffix", [".txt", ".md", ".srt"])
+def test_each_format_failure_preserves_other_commits_and_reports_reason(tmp_path, monkeypatch, failed_suffix):
+    policy = {"mode": "source", "txt": {"enabled": True}, "markdown": {"enabled": True},
+              "srt": {"enabled": True}, "conflict_policy": "fail", "preserve_source_txt": False}
+    plan, = build_configurable_output_plans([tmp_path / "course.wav"], policy)
+    original = output_store.atomic_write_text
+    def write(path, content):
+        if path.suffix == failed_suffix:
+            raise PermissionError("not writable")
+        return original(path, content)
+    monkeypatch.setattr(output_store, "atomic_write_text", write)
+    with pytest.raises(PartialOutputError, match="not writable") as caught:
+        write_primary_outputs(plan, "", markdown_content="", srt_content="")
+    assert len(caught.value.completed_paths) == 2
+    assert all(p.exists() and p.read_text(encoding="utf-8") == "" for p in caught.value.completed_paths)
+    assert caught.value.failures[0][0].suffix == failed_suffix
+    assert not list(tmp_path.glob("*.tmp"))
+    # A retry still meets the normal disk-conflict gate.
+    with pytest.raises(OutputConflictError):
+        build_configurable_output_plans([tmp_path / "course.wav"], policy)
 
 
 def test_default_output_plan_uses_source_text_directory(tmp_path: Path):

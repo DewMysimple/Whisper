@@ -56,6 +56,15 @@ describe('workspace task integrity', () => {
           ...TASK,
           status: 'completed',
           outputs: [],
+          draft: {
+            ...useWorkspace.getInitialState().tasks.find((task) => task.draft)!.draft!,
+            output: {
+              ...useWorkspace.getState().output,
+              txtEnabled: true,
+              markdownEnabled: false,
+              srtEnabled: false,
+            },
+          },
           mediaStates: [
             {
               path: 'D:\\lesson.wav',
@@ -196,7 +205,7 @@ describe('workspace task integrity', () => {
       elapsed: '00:20',
       outputs: ['C:\\new.txt'],
     });
-    audit.resolve([{ path: 'C:\\old.txt', exists: true }]);
+    audit.resolve([{ path: 'C:\\old.txt', exists: true, valid: true }]);
     await request;
     expect(
       useWorkspace.getState().tasks.find((task) => task.id === TASK.id)?.outputAvailability,
@@ -208,7 +217,7 @@ describe('workspace task integrity', () => {
   it('keeps an existing output healthy when its preview fails for a non-file reason', async () => {
     vi.spyOn(desktopBridge, 'readOutputPreview').mockRejectedValue(new Error('permission denied'));
     vi.spyOn(desktopBridge, 'inspectOutputPaths').mockResolvedValue([
-      { path: 'C:\\one.txt', exists: true },
+      { path: 'C:\\one.txt', exists: true, valid: true },
     ]);
     useWorkspace.setState({ tasks: [{ ...TASK, status: 'completed', outputs: ['C:\\one.txt'] }] });
     await useWorkspace.getState().selectTask(TASK.id);
