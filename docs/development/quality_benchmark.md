@@ -28,3 +28,11 @@ python -m tests.benchmark.run_quality_benchmark --model-dir models/huggingface -
 - JSON 和 Markdown 同时生成。对比逐素材逐模型列出候选减基线的指标差值（正误差表示退化），输入／参考／参数改变则不比较；模型权重与环境变化需人工识别，不能将两次单次运行的速度波动称为优化收益。
 
 真实设备缺失、模型缺失或任务失败时保留诊断；失败停止后续推理，避免累积异常 Worker。真实验收与单元测试明确分开。
+
+## 独立性能探测
+
+`python -m tests.benchmark.run_decode_benchmark --output-dir tests/benchmark/runs/<new-decode-run>`
+生成30／60／180分钟零PCM，在独立进程测生产解码的数组大小和峰值RSS；不加载识别模型，不能代替真实长语音、VAD或时间轴验收。
+
+先 `corepack pnpm build`，再 `node tests/benchmark/run_persistence_benchmark.mjs tests/benchmark/runs/<new-storage-run>`，
+用隔离Edge和临时loopback预览测100条任务的同步序列化／存储，包含常规模板与合成诊断上界。运行器关闭自己启动的服务和浏览器，不改变正式应用入口。结果不能外推为日常帧延时或优化收益。
