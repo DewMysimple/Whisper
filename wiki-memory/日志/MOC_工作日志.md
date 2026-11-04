@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-04 | bug | - | archived | qwen-cancellation-2026-11-04 | [[日志/2026-11-04-FQwen协作取消.md|F：Qwen 生成循环协作取消]] |
 | 2026-11-04 | maintenance | - | archived | bounded-web-logs-2026-11-04 | [[日志/2026-11-04-E前端日志有界缓冲.md|E：前端日志内存上限]] |
 | 2026-11-04 | ui | - | archived | quality-review-2026-11-04 | [[日志/2026-11-04-D质量快捷复核.md|D：异常片段快捷复核]] |
 | 2026-11-04 | bug | - | archived | resume-output-2026-11-04 | [[日志/2026-11-04-C恢复与输出可靠性.md|C：恢复前核验与多格式失败反馈]] |

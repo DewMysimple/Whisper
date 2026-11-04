@@ -11,6 +11,7 @@ from whisper_subtitle.domain.execution import HardwareInfo
 from whisper_subtitle.domain.transcription import TranscriptionInfo
 from whisper_subtitle.infrastructure.qwen_engine import QwenASREngine
 from whisper_subtitle.infrastructure import torch_hardware
+from whisper_subtitle.domain.transcription import TranscriptionCancelled
 
 
 def test_torch_loader_initializes_shared_cuda_before_import(monkeypatch):
@@ -95,4 +96,67 @@ def test_threads_are_restored_before_yield_or_failure(monkeypatch, failure):
         assert (segment.start, segment.end, segment.text) == (2, 4, "你好。")
         assert info.language == "zh"
         segments.close()
+    assert threads.value == 8
+
+
+def test_cancel_before_decode_and_between_windows(monkeypatch):
+    import threading
+    engine, threads = make_engine()
+    cancelled = threading.Event()
+    cancelled.set()
+    monkeypatch.setattr("whisper_subtitle.infrastructure.qwen_engine.decode_media",
+                        lambda _: pytest.fail("cancelled task decoded media"))
+    with pytest.raises(TranscriptionCancelled):
+        engine.transcribe_cancellable("unused.wav", cancelled=cancelled.is_set)
+    cancelled.clear()
+    monkeypatch.setattr("whisper_subtitle.infrastructure.qwen_engine.speech_windows",
+                        lambda *args, **kw: [(0, 16000), (16000, 32000)])
+    calls = []
+    def recognize(*args, **kwargs):
+        calls.append(1)
+        return "你好", "Chinese", "zh"
+    monkeypatch.setattr(engine, "_recognize_chunk", recognize)
+    segments = engine._segments(np.zeros(32000), qwen_defaults(), TranscriptionInfo(2), cancelled=cancelled.is_set)
+    assert next(segments).text == "你好"
+    cancelled.set()
+    with pytest.raises(TranscriptionCancelled):
+        next(segments)
+    assert calls == [1]
+    assert threads.value == 8
+
+
+@pytest.mark.parametrize("failure", ["cancel", "generate"])
+def test_generation_stop_discards_partial_text_restores_threads_and_allows_reuse(monkeypatch, failure):
+    import threading
+    engine, threads = make_engine()
+    engine._transformers = SimpleNamespace(StoppingCriteria=object, StoppingCriteriaList=list)
+    engine._torch.bool = np.bool_
+    engine._torch.full = lambda shape, value, **kwargs: np.full(shape, value, dtype=bool)
+    cancelled = threading.Event()
+    monkeypatch.setattr("whisper_subtitle.infrastructure.qwen_engine.speech_windows",
+                        lambda *args, **kw: [(0, 16000), (16000, 32000)])
+    original = engine._model.generate
+    decoded = []
+    engine._processor.decode = lambda *args, **kwargs: decoded.append(1) or [{"transcription": "完整", "language": "Chinese"}]
+    def generate(**kwargs):
+        criteria = kwargs["stopping_criteria"][0]
+        ids = SimpleNamespace(shape=(1,), device="cpu")
+        assert not criteria(ids, None).any()
+        if failure == "generate":
+            raise RuntimeError("generation error")
+        cancelled.set()
+        assert criteria(ids, None).all()
+        return np.array([[1, 3, 11]])  # No EOS; must not be decoded or exported.
+    for _ in range(3):
+        cancelled.clear()
+        engine._model.generate = generate
+        iterator = engine._segments(np.zeros(32000), qwen_defaults(), TranscriptionInfo(2), cancelled=cancelled.is_set)
+        with pytest.raises(TranscriptionCancelled if failure == "cancel" else RuntimeError):
+            next(iterator)
+        assert not decoded
+        assert threads.value == 8
+    cancelled.clear()
+    engine._model.generate = original
+    segments = list(engine._segments(np.zeros(32000), qwen_defaults(), TranscriptionInfo(2), cancelled=cancelled.is_set))
+    assert [s.text for s in segments] == ["完整", "完整"]
     assert threads.value == 8

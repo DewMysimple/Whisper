@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import gc
 import importlib
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from itertools import chain
 from typing import Any
@@ -12,7 +12,7 @@ from typing import Any
 from ..domain.alignment import aligned_words
 from ..domain.backend_parameters import QWEN_ALIGNMENT_LANGUAGES, QWEN_LANGUAGES, qwen_defaults
 from ..domain.models import MODELS_BY_ID
-from ..domain.transcription import TranscribedSegment, TranscribedWord, TranscriptionInfo
+from ..domain.transcription import TranscribedSegment, TranscribedWord, TranscriptionInfo, TranscriptionCancelled
 from ..paths import ModelLocation
 from .audio_chunks import SAMPLE_RATE, decode_media, speech_windows
 from ..domain.execution import HardwareInfo
@@ -56,6 +56,10 @@ class QwenASREngine:
             ).to(self._model.device).eval()
 
     def transcribe(self, media_path: str, **options: Any):
+        return self.transcribe_cancellable(media_path, cancelled=None, **options)
+
+    def transcribe_cancellable(self, media_path: str, *, cancelled: Callable[[], bool] | None, **options: Any):
+        self._check_cancelled(cancelled)
         params = qwen_defaults()
         unknown = set(options) - params.keys()
         if unknown:
@@ -69,10 +73,16 @@ class QwenASREngine:
         if params["word_timestamps"] and language is not None and language not in QWEN_ALIGNMENT_LANGUAGES:
             raise ValueError(f"Qwen 对齐模型不支持 {language}，请仅输出 TXT/Markdown")
         audio = decode_media(media_path)
+        self._check_cancelled(cancelled)
         info = TranscriptionInfo(len(audio) / SAMPLE_RATE, language)
-        iterator = self._segments(audio, params, info)
+        iterator = self._segments(audio, params, info, cancelled=cancelled)
         first = next(iterator, None)
         return (chain((first,), iterator) if first is not None else iter(())), info
+
+    @staticmethod
+    def _check_cancelled(cancelled: Callable[[], bool] | None) -> None:
+        if cancelled is not None and cancelled():
+            raise TranscriptionCancelled("Qwen task was cancelled; incomplete window discarded")
 
     @contextmanager
     def _inference_threads(self) -> Iterator[None]:
@@ -88,16 +98,28 @@ class QwenASREngine:
 
     def _recognize_chunk(
         self, chunk: Any, params: Mapping[str, Any], prompt: str | None,
+        *, cancelled: Callable[[], bool] | None = None,
     ) -> tuple[str, str | None, str | None]:
+        self._check_cancelled(cancelled)
         inputs = self._processor.apply_transcription_request(
             audio=chunk,
             language=QWEN_LANGUAGES.get(params["language"]),
             prompt=prompt,
         ).to(self._model.device, self._model.dtype)
+        self._check_cancelled(cancelled)
+        generation_options = {}
+        if cancelled is not None:
+            torch = self._torch
+            class CancelRequested(self._transformers.StoppingCriteria):
+                def __call__(self, input_ids, scores, **kwargs):
+                    return torch.full((input_ids.shape[0],), cancelled(), dtype=torch.bool, device=input_ids.device)
+            generation_options["stopping_criteria"] = self._transformers.StoppingCriteriaList([CancelRequested()])
         with self._torch.inference_mode():
             ids = self._model.generate(
                 **inputs, max_new_tokens=params["max_new_tokens"], do_sample=False,
+                **generation_options,
             )
+        self._check_cancelled(cancelled)
         generated = ids[:, inputs["input_ids"].shape[1]:]
         # A full token budget without EOS means the transcript is incomplete.
         eos = self._model.generation_config.eos_token_id
@@ -137,7 +159,9 @@ class QwenASREngine:
 
     def _segments(
         self, audio: Any, params: Mapping[str, Any], info: TranscriptionInfo,
+        *, cancelled: Callable[[], bool] | None = None,
     ) -> Iterator[TranscribedSegment]:
+        self._check_cancelled(cancelled)
         windows = speech_windows(
             audio, chunk_length=params["chunk_length"],
             vad_filter=params["vad_filter"], vad_parameters=params["vad_parameters"],
@@ -146,9 +170,11 @@ class QwenASREngine:
             str(params[key]) for key in ("initial_prompt", "hotwords") if params.get(key)
         ) or None
         for start, end in windows:
+            self._check_cancelled(cancelled)
             with self._inference_threads():
                 chunk = audio[start:end]
-                text, detected, code = self._recognize_chunk(chunk, params, prompt)
+                text, detected, code = self._recognize_chunk(chunk, params, prompt, **({"cancelled": cancelled} if cancelled is not None else {}))
+                self._check_cancelled(cancelled)
                 if info.language is None:
                     info.language = code
                 words = None
@@ -159,6 +185,7 @@ class QwenASREngine:
                         chunk, text, offset=start / SAMPLE_RATE,
                         duration=(end - start) / SAMPLE_RATE,
                     )
+                    self._check_cancelled(cancelled)
             yield TranscribedSegment(start / SAMPLE_RATE, end / SAMPLE_RATE, text, words)
 
     def close(self) -> None:

@@ -34,7 +34,7 @@ from ..domain.postprocess import (
 from ..domain.presets import derive_preset, resolve_preset
 from ..domain.backend_parameters import is_qwen_model
 from ..domain.quality import build_recognition_quality_diagnostics
-from ..domain.transcription import TranscriptionEngine
+from ..domain.transcription import TranscriptionEngine, CancellableTranscriptionEngine, TranscriptionCancelled
 from ..domain.subtitles import build_srt_document
 from ..domain.transcript_layout import build_transcript_document
 from ..domain.execution import HardwareInfo
@@ -68,10 +68,6 @@ def _ignore_progress(_event: ProgressEvent) -> None:
 
 def _not_cancelled() -> bool:
     return False
-
-
-class TranscriptionCancelled(RuntimeError):
-    """Raised at safe application checkpoints when a Worker task is cancelled."""
 
 
 class TranscriptionService:
@@ -214,7 +210,10 @@ class TranscriptionService:
         media_started_at = time.monotonic()
         if mixed_recognition and model_id not in SECONDARY_RECOGNITION_MODEL_IDS:
             raise ValueError("mixed_zh_en requires a Large V3 or Large V3 Turbo model")
-        segments, info = engine.transcribe(str(media_path), **params)
+        if isinstance(engine, CancellableTranscriptionEngine):
+            segments, info = engine.transcribe_cancellable(str(media_path), cancelled=self._cancelled, **params)
+        else:
+            segments, info = engine.transcribe(str(media_path), **params)
         probability = getattr(info, "language_probability", None)
         if probability is None:
             language_message = f"🌐 识别语言: {info.language or '未识别到语音'}"

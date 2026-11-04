@@ -1,5 +1,18 @@
 # Qwen3-ASR 本地后端
 
+## 内部取消
+
+桌面与 Worker 继续使用 v1 `transcription.cancel`。application 通过可选的
+`CancellableTranscriptionEngine` 能力把当前任务探针传给 Qwen；它是单次运行控制，
+不进入 preset、模型配置或历史参数。已安装 Transformers 5.17.0 的标准
+`StoppingCriteria` 在 token 检查点停止，随后丢弃该窗口，不产生半截正式输出。
+解码、前处理、单次 GPU forward 及对齐仍需到达安全检查点，不能保证即时抢占。
+取消保持模型可复用，后续任务不继承旧取消信号。
+
+显式真实 CUDA 验收：
+`python -m tests.benchmark.run_qwen_cancel_validation --model-dir models/huggingface --output-dir tests/benchmark/runs/<new-run>`。
+两档模型各连续三次生成中取消，再执行一例三格式任务；测试专用触发条件不会进入产品。
+
 工程保留 Tiny、Base、Small、Medium、Large V3、Large V3 Turbo，并新增
 `qwen3-asr-1.7b`、`qwen3-asr-0.6b`。默认仍为 `large-v3-turbo`；旧模型／preset
 覆盖值不会迁移到 Qwen。新前端、Host 和 Worker 必须配套使用。

@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from .mixed_language import LanguageDetectionRegion
 
 
+class TranscriptionCancelled(RuntimeError):
+    """Internal cooperative cancellation, never a successful partial result."""
+
+
 @dataclass(frozen=True, slots=True)
 class TranscribedWord:
     start: float
@@ -42,6 +46,12 @@ class TranscriptionEngine(Protocol):
         **options: Any,
     ) -> tuple[Iterable[Any], Any]:
         """Transcribe one media path with preset-specific options."""
+
+
+@runtime_checkable
+class CancellableTranscriptionEngine(TranscriptionEngine, Protocol):
+    def transcribe_cancellable(self, media_path: str, *, cancelled: Callable[[], bool], **options: Any) -> tuple[Iterable[Any], Any]:
+        """Optional internal capability; cancellation is not a preset option."""
 
 @runtime_checkable
 class LanguageRegionDetector(TranscriptionEngine, Protocol):
