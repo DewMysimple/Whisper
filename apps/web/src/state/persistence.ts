@@ -89,24 +89,70 @@ interface PersistedWorkspace {
 
 const STORAGE_KEY = 'whisper-subtitle.desktop-state.v1';
 const TASK_LIMIT = 100;
+const unprotectedState = new Map<string, string>();
 
-export function loadWorkspaceState(storageKey = STORAGE_KEY): PersistedWorkspace | null {
+export function loadWorkspaceState(
+  storageKey = STORAGE_KEY,
+  onRecovery: (message: string) => void = () => undefined,
+): PersistedWorkspace | null {
+  let raw: string | null = null;
+  const preserve = () => {
+    if (raw === null) return;
+    unprotectedState.set(storageKey, raw);
+    try {
+      preserveOriginal(storageKey, raw);
+      onRecovery('本机记录部分损坏，已保留原始备份并恢复有效数据。');
+    } catch {
+      onRecovery('本机记录损坏且备份失败，已保护原始数据，当前会话暂不能保存。');
+    }
+  };
   try {
-    const raw = localStorage.getItem(storageKey);
+    raw = localStorage.getItem(storageKey);
     if (raw === null) return null;
     const value: unknown = JSON.parse(raw);
-    if (!isRecord(value) || value.schemaVersion !== 1) return null;
-    if (!Array.isArray(value.tasks) || !value.tasks.every(isTaskSnapshot)) return null;
+    if (!isRecord(value) || value.schemaVersion !== 1) {
+      preserve();
+      return null;
+    }
     const preferences = parsePreferences(value.preferences);
-    if (preferences === null) return null;
+    if (preferences === null) {
+      preserve();
+      return null;
+    }
+    const records: unknown[] = Array.isArray(value.tasks) ? value.tasks : [];
+    const tasks: TaskSnapshot[] = [];
+    let damaged = !Array.isArray(value.tasks);
+    for (const record of records) {
+      try {
+        if (!isTaskSnapshot(record)) {
+          damaged = true;
+          continue;
+        }
+        const task = markInterruptedTask(normalizeTaskSnapshot(record));
+        if (tasks.length < TASK_LIMIT) tasks.push(task);
+      } catch {
+        damaged = true;
+      }
+    }
+    if (damaged) preserve();
     return {
       schemaVersion: 1,
       preferences,
-      tasks: value.tasks.slice(0, TASK_LIMIT).map(normalizeTaskSnapshot).map(markInterruptedTask),
+      tasks,
     };
   } catch {
+    if (raw !== null) preserve();
+    else onRecovery('无法读取本机配置与历史，当前使用默认配置。');
     return null;
   }
+}
+
+function preserveOriginal(storageKey: string, raw: string): void {
+  const backupKey = `${storageKey}.recovery-backup`;
+  const previous = localStorage.getItem(backupKey);
+  if (previous !== null && previous !== raw) throw new Error('已有不同的恢复备份，请先导出备份。');
+  if (previous === null) localStorage.setItem(backupKey, raw);
+  unprotectedState.delete(storageKey);
 }
 
 export function saveWorkspaceState(
@@ -114,6 +160,8 @@ export function saveWorkspaceState(
   tasks: TaskSnapshot[],
   storageKey = STORAGE_KEY,
 ): void {
+  const original = unprotectedState.get(storageKey);
+  if (original !== undefined) preserveOriginal(storageKey, original);
   const payload: PersistedWorkspace = {
     schemaVersion: 1,
     preferences,
@@ -314,14 +362,41 @@ function isTaskSnapshot(value: unknown): value is TaskSnapshot {
   return (
     typeof value.id === 'string' &&
     typeof value.title === 'string' &&
-    typeof value.sourceCount === 'number' &&
+    isNumberInRange(value.sourceCount, 0, Number.MAX_SAFE_INTEGER, true) &&
     isPreset(value.presetId) &&
     typeof value.isCustom === 'boolean' &&
     ['queued', 'running', 'completed', 'failed', 'cancelled'].includes(String(value.status)) &&
-    typeof value.progress === 'number' &&
+    isNumberInRange(value.progress, 0, 100) &&
     typeof value.stage === 'string' &&
     typeof value.elapsed === 'string' &&
-    typeof value.createdAt === 'string'
+    typeof value.createdAt === 'string' &&
+    [value.outputs, value.mediaPaths].every(
+      (paths) =>
+        paths === undefined ||
+        (Array.isArray(paths) && paths.every((path) => typeof path === 'string')),
+    ) &&
+    (value.mediaStates === undefined ||
+      (Array.isArray(value.mediaStates) &&
+        value.mediaStates.every(
+          (media) =>
+            isRecord(media) &&
+            typeof media.path === 'string' &&
+            ['pending', 'running', 'completed', 'failed', 'cancelled', 'skipped'].includes(
+              String(media.status),
+            ) &&
+            typeof media.stage === 'string' &&
+            typeof media.elapsedSeconds === 'number' &&
+            (media.outputPaths === undefined ||
+              (Array.isArray(media.outputPaths) &&
+                media.outputPaths.every((path) => typeof path === 'string'))),
+        ))) &&
+    (value.draft === undefined ||
+      (isRecord(value.draft) &&
+        Array.isArray(value.draft.inputs) &&
+        isPreset(value.draft.basePresetId) &&
+        isOutputPolicy(value.draft.output) &&
+        isOverrides(value.draft.overrides) &&
+        isParameters(value.draft.effectiveParameters)))
   );
 }
 

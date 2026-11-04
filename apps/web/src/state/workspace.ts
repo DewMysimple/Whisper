@@ -1309,7 +1309,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   initialize: () => {
     if (get().initialized) return () => undefined;
     if (!hydrated) {
-      const persisted = loadWorkspaceState(workspaceStorageKey);
+      const persisted = loadWorkspaceState(workspaceStorageKey, (lastError) => set({ lastError }));
       if (persisted !== null) {
         applyAppearancePreferences(persisted.preferences);
         set({

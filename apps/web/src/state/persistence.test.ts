@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskSnapshot } from '../contracts/desktop';
 import { getPreset } from '../data/presets';
@@ -101,6 +101,69 @@ describe('desktop workspace persistence', () => {
     expect(restored?.tasks[0]).toEqual(
       expect.objectContaining({ status: 'failed', errorCode: 'host.session_interrupted' }),
     );
+  });
+
+  it('recovers preferences and valid history around a corrupt fiftieth record', () => {
+    const tasks: unknown[] = Array.from({ length: 100 }, (_, i) => ({
+      ...runningTask,
+      id: `${i}`,
+    }));
+    tasks[49] = { id: 'broken' };
+    const raw = JSON.stringify({ schemaVersion: 1, preferences, tasks });
+    localStorage.setItem('recovery-test', raw);
+    const restored = loadWorkspaceState('recovery-test');
+    expect(restored?.preferences).toEqual(preferences);
+    expect(restored?.tasks).toHaveLength(99);
+    expect(restored?.tasks.at(-1)?.id).toBe('99');
+    expect(localStorage.getItem('recovery-test.recovery-backup')).toBe(raw);
+  });
+
+  it('isolates a malformed optional draft and enforces the valid history limit', () => {
+    const tasks = Array.from({ length: 110 }, (_, i) => ({ ...runningTask, id: `${i}` }));
+    localStorage.setItem(
+      'recovery-test',
+      JSON.stringify({
+        schemaVersion: 1,
+        preferences,
+        tasks: [{ ...runningTask, draft: {} }, ...tasks],
+      }),
+    );
+    expect(loadWorkspaceState('recovery-test')?.tasks).toHaveLength(100);
+    expect(loadWorkspaceState('recovery-test')?.tasks[0]?.id).toBe('0');
+  });
+
+  it.each(['{broken', '{"schemaVersion":2}'])('preserves unreadable state %s', (raw) => {
+    localStorage.setItem('recovery-test', raw);
+    expect(loadWorkspaceState('recovery-test')).toBeNull();
+    expect(localStorage.getItem('recovery-test.recovery-backup')).toBe(raw);
+  });
+
+  it('recovers valid preferences when the history container is corrupt', () => {
+    localStorage.setItem(
+      'recovery-test',
+      JSON.stringify({ schemaVersion: 1, preferences, tasks: null }),
+    );
+    expect(loadWorkspaceState('recovery-test')?.preferences).toEqual(preferences);
+    expect(loadWorkspaceState('recovery-test')?.tasks).toEqual([]);
+  });
+
+  it('does not overwrite the only corrupt source when backup storage fails', () => {
+    localStorage.setItem('recovery-test', '{broken');
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    expect(loadWorkspaceState('recovery-test')).toBeNull();
+    expect(() => saveWorkspaceState(preferences, [], 'recovery-test')).toThrow();
+    spy.mockRestore();
+    expect(localStorage.getItem('recovery-test')).toBe('{broken');
+  });
+
+  it('safely handles storage read failures', () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('denied');
+    });
+    expect(loadWorkspaceState()).toBeNull();
+    spy.mockRestore();
   });
 
   it('round-trips versioned configuration and rejects invalid ranges', () => {
