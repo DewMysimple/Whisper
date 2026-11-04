@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-04 | bug | - | archived | nested-history-recovery-2026-11-04 | [[日志/2026-11-04-补强嵌套历史与旧草稿恢复.md|最终审查：嵌套历史容错]] |
 | 2026-11-04 | test | - | archived | measured-optional-scope-2026-11-04 | [[日志/2026-11-04-P2P3测量与范围决策.md|P2/P3：先测量与保留范围]] |
 | 2026-11-04 | bug | - | archived | qwen-cancellation-2026-11-04 | [[日志/2026-11-04-FQwen协作取消.md|F：Qwen 生成循环协作取消]] |
 | 2026-11-04 | maintenance | - | archived | bounded-web-logs-2026-11-04 | [[日志/2026-11-04-E前端日志有界缓冲.md|E：前端日志内存上限]] |

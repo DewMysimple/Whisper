@@ -166,6 +166,65 @@ describe('desktop workspace persistence', () => {
     spy.mockRestore();
   });
 
+  it('isolates corrupt nested diagnostics instead of restoring a page-crashing object', () => {
+    const corrupt = {
+      ...runningTask,
+      mediaStates: [
+        {
+          path: 'bad.wav',
+          status: 'completed',
+          progress: 100,
+          stage: '',
+          elapsedSeconds: 1,
+          qualityDiagnostics: { segments: [] },
+        },
+      ],
+    };
+    localStorage.setItem(
+      'nested-corruption',
+      JSON.stringify({ schemaVersion: 1, preferences, tasks: [corrupt, runningTask] }),
+    );
+    const restored = loadWorkspaceState('nested-corruption');
+    expect(restored?.preferences).toEqual(preferences);
+    expect(restored?.tasks).toHaveLength(1);
+    expect(localStorage.getItem('nested-corruption.recovery-backup')).not.toBeNull();
+  });
+
+  it('keeps version-one drafts that predate optional SRT and Markdown copy fields', () => {
+    const legacy = {
+      schemaVersion: 1,
+      preferences,
+      tasks: [
+        {
+          ...runningTask,
+          draft: {
+            inputs: [],
+            modelId: 'large-v3-turbo',
+            basePresetId: 'en_v1',
+            profileMode: 'transcript',
+            overrides: {},
+            effectiveParameters: preferences.parameters,
+            subtitleParameters: preferences.subtitleParameters,
+            output: {
+              ...preferences.output,
+              srtEnabled: undefined,
+              preserveSourceMarkdown: undefined,
+              conflictPolicy: undefined,
+            },
+          },
+        },
+      ],
+    };
+    localStorage.setItem('legacy-draft', JSON.stringify(legacy));
+    const restored = loadWorkspaceState('legacy-draft');
+    expect(restored?.tasks).toHaveLength(1);
+    expect(restored?.tasks[0]?.draft?.output).toMatchObject({
+      srtEnabled: false,
+      preserveSourceMarkdown: false,
+      conflictPolicy: 'confirm_overwrite',
+    });
+  });
+
   it('round-trips versioned configuration and rejects invalid ranges', () => {
     expect(importPreferences(exportPreferences(preferences))).toEqual(preferences);
     expect(() =>

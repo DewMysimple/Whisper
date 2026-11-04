@@ -381,11 +381,13 @@ function isTaskSnapshot(value: unknown): value is TaskSnapshot {
           (media) =>
             isRecord(media) &&
             typeof media.path === 'string' &&
-            ['pending', 'running', 'completed', 'failed', 'cancelled', 'skipped'].includes(
+            ['pending', 'running', 'completed', 'failed', 'skipped'].includes(
               String(media.status),
             ) &&
             typeof media.stage === 'string' &&
             typeof media.elapsedSeconds === 'number' &&
+            (media.qualityDiagnostics === undefined ||
+              isQualitySnapshot(media.qualityDiagnostics)) &&
             (media.outputPaths === undefined ||
               (Array.isArray(media.outputPaths) &&
                 media.outputPaths.every((path) => typeof path === 'string'))),
@@ -393,10 +395,106 @@ function isTaskSnapshot(value: unknown): value is TaskSnapshot {
     (value.draft === undefined ||
       (isRecord(value.draft) &&
         Array.isArray(value.draft.inputs) &&
+        value.draft.inputs.every(
+          (input) =>
+            isRecord(input) &&
+            typeof input.path === 'string' &&
+            typeof input.valid === 'boolean' &&
+            (input.kind === 'file' || input.kind === 'directory'),
+        ) &&
         isPreset(value.draft.basePresetId) &&
-        isOutputPolicy(value.draft.output) &&
+        isRecord(value.draft.output) &&
+        isOutputPolicy(historicalOutput(value.draft.output)) &&
         isOverrides(value.draft.overrides) &&
         isParameters(value.draft.effectiveParameters)))
+  );
+}
+
+function historicalOutput(output: Record<string, unknown>) {
+  return {
+    ...output,
+    srtEnabled: output.srtEnabled ?? false,
+    preserveSourceMarkdown: output.preserveSourceMarkdown ?? false,
+    conflictPolicy:
+      output.conflictPolicy === 'auto_rename' || output.conflictPolicy === 'confirm_skip'
+        ? output.conflictPolicy
+        : 'confirm_overwrite',
+  };
+}
+
+function isQualitySnapshot(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const strings = (items: unknown) =>
+    Array.isArray(items) && items.every((s) => typeof s === 'string');
+  const finite = (number: unknown) => typeof number === 'number' && Number.isFinite(number);
+  const nullable = (number: unknown) => number === null || finite(number);
+  const counts = ['segmentCount', 'fallbackSegmentCount', 'maxTemperature', 'lowConfidenceCount'];
+  if (
+    !counts.every((key) => finite(value[key])) ||
+    !nullable(value.languageProbability) ||
+    !(value.detectedLanguage === null || typeof value.detectedLanguage === 'string') ||
+    !Array.isArray(value.segments)
+  )
+    return false;
+  if (
+    !value.segments.every(
+      (s) =>
+        isRecord(s) &&
+        finite(s.index) &&
+        nullable(s.start) &&
+        nullable(s.end) &&
+        typeof s.text === 'string' &&
+        strings(s.reasons) &&
+        ['temperature', 'avgLogProbability', 'compressionRatio', 'noSpeechProbability'].every(
+          (key) => nullable(s[key]),
+        ),
+    )
+  )
+    return false;
+  if (
+    value.languageRegions !== undefined &&
+    (!Array.isArray(value.languageRegions) ||
+      !value.languageRegions.every(
+        (r) =>
+          isRecord(r) &&
+          ['start', 'end', 'topProbability', 'englishProbability', 'chineseProbability'].every(
+            (key) => finite(r[key]),
+          ) &&
+          ['primaryText', 'candidateText', 'topLanguage', 'decision'].every(
+            (key) => typeof r[key] === 'string',
+          ) &&
+          (r.reason === null || typeof r.reason === 'string'),
+      ))
+  )
+    return false;
+  if (
+    value.detailCandidates !== undefined &&
+    (!Array.isArray(value.detailCandidates) ||
+      !value.detailCandidates.every(
+        (r) =>
+          isRecord(r) &&
+          ['start', 'end', 'chineseProbability'].every((key) => finite(r[key])) &&
+          [
+            'primaryWordProbability',
+            'candidateWordProbability',
+            'primaryLogProbability',
+            'candidateLogProbability',
+          ].every((key) => nullable(r[key])) &&
+          ['primaryText', 'candidateText', 'decision'].every((key) => typeof r[key] === 'string') &&
+          strings(r.recoveredHotwords) &&
+          (r.reason === null || typeof r.reason === 'string'),
+      ))
+  )
+    return false;
+  const audit = value.hotwordAudit;
+  return (
+    audit === undefined ||
+    (isRecord(audit) &&
+      strings(audit.matchedTerms) &&
+      strings(audit.missingTerms) &&
+      ['termCount', 'matchedCount', 'missingCount', 'omittedTermCount'].every((key) =>
+        finite(audit[key]),
+      ))
   );
 }
 
@@ -445,6 +543,8 @@ function normalizeTaskSnapshot(task: TaskSnapshot): TaskSnapshot {
                 : 'stable_primary',
             output: {
               ...normalizedDraft.output,
+              srtEnabled: normalizedDraft.output.srtEnabled ?? false,
+              preserveSourceMarkdown: normalizedDraft.output.preserveSourceMarkdown ?? false,
               conflictPolicy:
                 normalizedDraft.output.conflictPolicy === 'auto_rename'
                   ? 'auto_rename'
