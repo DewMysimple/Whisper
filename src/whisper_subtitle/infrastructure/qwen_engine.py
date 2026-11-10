@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import gc
 import importlib
+import logging
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from itertools import chain
 from typing import Any
 
-from ..domain.alignment import aligned_words
+from ..domain.alignment import AlignmentError, aligned_words
 from ..domain.backend_parameters import QWEN_ALIGNMENT_LANGUAGES, QWEN_LANGUAGES, qwen_defaults
 from ..domain.models import MODELS_BY_ID
 from ..domain.transcription import TranscribedSegment, TranscribedWord, TranscriptionInfo, TranscriptionCancelled
@@ -17,6 +18,15 @@ from ..paths import ModelLocation
 from .audio_chunks import SAMPLE_RATE, decode_media, speech_windows
 from ..domain.execution import HardwareInfo
 from .torch_hardware import load_torch
+
+
+_LOGGER = logging.getLogger(__name__)
+_MIN_RETRY_WINDOW_SAMPLES = SAMPLE_RATE
+_MAX_WINDOW_RETRY_DEPTH = 5
+
+
+class QwenTokenLimitError(ValueError):
+    """A generated window exhausted its token budget without an end marker."""
 
 
 class QwenASREngine:
@@ -128,7 +138,7 @@ class QwenASREngine:
             generated.shape[1] >= params["max_new_tokens"]
             and int(generated[0, -1]) not in (eos or [])
         ):
-            raise ValueError("Qwen 转录达到 token 上限，请缩短音频窗口或提高最大 token 数")
+            raise QwenTokenLimitError("Qwen 转录达到 token 上限，当前音频窗口需要拆分重试")
         parsed = self._processor.decode(generated, return_format="parsed")[0]
         text = parsed["transcription"].strip()
         detected = parsed.get("language") or params["language"]
@@ -170,13 +180,23 @@ class QwenASREngine:
             str(params[key]) for key in ("initial_prompt", "hotwords") if params.get(key)
         ) or None
         for start, end in windows:
-            self._check_cancelled(cancelled)
+            yield from self._window_segments(
+                audio, start, end, params, prompt, info, cancelled=cancelled,
+            )
+
+    def _window_segments(
+        self, audio: Any, start: int, end: int, params: Mapping[str, Any],
+        prompt: str | None, info: TranscriptionInfo,
+        *, cancelled: Callable[[], bool] | None = None, retry_depth: int = 0,
+    ) -> Iterator[TranscribedSegment]:
+        """Split token-limited or invalidly aligned windows at original offsets."""
+        self._check_cancelled(cancelled)
+        midpoint = (start + end) // 2
+        try:
             with self._inference_threads():
                 chunk = audio[start:end]
                 text, detected, code = self._recognize_chunk(chunk, params, prompt, **({"cancelled": cancelled} if cancelled is not None else {}))
                 self._check_cancelled(cancelled)
-                if info.language is None:
-                    info.language = code
                 words = None
                 if text and params["word_timestamps"]:
                     if code not in QWEN_ALIGNMENT_LANGUAGES:
@@ -186,7 +206,35 @@ class QwenASREngine:
                         duration=(end - start) / SAMPLE_RATE,
                     )
                     self._check_cancelled(cancelled)
+                if info.language is None:
+                    info.language = code
+        except (QwenTokenLimitError, AlignmentError) as exc:
+            self._check_cancelled(cancelled)
+            if (
+                retry_depth >= _MAX_WINDOW_RETRY_DEPTH
+                or midpoint - start < _MIN_RETRY_WINDOW_SAMPLES
+                or end - midpoint < _MIN_RETRY_WINDOW_SAMPLES
+            ):
+                raise type(exc)(
+                    f"{exc}；音频 {start / SAMPLE_RATE:.3f}"
+                    f"–{end / SAMPLE_RATE:.3f} 秒已达自动拆分重试下限，未输出截断内容"
+                ) from exc
+            reason = "token limit" if isinstance(exc, QwenTokenLimitError) else "alignment validation failed"
+            _LOGGER.warning(
+                "Qwen %s at %.3f–%.3fs; splitting at %.3fs for retry (depth %d)",
+                reason, start / SAMPLE_RATE, end / SAMPLE_RATE, midpoint / SAMPLE_RATE,
+                retry_depth + 1,
+            )
+        else:
             yield TranscribedSegment(start / SAMPLE_RATE, end / SAMPLE_RATE, text, words)
+            return
+        # Leave the exception handler first so its traceback does not retain the
+        # failed generation's tensors while the smaller windows run on the GPU.
+        for child_start, child_end in ((start, midpoint), (midpoint, end)):
+            yield from self._window_segments(
+                audio, child_start, child_end, params, prompt, info,
+                cancelled=cancelled, retry_depth=retry_depth + 1,
+            )
 
     def close(self) -> None:
         self._model = self._processor = self._aligner = self._aligner_processor = None

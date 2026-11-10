@@ -110,6 +110,30 @@ def test_alignment_never_fabricates_timestamps(stamps):
         aligned_words("hello", stamps, offset=0, duration=2)
 
 
+@pytest.mark.parametrize("text, stamps", [
+    ("hello", []),
+    ("hello", [{"text": "different", "start_time": 0, "end_time": 1}]),
+    ("hello", [{"text": "hello", "start_time": float("nan"), "end_time": 1}]),
+    ("hello", [{"text": "hello", "start_time": -1, "end_time": 1}]),
+    ("hello", [{"text": "hello", "start_time": 3, "end_time": 4}]),
+    ("hello", [{"text": "hello", "start_time": 1, "end_time": 0}]),
+    ("hello world", [{"text": "hello", "start_time": 1, "end_time": 1.5},
+                     {"text": "world", "start_time": 0.5, "end_time": 1}]),
+])
+def test_known_alignment_validation_failures_are_typed_and_still_rejected(text, stamps):
+    from whisper_subtitle.domain.alignment import AlignmentError
+    with pytest.raises(AlignmentError) as captured:
+        aligned_words(text, stamps, offset=10, duration=2)
+    assert isinstance(captured.value, ValueError)
+
+
+def test_malformed_alignment_structure_is_not_classified_as_retryable():
+    from whisper_subtitle.domain.alignment import AlignmentError
+    with pytest.raises(KeyError) as captured:
+        aligned_words("hello", [{"text": "hello", "end_time": 1}], offset=0, duration=2)
+    assert not isinstance(captured.value, AlignmentError)
+
+
 def test_chunk_windows_are_bounded_and_preserve_silence_offsets(monkeypatch):
     vad = SimpleNamespace(
         VadOptions=lambda **options: options,

@@ -3,9 +3,10 @@ type: knowledge
 status: active
 kind: module
 importance: high
-updated: 2026-10-31
+updated: 2026-11-11
 topic: python-transcription-core
 source_logs:
+  - "[[日志/2026-11-11-Qwen触顶自动拆窗与双视频验收]]"
   - "[[日志/2026-10-31-输出安全诊断语义与持续集成]]"
   - "[[日志/2026-09-28-公共契约与后端生命周期维护]]"
   - "[[日志/2026-09-27-Qwen本地模型适配与Whisper兼容]]"
@@ -20,6 +21,8 @@ supersedes: null
 # Python 转录核心
 
 ## 职责
+
+- Qwen 单窗满 token 预算且无 EOS 时，通过内部专用异常二分该原始样本区间并依次重试；对齐文字／真实时间戳／完整性校验失败用内部 `AlignmentError` 复用同一套有界重试，不改变校验条件或伪造时间戳。成功子窗分别对齐并保留绝对时间，只有成功窗口更新语言。最小子窗 1 秒、最多 5 层，穷尽时明确失败，不输出截断文本。每次尝试恢复线程状态后才递归或 yield，并保留取消检查；普通推理／对齐异常不重试。默认窗口和 token 预算不变，真实验收见 [[日志/2026-11-11-Qwen触顶自动拆窗与双视频验收]]。
 
 - `models.py` 的 `decoding_diagnostics` 表达模型是否提供 Whisper 解码指标，由现有生成器投影。`quality.py` 对 Qwen 保留语言／术语共用的 v1 兼容载体，但数字占位不代表评估；`transcribe.py` 共享 CLI／Worker 进度明确说明未提供指标。Whisper 的真实复核、回退和零值语义保留。
 
