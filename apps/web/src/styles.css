@@ -3369,7 +3369,6 @@ textarea:focus {
       transparent 58%
     ),
     var(--accent-soft);
-  transform: scale(0.995);
 }
 
 @keyframes source-picker-in {

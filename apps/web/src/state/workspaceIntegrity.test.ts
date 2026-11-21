@@ -106,7 +106,8 @@ describe('workspace task integrity', () => {
     await useWorkspace.getState().startTask();
     expect(list).toHaveBeenCalledTimes(1);
     expect(useWorkspace.getState().startingTask).toBe(true);
-    useWorkspace.getState().handleEvent({ type: 'inputs.added', inputs: [added] });
+    vi.spyOn(desktopBridge, 'inspectPaths').mockResolvedValue([added]);
+    await useWorkspace.getState().addDroppedPaths([added.path]);
     modelCheck.resolve([
       { id: useWorkspace.getState().selectedModelId, installed: true } as LocalModelDescriptor,
     ]);
@@ -115,6 +116,37 @@ describe('workspace task integrity', () => {
     expect(start.mock.calls[0]![0].inputs).toEqual([original]);
     expect(useWorkspace.getState().inputs).toEqual([added]);
     expect(useWorkspace.getState().startingTask).toBe(false);
+  });
+
+  it('checks each dropped path once and ignores cleared batches that finish out of order', async () => {
+    const staleCheck = deferred<Awaited<ReturnType<typeof desktopBridge.inspectPaths>>>();
+    const currentCheck = deferred<Awaited<ReturnType<typeof desktopBridge.inspectPaths>>>();
+    const inspect = vi
+      .spyOn(desktopBridge, 'inspectPaths')
+      .mockReturnValueOnce(staleCheck.promise)
+      .mockReturnValueOnce(currentCheck.promise);
+    const source = {
+      id: 'new',
+      path: 'C:\\Media\\drop.wav',
+      kind: 'file' as const,
+      origin: 'drop' as const,
+      valid: true,
+    };
+
+    const stale = useWorkspace.getState().addDroppedPaths([source.path, source.path.toLowerCase()]);
+    await useWorkspace.getState().addDroppedPaths([source.path.toUpperCase()]);
+    expect(inspect).toHaveBeenCalledExactlyOnceWith([source.path], 'drop');
+    expect(useWorkspace.getState().pendingDrops).toEqual([[source.path]]);
+    useWorkspace.getState().clearInputs();
+    const current = useWorkspace.getState().addDroppedPaths([source.path]);
+    currentCheck.resolve([source]);
+    await current;
+    staleCheck.resolve([{ ...source, id: 'stale', valid: false }]);
+    await stale;
+    await useWorkspace.getState().addDroppedPaths([source.path]);
+    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(useWorkspace.getState().pendingDrops).toEqual([]);
+    expect(useWorkspace.getState().inputs).toEqual([source]);
   });
 
   it('does not let duplicate queue or late progress events resurrect or select a terminal task', () => {

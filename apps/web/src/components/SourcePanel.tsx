@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import { ClipboardPaste, FileAudio, FolderOpen, LoaderCircle } from 'lucide-react';
 
+import { desktopBridge } from '../bridge';
 import { useWorkspace } from '../state/workspace';
 
 export function SourcePanel() {
@@ -10,8 +11,11 @@ export function SourcePanel() {
   const addFiles = useWorkspace((state) => state.addFiles);
   const addDirectory = useWorkspace((state) => state.addDirectory);
   const addClipboardPaths = useWorkspace((state) => state.addClipboardPaths);
+  const dragActive = useWorkspace((state) => state.draggingMedia);
+  const pendingCount = useWorkspace((state) =>
+    state.pendingDrops.reduce((count, paths) => count + paths.length, 0),
+  );
   const [clipboardBusy, setClipboardBusy] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
 
   const pasteClipboardPaths = async () => {
     if (clipboardBusy) return;
@@ -37,26 +41,21 @@ export function SourcePanel() {
         className={`drop-zone ${inputs.length > 0 ? 'has-inputs' : ''} ${
           dragActive ? 'is-dragging' : ''
         }`}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          setDragActive(true);
-        }}
-        onDragLeave={(event) => {
-          const nextTarget = event.relatedTarget;
-          if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
-            setDragActive(false);
-          }
-        }}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          setDragActive(false);
-        }}
         role="group"
       >
         <div className="source-intake-copy">
-          <strong>{dragActive ? '松开即可加入任务清单' : '添加本地媒体'}</strong>
-          <span>可选择文件、递归扫描文件夹，或直接拖放到此处</span>
+          <strong role="status">
+            {dragActive
+              ? '松开以添加本地媒体'
+              : pendingCount > 0
+                ? `正在检查 ${pendingCount} 项拖入内容…`
+                : '添加本地媒体'}
+          </strong>
+          <span>
+            {desktopBridge.mode === 'tauri'
+              ? '可选择文件、递归扫描文件夹，或直接拖入窗口'
+              : '可选择文件或递归扫描文件夹'}
+          </span>
         </div>
         <div className="source-actions" aria-label="添加输入来源">
           <button

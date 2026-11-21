@@ -51,6 +51,7 @@ function focusChecklistTarget(panelSelector: string, controlSelector: string): v
 
 export function LaunchCard() {
   const inputs = useWorkspace((state) => state.inputs);
+  const checkingDroppedMedia = useWorkspace((state) => state.pendingDrops.length > 0);
   const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
   const overrides = useWorkspace((state) => state.overrides);
   const parameters = useWorkspace((state) => state.parameters);
@@ -82,6 +83,7 @@ export function LaunchCard() {
     !needsOutputRoot &&
     hasOutputTarget &&
     hostStatus.state === 'ready' &&
+    !checkingDroppedMedia &&
     !startingTask &&
     pendingOverwrite === null &&
     pendingShutdownStart === null;
@@ -102,11 +104,13 @@ export function LaunchCard() {
   const checklistPending = pendingOverwrite !== null || pendingShutdownStart !== null;
   const checklistStatus = startingTask
     ? '正在准备'
-    : checklistPending
-      ? '等待确认'
-      : canStart
-        ? '可以执行'
-        : '待补充';
+    : checkingDroppedMedia
+      ? '正在检查媒体'
+      : checklistPending
+        ? '等待确认'
+        : canStart
+          ? '可以执行'
+          : '待补充';
   const readinessMessage = needsOutputRoot
     ? '还需选择真实输出目录，完成后即可执行。'
     : hasInvalidInput
@@ -175,9 +179,13 @@ export function LaunchCard() {
         <div className="panel-heading launch-heading">
           <p className="step-label">PRE-FLIGHT</p>
           <div className="launch-heading-actions">
-            {inputs.length > 0 && (
+            {(inputs.length > 0 || checkingDroppedMedia) && (
               <button
-                aria-label={`清除任务清单中的 ${mediaCount} 个媒体文件`}
+                aria-label={
+                  checkingDroppedMedia
+                    ? '清除任务清单和正在检查的媒体'
+                    : `清除任务清单中的 ${mediaCount} 个媒体文件`
+                }
                 className="preflight-clear"
                 onClick={clearInputs}
                 title="只清空当前任务清单，不删除本机媒体文件"
@@ -191,7 +199,13 @@ export function LaunchCard() {
               {checklistStatus}
             </span>
           </div>
-          <h2 id="launch-title">{inputs.length > 0 ? '任务清单已就绪' : '等待输入来源'}</h2>
+          <h2 id="launch-title">
+            {checkingDroppedMedia
+              ? '任务清单'
+              : inputs.length > 0
+                ? '任务清单已就绪'
+                : '等待输入来源'}
+          </h2>
         </div>
         <div aria-label="执行前清单" className="preflight-list">
           <CardButton

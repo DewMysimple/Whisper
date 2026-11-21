@@ -91,6 +91,7 @@ export class TauriDesktopBridge implements DesktopBridge {
   private readonly taskStartedAt = new Map<string, number>();
   private readonly taskProgress = new TaskProgressTracker();
   private nativeSetup: Promise<void> | undefined;
+  private dragSetup: Promise<UnlistenFn | undefined> | undefined;
   private performanceTimer: ReturnType<typeof setInterval> | undefined;
   private modelHealthTimer: ReturnType<typeof setInterval> | undefined;
   private performancePolling = false;
@@ -346,6 +347,24 @@ export class TauriDesktopBridge implements DesktopBridge {
 
   subscribe(listener: (event: DesktopEvent) => void): Unlisten {
     this.listeners.add(listener);
+    if (!this.disposed) {
+      this.dragSetup ??= getCurrentWebviewWindow()
+        .onDragDropEvent(({ payload }) => {
+          if (payload.type === 'enter') {
+            this.emit({ type: 'inputs.drag_active', active: payload.paths.length > 0 });
+          } else if (payload.type === 'leave') {
+            this.emit({ type: 'inputs.drag_active', active: false });
+          } else if (payload.type === 'drop') {
+            this.emit({ type: 'inputs.dropped', paths: payload.paths });
+          }
+        })
+        .catch((error: unknown) => {
+          this.dragSetup = undefined;
+          const normalized = normalizeInvokeError(error);
+          this.emit({ type: 'worker.error', code: normalized.code, message: normalized.message });
+          return undefined;
+        });
+    }
     void this.ensureNativeListeners().catch((error: unknown) => {
       const normalized = normalizeInvokeError(error);
       this.emit({ type: 'worker.error', code: normalized.code, message: normalized.message });
@@ -357,6 +376,8 @@ export class TauriDesktopBridge implements DesktopBridge {
     this.disposed = true;
     this.hostRevision += 1;
     this.lastReadyPid = null;
+    void this.dragSetup?.then((unlisten) => unlisten?.());
+    this.dragSetup = undefined;
     for (const unlisten of this.nativeUnlisteners.splice(0)) unlisten();
     this.listeners.clear();
     this.pendingTasks.clear();
@@ -409,22 +430,6 @@ export class TauriDesktopBridge implements DesktopBridge {
       listen<PowerActionStatus>('desktop://power-action', ({ payload }) =>
         this.emit({ type: 'power.action', status: payload }),
       ),
-    );
-    await this.registerNativeListener(
-      getCurrentWebviewWindow().onDragDropEvent((event) => {
-        if (event.payload.type === 'drop') {
-          void this.inspectPaths(event.payload.paths, 'drop')
-            .then((inputs) => this.emit({ type: 'inputs.added', inputs }))
-            .catch((error: unknown) => {
-              const normalized = normalizeInvokeError(error);
-              this.emit({
-                type: 'worker.error',
-                code: normalized.code,
-                message: normalized.message,
-              });
-            });
-        }
-      }),
     );
     const revision = this.hostRevision;
     const status = await invoke<HostStatus>('get_host_status');

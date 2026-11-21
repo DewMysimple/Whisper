@@ -7,7 +7,7 @@ import { getPreset } from '../data/presets';
 const native = vi.hoisted(() => ({
   handlers: new Map<string, (event: { payload: unknown }) => void>(),
   dragHandler: undefined as
-    ((event: { payload: { type: string; paths: string[] } }) => void) | undefined,
+    ((event: { payload: { type: string; paths?: string[] } }) => void) | undefined,
   invoke: vi.fn(),
   open: vi.fn(),
   readText: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
   getCurrentWebviewWindow: () => ({
     onDragDropEvent: async (
-      handler: (event: { payload: { type: string; paths: string[] } }) => void,
+      handler: (event: { payload: { type: string; paths?: string[] } }) => void,
     ) => {
       native.dragHandler = handler;
       return () => {
@@ -637,21 +637,23 @@ describe('TauriDesktopBridge', () => {
     },
   );
 
-  it('adds native drag paths through the Rust inspection command', async () => {
+  it('delivers native drag feedback and drop paths even if Worker initialization fails', async () => {
+    native.invoke.mockRejectedValueOnce(new Error('status unavailable'));
     const bridge = new TauriDesktopBridge();
     const events: DesktopEvent[] = [];
     bridge.subscribe((event) => events.push(event));
-    await bridge.getHostStatus();
-    native.dragHandler?.({ payload: { type: 'drop', paths: ['F:\\Media\\drop.wav'] } });
-    await vi.waitFor(() => {
-      expect(events).toContainEqual(
-        expect.objectContaining({
-          type: 'inputs.added',
-          inputs: [expect.objectContaining({ path: 'F:\\Media\\drop.wav', origin: 'drop' })],
-        }),
-      );
-    });
+    const paths = ['F:\\Media\\drop.wav'];
+    native.dragHandler?.({ payload: { type: 'enter', paths } });
+    native.dragHandler?.({ payload: { type: 'leave' } });
+    expect(events).toEqual([
+      { type: 'inputs.drag_active', active: true },
+      { type: 'inputs.drag_active', active: false },
+    ]);
+    await vi.waitFor(() => expect(events.at(-1)?.type).toBe('worker.error'));
+    native.dragHandler?.({ payload: { type: 'drop', paths } });
+    expect(events.at(-1)).toEqual({ type: 'inputs.dropped', paths });
     bridge.dispose();
+    await vi.waitFor(() => expect(native.dragHandler).toBeUndefined());
   });
 
   it('audits completed output paths through the local Rust host', async () => {

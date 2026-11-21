@@ -245,6 +245,8 @@ export interface WorkspaceState {
   executionOptions: ExecutionOptions;
   setExecutionOptions(options: ExecutionOptions): void;
   inputs: InputSource[];
+  draggingMedia: boolean;
+  pendingDrops: string[][];
   selectedModelId: ModelId;
   selectedPresetId: PresetId;
   profileMode: ProfileMode;
@@ -328,6 +330,7 @@ export interface WorkspaceState {
   addFiles(): Promise<void>;
   addDirectory(): Promise<void>;
   addClipboardPaths(): Promise<void>;
+  addDroppedPaths(paths: string[]): Promise<void>;
   chooseOutputDirectory(): Promise<void>;
   selectOutputLocation(mode: 'source' | 'folders'): void;
   removeInput(id: string): void;
@@ -374,6 +377,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     persistLater(get);
   },
   inputs: [],
+  draggingMedia: false,
+  pendingDrops: [],
   selectedModelId: DEFAULT_MODEL_ID,
   selectedPresetId: 'en_v1',
   profileMode: 'transcript',
@@ -623,6 +628,40 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ lastError: errorMessage(error) });
     }
   },
+  addDroppedPaths: async (paths) => {
+    const { inputs, pendingDrops } = get();
+    const knownPaths = new Set([
+      ...inputs.map((input) => input.path.toLocaleLowerCase()),
+      ...pendingDrops.flat().map((path) => path.toLocaleLowerCase()),
+    ]);
+    const batch = paths.filter((path) => {
+      const key = path.toLocaleLowerCase();
+      if (!key || knownPaths.has(key)) return false;
+      knownPaths.add(key);
+      return true;
+    });
+    if (!batch.length) {
+      set({ draggingMedia: false });
+      return;
+    }
+    set({ draggingMedia: false, pendingDrops: [...pendingDrops, batch], lastError: null });
+
+    let inspected: InputSource[] = [];
+    let failure: string | undefined;
+    try {
+      inspected = await desktopBridge.inspectPaths(batch, 'drop');
+    } catch (error) {
+      failure = `无法添加拖入的媒体：${errorMessage(error)}`;
+    }
+    set((state) => {
+      if (!state.pendingDrops.includes(batch)) return state;
+      return {
+        pendingDrops: state.pendingDrops.filter((pending) => pending !== batch),
+        inputs: mergeUniqueInputs(state.inputs, inspected),
+        ...(failure === undefined ? {} : { lastError: failure }),
+      };
+    });
+  },
   chooseOutputDirectory: async () => {
     try {
       const rootDirectory = await desktopBridge.selectOutputDirectory();
@@ -657,7 +696,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     persistLater(get);
   },
   removeInput: (id) => set((state) => ({ inputs: state.inputs.filter((item) => item.id !== id) })),
-  clearInputs: () => set({ inputs: [] }),
+  clearInputs: () => set({ inputs: [], pendingDrops: [] }),
   selectModel: (modelId) => {
     const state = get();
     set({
@@ -811,6 +850,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const state = get();
     if (
       state.inputs.length === 0 ||
+      state.pendingDrops.length > 0 ||
       state.startingTask ||
       state.pendingOverwrite ||
       state.pendingShutdownStart

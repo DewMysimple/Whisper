@@ -3,9 +3,41 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import App from './App';
+import { desktopBridge } from './bridge';
 import { useWorkspace } from './state/workspace';
 
 describe('desktop workspace', () => {
+  it('shows native drag feedback immediately and waits to enable transcription until inspection finishes', async () => {
+    const user = userEvent.setup();
+    const inspect = vi.spyOn(desktopBridge, 'inspectPaths');
+    let finishInspection!: (value: Awaited<ReturnType<typeof desktopBridge.inspectPaths>>) => void;
+    inspect.mockReturnValueOnce(new Promise((resolve) => (finishInspection = resolve)));
+    const path = 'D:\\媒体\\剪辑.wav';
+    render(<App />);
+    const source = screen.getByRole('group', { name: '媒体拖放与选择区域' });
+    const start = screen.getByRole('button', { name: /开始本地转录/ });
+    await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
+    expect(start).toBeEnabled();
+
+    act(() => useWorkspace.getState().handleEvent({ type: 'inputs.drag_active', active: true }));
+    expect(source).toHaveClass('is-dragging');
+    expect(within(source).getByRole('status')).toHaveTextContent('松开以添加本地媒体');
+    act(() => useWorkspace.getState().handleEvent({ type: 'inputs.dropped', paths: [path] }));
+    expect(source).not.toHaveClass('is-dragging');
+    expect(within(source).getByRole('status')).toHaveTextContent('正在检查 1 项拖入内容');
+    expect(inspect).toHaveBeenCalledWith([path], 'drop');
+    expect(start).toBeDisabled();
+
+    await act(async () => {
+      finishInspection([{ id: 'drag', path, kind: 'file', origin: 'drop', valid: true }]);
+    });
+    expect(within(source).getByRole('status')).toHaveTextContent('添加本地媒体');
+    expect(screen.getByLabelText('执行前清单')).toHaveTextContent('3 个媒体');
+    expect(start).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: '清除任务清单中的 3 个媒体文件' }));
+    inspect.mockRestore();
+  });
+
   it('starts in the transcription workspace without a personal desk and exposes only Ctrl+Enter', async () => {
     const user = userEvent.setup();
     render(<App />);

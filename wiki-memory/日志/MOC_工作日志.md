@@ -3,7 +3,7 @@ type: moc
 status: active
 kind: process
 importance: high
-updated: 2026-11-11
+updated: 2026-11-21
 topic: work-log-index
 source_logs: []
 supersedes: null
@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-21 | bug | - | archived | native-media-drop-feedback | [[日志/2026-11-21-修复原生媒体拖放与检查反馈.md|修复原生媒体拖放与检查反馈]] |
 | 2026-11-11 | bug | - | archived | qwen-token-limit-retry-validation | [[日志/2026-11-11-Qwen触顶自动拆窗与双视频验收.md|Qwen 触顶自动拆窗与双视频验收]] |
 | 2026-11-04 | bug | - | archived | nested-history-recovery-2026-11-04 | [[日志/2026-11-04-补强嵌套历史与旧草稿恢复.md|最终审查：嵌套历史容错]] |
 | 2026-11-04 | maintenance | - | archived | personal-reliability-acceptance-2026-11-04 | [[日志/2026-11-04-可靠性迭代交付验收.md|1. 总结]] |

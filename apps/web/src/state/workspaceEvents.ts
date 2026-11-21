@@ -3,7 +3,6 @@ import { notifyPowerCountdown, notifyTaskFinished } from '../notifications';
 import { appendPerformanceSample } from './performanceWindow';
 import { elapsedTextSeconds } from './taskTiming';
 import { appendWorkerLog } from './workerLogBuffer';
-import { mergeUniqueInputs } from './workspaceDraft';
 import type { WorkspaceState } from './workspace';
 import {
   isTerminalTaskStatus,
@@ -23,8 +22,12 @@ export function handleWorkspaceEvent(
   get: WorkspaceGet,
   persistLater: PersistLater,
 ): void {
-  if (event.type === 'inputs.added') {
-    set((state) => ({ inputs: mergeUniqueInputs(state.inputs, event.inputs) }));
+  if (event.type === 'inputs.drag_active') {
+    set({ draggingMedia: event.active });
+    return;
+  }
+  if (event.type === 'inputs.dropped') {
+    void get().addDroppedPaths(event.paths);
     return;
   }
   if (event.type === 'host.status') {

@@ -1421,7 +1421,7 @@ mod tests {
         ));
         let nested = root.join("nested");
         fs::create_dir_all(&nested).expect("nested fixture directory");
-        fs::write(root.join("one.mp4"), b"fixture").expect("media fixture");
+        fs::write(root.join("ONE.mp4"), b"fixture").expect("media fixture");
         fs::write(nested.join("two.WAV"), b"fixture").expect("nested media fixture");
         fs::write(nested.join("ignore.txt"), b"fixture").expect("non-media fixture");
 
@@ -1436,7 +1436,10 @@ mod tests {
             inspected[0].detail.as_deref(),
             Some("递归发现 2 个媒体文件")
         );
-        assert_eq!(inspected[0].media_paths.len(), 2);
+        assert_eq!(
+            inspected[0].media_paths,
+            [nested.join("two.WAV"), root.join("ONE.mp4")]
+        );
         let media_paths = inspected[0].media_paths.clone();
         apply_media_inspections(
             &mut inspected,

@@ -3,9 +3,10 @@ type: knowledge
 status: active
 kind: module
 importance: high
-updated: 2026-10-31
+updated: 2026-11-21
 topic: tauri-react-desktop
 source_logs:
+  - "[[日志/2026-11-21-修复原生媒体拖放与检查反馈]]"
   - "[[日志/2026-10-31-输出安全诊断语义与持续集成]]"
   - "[[日志/2026-09-25-重设计启动操作面板内部布局]]"
   - "[[日志/2026-09-24-文件输出提示与转录操作区稳定化]]"
@@ -59,6 +60,7 @@ supersedes: null
 - `apps/web/src/` 提供页面组件、任务工作区、历史、设置、性能和 bridge；模型与参数由 `ConfigurationView` 提供独立页面，`HardwareView` 提供独立硬件执行设置与实际能力查询，规则见 [[决策/ADR-005-硬件执行设置与工作台]]。
 - `apps/web/src/bridge/mockDesktopBridge.ts` 只用于浏览器测试；`tauriDesktopBridge.ts` 是正式本地 bridge。
 - `apps/desktop/src-tauri/` 负责窗口、原生对话框、拖放、系统通知、Worker Host、权限和受限输出预览。
+- 桌面拖放由 Tauri 原生事件提供路径和进入／离开反馈，监听独立于 Worker 状态及轮询初始化。`workspace.ts` 立即记录待检查批次，过滤已入清单或正在检查的重复路径，复用 `inspect_inputs` 校验路径、媒体类型、容器可读性和时长。待检查批次只在当前会话存在，检查结束后才并入可提交的输入。清除清单时失效的批次结果不能重新加入。Rust 递归收集目录媒体后统一按不区分大小写的路径排序。
 - UI 状态通过版本化 localStorage 保存设置和最多 100 条任务，不依赖服务端数据库。
 - 外观配置在同一版本 1 payload 中保存主题、强调色、字体家族、框架/工作台/日志三组字号，以及展开导航、工作台最大宽度和顶栏高度；`appearancePreferences.ts` 负责校验后的 CSS 变量投影。顶栏收纳状态独立保存在版本 1 配置，旧配置默认展开，展开高度不会因收起而改写。顶栏高度默认 116px，合法范围为 96–168px，缺失字段按默认值迁移。设置页提供八组经浅色／深色界面校准的工作台强调色；自定义取色器把二维 HSV 面板、色相轨道和 RGB 输入换算为现有 `#RRGGBB` 事实源。强调色不透明度固定为 100%，成功、警告、错误等语义色不随强调色改变。日志字号在字段缺失时默认 13px，已有合法显式值保持不变。设置页的三组尺寸和三组字号共用受范围约束的纯数字文本输入：允许直接键入、加减按钮与方向键调节，失焦时收敛范围；两类数值使用一致的等宽字体参数，并以说明字阶加 2px 显示。工作区尺寸值按 `px` 前的白色数值区居中，三组字号按各自数值框居中；单位固定在右侧独立单元，且只有外层控件绘制焦点。`Sidebar.tsx` 的导航拖拽分隔条只通过 `setSidebarWidth` 更新事实源，`App.tsx` 的顶栏拖拽分隔条同样只通过 `setTopbarHeight` 更新事实源；两者都支持指针捕获、键盘调节与双击复位，组件不另存布局尺寸。
 - `state/workspaceEvents.ts` 集中 Worker/Host 事件归并，`state/workspaceTaskState.ts` 保存任务状态派生和质量诊断纯函数；`workspaceDraft.ts`、`workspacePersistence.ts` 和 `appearancePreferences.ts` 分别保存草稿、持久化和外观规则；`workspace.ts` 负责 store 组合和公开动作。

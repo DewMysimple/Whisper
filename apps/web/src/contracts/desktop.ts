@@ -339,7 +339,8 @@ export interface TaskFinishedNotice {
 }
 
 export type DesktopEvent =
-  | { type: 'inputs.added'; inputs: InputSource[] }
+  | { type: 'inputs.drag_active'; active: boolean }
+  | { type: 'inputs.dropped'; paths: string[] }
   | { type: 'host.status'; status: HostStatus }
   | { type: 'worker.environment'; environment: WorkerEnvironment }
   | { type: 'worker.log'; line: string }

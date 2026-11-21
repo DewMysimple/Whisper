@@ -1,6 +1,6 @@
 //! Input media discovery and duration-inspection merge helpers.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::{HostError, InspectedInput, MediaInspectionItem};
 
@@ -17,30 +17,18 @@ fn is_supported_media(path: &Path) -> bool {
         })
 }
 
-fn collect_supported_media(path: &Path) -> Result<Vec<std::path::PathBuf>, std::io::Error> {
-    if path.is_file() {
-        return Ok(if is_supported_media(path) {
-            vec![path.to_path_buf()]
-        } else {
-            Vec::new()
-        });
-    }
-    let mut media = Vec::new();
+fn collect_directory_media(path: &Path, media: &mut Vec<PathBuf>) -> std::io::Result<()> {
     for entry in std::fs::read_dir(path)? {
         let entry = entry?;
         let file_type = entry.file_type()?;
+        let path = entry.path();
         if file_type.is_dir() {
-            media.extend(collect_supported_media(&entry.path())?);
-        } else if file_type.is_file() && is_supported_media(&entry.path()) {
-            media.push(entry.path());
+            collect_directory_media(&path, media)?;
+        } else if file_type.is_file() && is_supported_media(&path) {
+            media.push(path);
         }
     }
-    media.sort_by(|left, right| {
-        left.to_string_lossy()
-            .to_lowercase()
-            .cmp(&right.to_string_lossy().to_lowercase())
-    });
-    Ok(media)
+    Ok(())
 }
 
 pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedInput> {
@@ -53,15 +41,24 @@ pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedI
         .into_iter()
         .map(|raw| {
             let path = strip_one_pair_of_quotes(raw.trim());
-            match std::fs::metadata(path) {
+            let target = Path::new(path);
+            match std::fs::metadata(target) {
                 Ok(metadata) if metadata.is_dir() || metadata.is_file() => {
-                    let kind = if metadata.is_dir() {
-                        "directory"
+                    let mut media_paths = Vec::new();
+                    let (kind, result) = if metadata.is_dir() {
+                        let result = collect_directory_media(target, &mut media_paths).map(|()| {
+                            media_paths
+                                .sort_by_cached_key(|entry| entry.to_string_lossy().to_lowercase());
+                        });
+                        ("directory", result)
                     } else {
-                        "file"
+                        if is_supported_media(target) {
+                            media_paths.push(target.to_path_buf());
+                        }
+                        ("file", Ok(()))
                     };
-                    match collect_supported_media(Path::new(path)) {
-                        Ok(media_paths) if !media_paths.is_empty() => InspectedInput {
+                    match result {
+                        Ok(()) if !media_paths.is_empty() => InspectedInput {
                             path: path.to_owned(),
                             kind: kind.to_owned(),
                             origin: normalized_origin.clone(),
@@ -73,7 +70,7 @@ pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedI
                                 .then(|| format!("递归发现 {} 个媒体文件", media_paths.len())),
                             media_paths,
                         },
-                        Ok(_) => InspectedInput {
+                        Ok(()) => InspectedInput {
                             path: path.to_owned(),
                             kind: kind.to_owned(),
                             origin: normalized_origin.clone(),
