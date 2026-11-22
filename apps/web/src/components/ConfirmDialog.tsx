@@ -11,6 +11,8 @@ interface ConfirmDialogProps {
   confirmLabel: string;
   cancelLabel?: string;
   pending?: boolean;
+  pendingLabel?: string;
+  onPendingCancel?: () => void;
   tone?: 'default' | 'danger';
   children?: ReactNode;
   onCancel(): void;
@@ -24,6 +26,8 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel = '取消',
   pending = false,
+  pendingLabel = '正在处理…',
+  onPendingCancel,
   tone = 'default',
   children,
   onCancel,
@@ -72,8 +76,13 @@ export function ConfirmDialog({
         </p>
         {children && <div className="confirm-dialog-details">{children}</div>}
         <footer>
-          <Button disabled={pending} onClick={onCancel} ref={cancelRef} type="button">
-            {cancelLabel}
+          <Button
+            disabled={pending && !onPendingCancel}
+            onClick={pending ? onPendingCancel : onCancel}
+            ref={cancelRef}
+            type="button"
+          >
+            {pending && onPendingCancel ? '取消准备' : cancelLabel}
           </Button>
           <Button
             variant="primary"
@@ -82,7 +91,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             type="button"
           >
-            {pending ? '正在处理…' : confirmLabel}
+            {pending ? pendingLabel : confirmLabel}
           </Button>
         </footer>
       </div>

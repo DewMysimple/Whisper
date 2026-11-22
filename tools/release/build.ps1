@@ -23,6 +23,7 @@ $IncludeQwen = -not $WhisperOnly
 
 . (Join-Path $RepositoryRoot "tools\maintenance\generated_paths.ps1")
 . (Join-Path $PSScriptRoot "prerequisites.ps1")
+. (Join-Path $PSScriptRoot "build_identity.ps1")
 
 function Assert-LastExitCode([string]$Step) {
     if ($LASTEXITCODE -ne 0) { throw "$Step failed with exit code $LASTEXITCODE" }
@@ -89,12 +90,21 @@ try {
     $PyInstallerRoot = Join-Path $BuildRoot "pyinstaller"
     $WorkerDist = Join-Path $PyInstallerRoot "dist"
     $WorkerWork = Join-Path $PyInstallerRoot "work"
+    New-Item -ItemType Directory -Force -Path $PyInstallerRoot | Out-Null
+    $WorkerBuildStamp = Join-Path $PyInstallerRoot "worker-build.json"
+    @{ revision = Get-ReleaseBuildRevision; builtAt = Get-ReleaseBuildTime } |
+        ConvertTo-Json -Compress | Set-Content -LiteralPath $WorkerBuildStamp -Encoding Ascii
     $PreviousBundleQwen = $env:WHISPER_SUBTITLE_BUNDLE_QWEN
+    $PreviousWorkerBuildStamp = $env:WHISPER_SUBTITLE_WORKER_BUILD_STAMP
     try {
         $env:WHISPER_SUBTITLE_BUNDLE_QWEN = if ($IncludeQwen) { "1" } else { "0" }
+        $env:WHISPER_SUBTITLE_WORKER_BUILD_STAMP = $WorkerBuildStamp
         & $Python -m PyInstaller --clean --noconfirm --distpath $WorkerDist --workpath $WorkerWork "tools/release/worker.spec"
         Assert-LastExitCode "PyInstaller Worker build"
-    } finally { $env:WHISPER_SUBTITLE_BUNDLE_QWEN = $PreviousBundleQwen }
+    } finally {
+        $env:WHISPER_SUBTITLE_BUNDLE_QWEN = $PreviousBundleQwen
+        $env:WHISPER_SUBTITLE_WORKER_BUILD_STAMP = $PreviousWorkerBuildStamp
+    }
     $WorkerSource = Join-Path $WorkerDist "whisper-subtitle-worker"
     if (-not (Test-Path -LiteralPath (Join-Path $WorkerSource "whisper-subtitle-worker.exe"))) {
         throw "Frozen Worker executable was not produced"

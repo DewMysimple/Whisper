@@ -2,10 +2,12 @@ import { Clock3, Power } from 'lucide-react';
 
 import { useWorkspace } from '../state/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useStartPreparation } from './useStartPreparation';
 
 export function ShutdownConfirmDialog() {
   const pending = useWorkspace((state) => state.pendingShutdownStart);
   const startingTask = useWorkspace((state) => state.startingTask);
+  const preparation = useStartPreparation();
   const confirmShutdownStart = useWorkspace((state) => state.confirmShutdownStart);
   const cancelShutdownStart = useWorkspace((state) => state.cancelShutdownStart);
 
@@ -17,6 +19,8 @@ export function ShutdownConfirmDialog() {
       onConfirm={() => void confirmShutdownStart()}
       open={pending !== null}
       pending={startingTask}
+      pendingLabel={`${preparation.label}…`}
+      onPendingCancel={preparation.cancel}
       title="确认任务完成后关闭电脑"
       tone="danger"
     >

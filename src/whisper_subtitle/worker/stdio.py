@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import stat
 import sys
 import threading
+import time
 from collections.abc import Callable
+from queue import SimpleQueue
 from typing import TextIO
 
 from ..protocol import (
     CommandMessage,
+    CommandMethod,
     ErrorCode,
     ErrorMessage,
     ProtocolValidationError,
@@ -84,6 +89,97 @@ def _worker_logger(stream: TextIO) -> logging.Logger:
     return logger
 
 
+def _command_lines(stdin: TextIO):
+    if sys.platform != "win32":
+        yield from stdin
+        return
+    try:
+        descriptor = stdin.fileno()
+        is_pipe = stat.S_ISFIFO(os.fstat(descriptor).st_mode)
+    except (AttributeError, OSError, ValueError):
+        is_pipe = False
+    if not is_pipe:
+        yield from stdin
+        return
+
+    # A blocking text-stream read on Windows can hold a native initialization
+    # lock needed by NumPy/CTranslate2, even when the reader is a different
+    # thread. Only read bytes already available in the Host's anonymous pipe.
+    from ctypes import POINTER, WinDLL, byref, get_last_error
+    from ctypes import wintypes
+    from msvcrt import get_osfhandle
+
+    peek = WinDLL("kernel32", use_last_error=True).PeekNamedPipe
+    peek.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD,
+                     POINTER(wintypes.DWORD), POINTER(wintypes.DWORD), POINTER(wintypes.DWORD)]
+    peek.restype = wintypes.BOOL
+    handle = get_osfhandle(descriptor)
+    available = wintypes.DWORD()
+    pending = bytearray()
+    while True:
+        if not peek(handle, None, 0, None, byref(available), None):
+            error = get_last_error()
+            if error in {109, 232, 233}:  # Broken, closing, or disconnected pipe.
+                break
+            raise OSError(error, "Cannot read Worker command pipe")
+        if available.value == 0:
+            time.sleep(0.01)
+            continue
+        block = os.read(descriptor, min(65536, available.value))
+        if not block:
+            break
+        pieces = block.split(b"\n")
+        pending.extend(pieces[0])
+        if len(pieces) > 1:
+            yield pending.decode("utf-8", errors="strict")
+            for line in pieces[1:-1]:
+                yield line.decode("utf-8", errors="strict")
+            pending = bytearray(pieces[-1])
+    if pending:
+        yield pending.decode("utf-8", errors="strict")
+
+
+def _read_commands(
+    stdin: TextIO,
+    commands: SimpleQueue[CommandMessage | ErrorMessage | None],
+    runtime: WorkerRuntime,
+    logger: logging.Logger,
+) -> None:
+    try:
+        for raw_line in _command_lines(stdin):
+            line = raw_line.rstrip("\r\n")
+            try:
+                command = parse_protocol_line(line)
+                if not isinstance(command, CommandMessage):
+                    raise ProtocolValidationError(
+                        ErrorCode.PROTOCOL_INVALID_MESSAGE,
+                        "worker stdin accepts command messages only",
+                    )
+            except ProtocolValidationError as exc:
+                commands.put(protocol_error_from_exception(exc, request_id=_best_effort_request_id(line)))
+                continue
+            if command.method is CommandMethod.TRANSCRIPTION_CANCEL_START:
+                runtime.cancel_start(command)
+                continue
+            if command.method is CommandMethod.MEDIA_CANCEL_INSPECTION or (
+                command.method is CommandMethod.MEDIA_INSPECT and command.params.get("progressive") is True
+            ):
+                try:
+                    runtime.handle_command(command)
+                except WorkerCommandError as exc:
+                    commands.put(runtime.command_error(command, exc))
+                continue
+            if command.method is CommandMethod.TRANSCRIPTION_START:
+                runtime.register_start(command.request_id)
+            commands.put(command)
+            if command.method is CommandMethod.WORKER_SHUTDOWN:
+                break
+    except Exception:
+        logger.exception("Worker command reader failed")
+    finally:
+        commands.put(None)
+
+
 def run_worker_loop(
     stdin: TextIO,
     stdout: TextIO,
@@ -101,50 +197,37 @@ def run_worker_loop(
         logger=logger,
     )
     writer.emit(worker_ready_event())
+    commands: SimpleQueue[CommandMessage | ErrorMessage | None] = SimpleQueue()
+    # Read preparation cancellation while the main command thread may be in
+    # native model initialization. Normal dispatch and model loading stay here.
+    reader = threading.Thread(
+        target=_read_commands, args=(stdin, commands, runtime, logger),
+        name="whisper-worker-stdin",
+    )
+    reader.start()
     try:
-        for raw_line in stdin:
-            line = raw_line.rstrip("\r\n")
-            request_id = _best_effort_request_id(line)
-            command: CommandMessage | None = None
+        while (command := commands.get()) is not None:
+            if isinstance(command, ErrorMessage):
+                writer.emit(command)
+                continue
             try:
-                message = parse_protocol_line(line)
-                if not isinstance(message, CommandMessage):
-                    raise ProtocolValidationError(
-                        ErrorCode.PROTOCOL_INVALID_MESSAGE,
-                        "worker stdin accepts command messages only",
-                    )
-                command = message
                 if runtime.handle_command(command):
                     break
-            except ProtocolValidationError as exc:
-                writer.emit(
-                    protocol_error_from_exception(exc, request_id=request_id)
-                )
             except WorkerCommandError as exc:
-                if command is None:
-                    writer.emit(
-                        ErrorMessage(
-                            exc.code,
-                            exc.data,
-                            request_id=request_id,
-                            task_id=exc.task_id,
-                            message=str(exc),
-                        )
-                    )
-                else:
-                    writer.emit(runtime.command_error(command, exc))
+                writer.emit(runtime.command_error(command, exc))
             except Exception as exc:
                 logger.exception("unhandled command failure")
                 writer.emit(
                     ErrorMessage(
                         ErrorCode.WORKER_INTERNAL,
                         {"exception": type(exc).__name__},
-                        request_id=command.request_id if command else request_id,
+                        request_id=command.request_id,
                         message=str(exc) or type(exc).__name__,
                     )
                 )
     finally:
         runtime.close(timeout=None)
+        reader.join()
     return 0
 
 

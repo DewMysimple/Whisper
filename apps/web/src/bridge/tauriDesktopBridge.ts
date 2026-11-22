@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import { readHardwareCapabilities } from '../state/executionOptions';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { desktopDir, join } from '@tauri-apps/api/path';
@@ -12,6 +12,8 @@ import type {
   DesktopEvent,
   EditableParameters,
   HostStatus,
+  InputInspectionOptions,
+  InputInspectionProgress,
   InputOrigin,
   InputSource,
   LocalModelDescriptor,
@@ -47,6 +49,7 @@ const MEDIA_EXTENSIONS = [
   'ogg',
 ];
 const MODEL_HEALTH_POLL_INTERVAL_MS = 5000;
+declare const __FRONTEND_BUILD__: { revision: string | null; builtAt: string | null };
 
 import {
   createRequestId,
@@ -75,6 +78,7 @@ interface InspectedInput {
   durationSeconds: number | null;
   unknownDurationCount: number | null;
   detail: string | null;
+  errorCode?: string | null;
 }
 
 interface HostStartResult {
@@ -88,6 +92,8 @@ export class TauriDesktopBridge implements DesktopBridge {
   private readonly listeners = new Set<(event: DesktopEvent) => void>();
   private readonly nativeUnlisteners: UnlistenFn[] = [];
   private readonly pendingTasks = new Map<string, PendingTaskMetadata>();
+  private readonly preparing = new Map<string, StartTranscriptionOptions>();
+  private readonly taskClickTimes = new Map<string, number>();
   private readonly taskStartedAt = new Map<string, number>();
   private readonly taskProgress = new TaskProgressTracker();
   private nativeSetup: Promise<void> | undefined;
@@ -100,6 +106,7 @@ export class TauriDesktopBridge implements DesktopBridge {
   private hostRevision = 0;
   private inputSequence = 1;
   private lastReadyPid: number | null = null;
+  private canCancelStart = false;
   private lastModelStatus: ModelStatus = {
     state: 'unloaded',
     modelId: null,
@@ -110,24 +117,23 @@ export class TauriDesktopBridge implements DesktopBridge {
   };
 
   async selectFiles(): Promise<InputSource[]> {
-    await this.ensureNativeListeners();
-    const selected = await open({
-      title: '选择需要转录的媒体文件',
-      multiple: true,
-      directory: false,
-      filters: [{ name: '支持的媒体文件', extensions: MEDIA_EXTENSIONS }],
-    });
-    return this.inspectPaths(normalizeDialogPaths(selected), 'dialog');
+    return this.inspectPaths(await this.pickInputPaths('file'), 'dialog');
   }
 
   async selectDirectory(): Promise<InputSource[]> {
+    return this.inspectPaths(await this.pickInputPaths('directory'), 'dialog');
+  }
+
+  async pickInputPaths(kind: InputSource['kind']): Promise<string[]> {
     await this.ensureNativeListeners();
+    const directory = kind === 'directory';
     const selected = await open({
-      title: '选择包含媒体的文件夹',
-      multiple: false,
-      directory: true,
+      title: directory ? '选择包含媒体的文件夹' : '选择需要转录的媒体文件',
+      multiple: !directory,
+      directory,
+      filters: directory ? undefined : [{ name: '支持的媒体文件', extensions: MEDIA_EXTENSIONS }],
     });
-    return this.inspectPaths(normalizeDialogPaths(selected), 'dialog');
+    return normalizeDialogPaths(selected);
   }
 
   async selectOutputDirectory(): Promise<string | null> {
@@ -145,17 +151,73 @@ export class TauriDesktopBridge implements DesktopBridge {
     return readText();
   }
 
-  async inspectPaths(paths: string[], origin: InputOrigin): Promise<InputSource[]> {
+  async inspectPaths(
+    paths: string[],
+    origin: InputOrigin,
+    options?: InputInspectionOptions,
+  ): Promise<InputSource[]> {
     if (paths.length === 0) return [];
-    const inspected = await invoke<InspectedInput[]>('inspect_inputs', { paths, origin });
-    return inspected.map((item) => ({
+    const toSource = (item: InspectedInput, id: string): InputSource => ({
       ...item,
       mediaCount: item.mediaCount ?? undefined,
       durationSeconds: item.durationSeconds ?? undefined,
       unknownDurationCount: item.unknownDurationCount ?? undefined,
       detail: item.detail ?? undefined,
-      id: `native-source-${this.inputSequence++}`,
-    }));
+      errorCode: item.errorCode ?? undefined,
+      id,
+    });
+    const progress =
+      options && new Channel<Omit<InputInspectionProgress, 'item'> & { item: InspectedInput }>();
+    if (progress && options) {
+      progress.onmessage = (update) =>
+        options.onProgress({
+          ...update,
+          item: toSource(update.item, `${options.importId}-${update.index}`),
+        });
+    }
+    const inspected = await invoke<InspectedInput[]>('inspect_inputs', {
+      paths,
+      origin,
+      ...(options ? { importId: options.importId, onProgress: progress } : {}),
+    });
+    return inspected.map((item, index) =>
+      toSource(
+        item,
+        options ? `${options.importId}-${index}` : `native-source-${this.inputSequence++}`,
+      ),
+    );
+  }
+
+  async cancelInputInspection(importId: string): Promise<void> {
+    const accepted = await invoke<boolean>('cancel_input_inspection', { importId });
+    if (accepted === false) {
+      // A clear can reach the Host before the inspection has registered.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await invoke('cancel_input_inspection', { importId });
+    }
+  }
+
+  async runtimeDiagnostics(): Promise<Record<string, unknown>> {
+    const [host, health] = await Promise.all([
+      invoke<Record<string, unknown>>('get_host_build').catch(() => null),
+      invoke<WorkerEnvelope>('worker_health').catch(() => null),
+    ]);
+    const result = health?.data.result;
+    const worker = isRecord(result) ? result : {};
+    return {
+      appVersion: host?.version ?? '未知',
+      frontend: __FRONTEND_BUILD__,
+      host,
+      worker: worker.worker_build ?? '未知',
+      ipcVersion: host?.ipcVersion ?? '未知',
+      capabilities: {
+        mediaInspection: worker.media_inspection_version ?? '未知',
+        startCancellation: worker.start_cancellation_version ?? '未知',
+      },
+      model: worker.model_id ?? this.lastModelStatus.modelId ?? '未知',
+      hardware:
+        worker.hardware ?? (this.lastModelStatus.state === 'ready' ? this.lastModelStatus : '未知'),
+    };
   }
 
   async inspectOutputPaths(paths: string[]): Promise<OutputPathStatus[]> {
@@ -291,10 +353,18 @@ export class TauriDesktopBridge implements DesktopBridge {
     draft: TranscriptionDraft,
     options: StartTranscriptionOptions = {},
   ): Promise<{ taskId: string }> {
-    await this.ensureNativeListeners();
     const requestId = createRequestId();
+    const began = options.clickedAt ?? performance.now();
+    await this.ensureNativeListeners();
+    options.onPreparation?.(requestId, 'checking', false);
+    this.preparing.set(requestId, { ...options, clickedAt: began });
     this.pendingTasks.set(requestId, createTaskMetadata(draft));
     try {
+      const sent = performance.now();
+      this.emit({
+        type: 'worker.log',
+        line: `[START] ${requestId} · web click to request · ${Math.round(sent - began)} ms`,
+      });
       const result = await invoke<HostStartResult>('start_transcription', {
         draft: {
           requestId,
@@ -316,10 +386,18 @@ export class TauriDesktopBridge implements DesktopBridge {
           ),
         },
       });
+      this.emit({
+        type: 'worker.log',
+        line: `[START] ${requestId} · ${result.taskId} · web request round trip · ${Math.round(performance.now() - sent)} ms`,
+      });
       return { taskId: result.taskId };
     } catch (error) {
       this.pendingTasks.delete(requestId);
+      this.preparing.delete(requestId);
       const normalized = normalizeInvokeError(error);
+      if (isRecord(normalized.data) && normalized.data.exception === 'StartCancelled') {
+        throw Object.assign(new Error('启动准备已取消。'), { code: 'start.cancelled' });
+      }
       const conflict = outputConflictDetails(normalized.data);
       if (normalized.code === 'output.failed' && conflict !== null) {
         throw Object.assign(new Error('检测到同名输出文件。'), {
@@ -338,6 +416,10 @@ export class TauriDesktopBridge implements DesktopBridge {
       }
       throw normalized;
     }
+  }
+
+  async cancelStart(startRequestId: string): Promise<boolean> {
+    return invoke<boolean>('cancel_start', { startRequestId });
   }
 
   async cancelTask(taskId: string): Promise<void> {
@@ -381,6 +463,8 @@ export class TauriDesktopBridge implements DesktopBridge {
     for (const unlisten of this.nativeUnlisteners.splice(0)) unlisten();
     this.listeners.clear();
     this.pendingTasks.clear();
+    this.preparing.clear();
+    this.taskClickTimes.clear();
     this.taskStartedAt.clear();
     this.taskProgress.clear();
     if (this.performanceTimer !== undefined) clearInterval(this.performanceTimer);
@@ -459,12 +543,16 @@ export class TauriDesktopBridge implements DesktopBridge {
     this.emit({ type: 'host.status', status });
     if (status.state === 'ready' && status.pid !== this.lastReadyPid) {
       this.lastReadyPid = status.pid;
+      void this.refreshModelHealth();
       void this.refreshEnvironment();
     }
     if (status.state !== 'ready') {
       this.lastReadyPid = null;
+      this.canCancelStart = false;
       if (status.state === 'failed' || status.state === 'stopped') {
         this.pendingTasks.clear();
+        this.preparing.clear();
+        this.taskClickTimes.clear();
         this.taskStartedAt.clear();
         this.taskProgress.clear();
       }
@@ -562,10 +650,11 @@ export class TauriDesktopBridge implements DesktopBridge {
     const previousModel = this.lastModelStatus;
     try {
       const envelope = await invoke<WorkerEnvelope>('worker_health');
-      if (this.disposed || revision !== this.hostRevision || previousModel !== this.lastModelStatus)
-        return;
+      if (this.disposed || revision !== this.hostRevision) return;
       const result = envelope.data.result;
       if (!isRecord(result)) return;
+      this.canCancelStart = result.start_cancellation_version === 1;
+      if (previousModel !== this.lastModelStatus) return;
       if (result.model_loaded === false) {
         if (this.lastModelStatus.state !== 'unloaded') {
           this.emitModelStatus({
@@ -610,6 +699,30 @@ export class TauriDesktopBridge implements DesktopBridge {
   }
 
   private handleWorkerMessage(message: WorkerEnvelope): void {
+    const pending = message.request_id ? this.preparing.get(message.request_id) : undefined;
+    if (pending && message.request_id) {
+      if (message.event === 'model.loading') {
+        pending.onPreparation?.(message.request_id, 'loading', this.canCancelStart);
+      }
+      if (message.event === 'task.queued' && message.task_id && pending.clickedAt !== undefined) {
+        this.taskClickTimes.set(message.task_id, pending.clickedAt);
+        this.preparing.delete(message.request_id);
+      }
+    }
+    if (message.type === 'error' && message.data.exception === 'StartCancelled') return;
+    if (
+      message.task_id &&
+      ['task.completed', 'task.failed', 'task.cancelled'].includes(message.event ?? '')
+    ) {
+      const began = this.taskClickTimes.get(message.task_id);
+      if (began !== undefined) {
+        this.emit({
+          type: 'worker.log',
+          line: `[TASK ${message.task_id}] web click to terminal · ${Math.round(performance.now() - began)} ms · ${message.event}`,
+        });
+        this.taskClickTimes.delete(message.task_id);
+      }
+    }
     dispatchWorkerMessage(message, {
       pendingTasks: this.pendingTasks,
       taskStartedAt: this.taskStartedAt,

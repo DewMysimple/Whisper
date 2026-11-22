@@ -66,6 +66,12 @@ export function WorkerLogsView() {
   const clearArmed = confirmation !== null;
   const reducedMotion = useReducedMotion();
   const logText = () => (logs.length === 0 ? '' : `${logs.join('\r\n')}\r\n`);
+  const diagnosticText = async () => {
+    const lines = logText();
+    if (desktopBridge.mode === 'mock') return lines;
+    const identity = await desktopBridge.runtimeDiagnostics();
+    return `${JSON.stringify(identity, null, 2)}\r\n\r\n${lines}`;
+  };
 
   const followLatest = useCallback(() => {
     const stream = streamRef.current;
@@ -87,7 +93,7 @@ export function WorkerLogsView() {
 
   const copyLogs = async () => {
     try {
-      await desktopBridge.copyWorkerLogs(logText());
+      await desktopBridge.copyWorkerLogs(await diagnosticText());
       setFeedback(`已复制 ${logs.length} 行日志`);
     } catch {
       setFeedback('复制失败，请检查系统剪贴板权限');
@@ -112,7 +118,7 @@ export function WorkerLogsView() {
 
   const exportLogs = async () => {
     try {
-      const path = await desktopBridge.exportWorkerLogs(logText());
+      const path = await desktopBridge.exportWorkerLogs(await diagnosticText());
       if (path !== null) setFeedback(`已导出当前缓冲区 ${logs.length} 行：${path}`);
     } catch {
       setFeedback('导出失败，请重新选择可写入的位置');

@@ -6,14 +6,20 @@ import gc
 import importlib
 import logging
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from itertools import chain
 from typing import Any
 
 from ..domain.alignment import AlignmentError, aligned_words
 from ..domain.backend_parameters import QWEN_ALIGNMENT_LANGUAGES, QWEN_LANGUAGES, qwen_defaults
 from ..domain.models import MODELS_BY_ID
-from ..domain.transcription import TranscribedSegment, TranscribedWord, TranscriptionInfo, TranscriptionCancelled
+from ..domain.transcription import (
+    InferenceTimings,
+    TranscribedSegment,
+    TranscribedWord,
+    TranscriptionCancelled,
+    TranscriptionInfo,
+)
 from ..paths import ModelLocation
 from .audio_chunks import SAMPLE_RATE, decode_media, speech_windows
 from ..domain.execution import HardwareInfo
@@ -82,9 +88,11 @@ class QwenASREngine:
             raise ValueError(f"Qwen 不支持语言: {language}")
         if params["word_timestamps"] and language is not None and language not in QWEN_ALIGNMENT_LANGUAGES:
             raise ValueError(f"Qwen 对齐模型不支持 {language}，请仅输出 TXT/Markdown")
-        audio = decode_media(media_path)
+        timings = InferenceTimings()
+        with timings.measure("audio_decode"):
+            audio = decode_media(media_path)
         self._check_cancelled(cancelled)
-        info = TranscriptionInfo(len(audio) / SAMPLE_RATE, language)
+        info = TranscriptionInfo(len(audio) / SAMPLE_RATE, language, inference_timings=timings)
         iterator = self._segments(audio, params, info, cancelled=cancelled)
         first = next(iterator, None)
         return (chain((first,), iterator) if first is not None else iter(())), info
@@ -108,15 +116,24 @@ class QwenASREngine:
 
     def _recognize_chunk(
         self, chunk: Any, params: Mapping[str, Any], prompt: str | None,
-        *, cancelled: Callable[[], bool] | None = None,
+        *, cancelled: Callable[[], bool] | None = None, timings: InferenceTimings | None = None,
     ) -> tuple[str, str | None, str | None]:
         self._check_cancelled(cancelled)
-        inputs = self._processor.apply_transcription_request(
-            audio=chunk,
-            language=QWEN_LANGUAGES.get(params["language"]),
-            prompt=prompt,
-        ).to(self._model.device, self._model.dtype)
+        with timings.measure("prepare_inputs") if timings else nullcontext():
+            inputs = self._processor.apply_transcription_request(
+                audio=chunk,
+                language=QWEN_LANGUAGES.get(params["language"]),
+                prompt=prompt,
+            ).to(self._model.device, self._model.dtype)
         self._check_cancelled(cancelled)
+        generated = self._generate(inputs, params, cancelled=cancelled, timings=timings)
+        with timings.measure("decode_generated") if timings else nullcontext():
+            return self._parse_generation(generated, params)
+
+    def _generate(
+        self, inputs: Any, params: Mapping[str, Any],
+        *, cancelled: Callable[[], bool] | None, timings: InferenceTimings | None,
+    ) -> Any:
         generation_options = {}
         if cancelled is not None:
             torch = self._torch
@@ -124,13 +141,21 @@ class QwenASREngine:
                 def __call__(self, input_ids, scores, **kwargs):
                     return torch.full((input_ids.shape[0],), cancelled(), dtype=torch.bool, device=input_ids.device)
             generation_options["stopping_criteria"] = self._transformers.StoppingCriteriaList([CancelRequested()])
-        with self._torch.inference_mode():
+        stage = "first_generate_host"
+        if timings is not None:
+            if timings.generation_calls > 0:
+                stage = "later_generate_host"
+            timings.generation_calls += 1
+        # Host wall time. No timing-only synchronization in production.
+        with self._torch.inference_mode(), timings.measure(stage) if timings else nullcontext():
             ids = self._model.generate(
                 **inputs, max_new_tokens=params["max_new_tokens"], do_sample=False,
                 **generation_options,
             )
         self._check_cancelled(cancelled)
-        generated = ids[:, inputs["input_ids"].shape[1]:]
+        return ids[:, inputs["input_ids"].shape[1]:]
+
+    def _parse_generation(self, generated: Any, params: Mapping[str, Any]) -> tuple[str, str | None, str | None]:
         # A full token budget without EOS means the transcript is incomplete.
         eos = self._model.generation_config.eos_token_id
         eos = [eos] if isinstance(eos, int) else eos
@@ -172,39 +197,65 @@ class QwenASREngine:
         *, cancelled: Callable[[], bool] | None = None,
     ) -> Iterator[TranscribedSegment]:
         self._check_cancelled(cancelled)
-        windows = speech_windows(
-            audio, chunk_length=params["chunk_length"],
-            vad_filter=params["vad_filter"], vad_parameters=params["vad_parameters"],
-        )
         prompt = "\n".join(
             str(params[key]) for key in ("initial_prompt", "hotwords") if params.get(key)
         ) or None
-        for start, end in windows:
+        for start, end in self._speech_windows(audio, params, info):
             yield from self._window_segments(
                 audio, start, end, params, prompt, info, cancelled=cancelled,
             )
+
+    @staticmethod
+    def _speech_windows(audio: Any, params: Mapping[str, Any], info: TranscriptionInfo) -> Iterator[tuple[int, int]]:
+        windows = iter(speech_windows(
+            audio, chunk_length=params["chunk_length"],
+            vad_filter=params["vad_filter"], vad_parameters=params["vad_parameters"],
+        ))
+        timings = info.inference_timings
+        while True:
+            with timings.measure("vad_and_window_selection") if timings else nullcontext():
+                window = next(windows, None)
+            if window is None:
+                return
+            if timings is not None:
+                timings.window_count += 1
+                timings.selected_window_seconds += (window[1] - window[0]) / SAMPLE_RATE
+            yield window
 
     def _window_segments(
         self, audio: Any, start: int, end: int, params: Mapping[str, Any],
         prompt: str | None, info: TranscriptionInfo,
         *, cancelled: Callable[[], bool] | None = None, retry_depth: int = 0,
+        recognition: tuple[str, str | None, str | None] | QwenTokenLimitError | None = None,
     ) -> Iterator[TranscribedSegment]:
         """Split token-limited or invalidly aligned windows at original offsets."""
         self._check_cancelled(cancelled)
         midpoint = (start + end) // 2
+        timings = info.inference_timings
         try:
-            with self._inference_threads():
+            retry_clock = timings.measure("retry_attempts") if timings and retry_depth else nullcontext()
+            with self._inference_threads(), retry_clock:
                 chunk = audio[start:end]
-                text, detected, code = self._recognize_chunk(chunk, params, prompt, **({"cancelled": cancelled} if cancelled is not None else {}))
+                if isinstance(recognition, QwenTokenLimitError):
+                    raise recognition
+                if recognition is None:
+                    recognition_options = {}
+                    if cancelled is not None:
+                        recognition_options["cancelled"] = cancelled
+                    if timings is not None:
+                        recognition_options["timings"] = timings
+                    recognition = self._recognize_chunk(chunk, params, prompt, **recognition_options)
+                text, detected, code = recognition
                 self._check_cancelled(cancelled)
                 words = None
                 if text and params["word_timestamps"]:
                     if code not in QWEN_ALIGNMENT_LANGUAGES:
                         raise ValueError(f"Qwen 对齐模型不支持检测到的语言 {detected}，请仅输出 TXT/Markdown")
-                    words = self._align_chunk(
-                        chunk, text, offset=start / SAMPLE_RATE,
-                        duration=(end - start) / SAMPLE_RATE,
-                    )
+                    with timings.measure("alignment") if timings else nullcontext():
+                        words = self._align_chunk(
+                            chunk, text, offset=start / SAMPLE_RATE,
+                            duration=(end - start) / SAMPLE_RATE,
+                        )
                     self._check_cancelled(cancelled)
                 if info.language is None:
                     info.language = code
@@ -219,7 +270,13 @@ class QwenASREngine:
                     f"{exc}；音频 {start / SAMPLE_RATE:.3f}"
                     f"–{end / SAMPLE_RATE:.3f} 秒已达自动拆分重试下限，未输出截断内容"
                 ) from exc
-            reason = "token limit" if isinstance(exc, QwenTokenLimitError) else "alignment validation failed"
+            token_limited = isinstance(exc, QwenTokenLimitError)
+            if timings is not None:
+                if token_limited:
+                    timings.token_retry_count += 1
+                else:
+                    timings.alignment_retry_count += 1
+            reason = "token limit" if token_limited else "alignment validation failed"
             _LOGGER.warning(
                 "Qwen %s at %.3f–%.3fs; splitting at %.3fs for retry (depth %d)",
                 reason, start / SAMPLE_RATE, end / SAMPLE_RATE, midpoint / SAMPLE_RATE,

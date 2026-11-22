@@ -4,37 +4,72 @@ import { describe, expect, it, vi } from 'vitest';
 
 import App from './App';
 import { desktopBridge } from './bridge';
+import type { InputSource } from './contracts/desktop';
 import { useWorkspace } from './state/workspace';
 
 describe('desktop workspace', () => {
-  it('shows native drag feedback immediately and waits to enable transcription until inspection finishes', async () => {
+  it('renders progressive native drops and isolates a canceled batch from a repeat drop', async () => {
     const user = userEvent.setup();
-    const inspect = vi.spyOn(desktopBridge, 'inspectPaths');
-    let finishInspection!: (value: Awaited<ReturnType<typeof desktopBridge.inspectPaths>>) => void;
-    inspect.mockReturnValueOnce(new Promise((resolve) => (finishInspection = resolve)));
-    const path = 'D:\\媒体\\剪辑.wav';
     render(<App />);
     const source = screen.getByRole('group', { name: '媒体拖放与选择区域' });
     const start = screen.getByRole('button', { name: /开始本地转录/ });
     await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
     expect(start).toBeEnabled();
 
+    const inspect = vi.spyOn(desktopBridge, 'inspectPaths');
+    const cancel = vi.spyOn(desktopBridge, 'cancelInputInspection');
+    let finishPrevious!: (value: InputSource[]) => void;
+    let finishCurrent!: (value: InputSource[]) => void;
+    inspect.mockImplementationOnce(() => new Promise((resolve) => (finishPrevious = resolve)));
+    inspect.mockImplementationOnce(() => new Promise((resolve) => (finishCurrent = resolve)));
+    const path = 'D:\\媒体\\中文 会议 #01.wav';
+    const slowPath = 'D:\\媒体\\慢音频.mkv';
+    const item = { id: 'drag', path, kind: 'file', origin: 'drop', valid: true } as const;
+
     act(() => useWorkspace.getState().handleEvent({ type: 'inputs.drag_active', active: true }));
     expect(source).toHaveClass('is-dragging');
     expect(within(source).getByRole('status')).toHaveTextContent('松开以添加本地媒体');
-    act(() => useWorkspace.getState().handleEvent({ type: 'inputs.dropped', paths: [path] }));
+    act(() =>
+      useWorkspace.getState().handleEvent({ type: 'inputs.dropped', paths: [path, slowPath] }),
+    );
     expect(source).not.toHaveClass('is-dragging');
-    expect(within(source).getByRole('status')).toHaveTextContent('正在检查 1 项拖入内容');
-    expect(inspect).toHaveBeenCalledWith([path], 'drop');
+    expect(within(source).getByRole('status')).toHaveTextContent('正在检查 2 项媒体来源');
+    const progress = screen.getByRole('list', { name: '媒体检查进度' });
+    expect(within(progress).getByText('中文 会议 #01.wav')).toHaveAttribute('title', path);
+    expect(within(progress).getAllByText('已收到 · 正在发现')).toHaveLength(2);
+    const previous = inspect.mock.lastCall?.[2];
+    expect(previous).toBeDefined();
+    act(() => previous!.onProgress({ index: 0, phase: 'inspected', item }));
+    expect(within(progress).getByText('可转录 · 时长未知')).toBeInTheDocument();
+    expect(within(progress).getByText('慢音频.mkv')).toBeInTheDocument();
     expect(start).toBeDisabled();
 
+    await user.click(screen.getByRole('button', { name: '清除任务清单和正在检查的媒体' }));
+    expect(cancel).toHaveBeenCalledWith(previous!.importId);
+    expect(progress).not.toBeInTheDocument();
+    act(() => useWorkspace.getState().handleEvent({ type: 'inputs.dropped', paths: [path] }));
+    const current = inspect.mock.lastCall?.[2];
+    expect(current?.importId).not.toBe(previous!.importId);
     await act(async () => {
-      finishInspection([{ id: 'drag', path, kind: 'file', origin: 'drop', valid: true }]);
+      previous!.onProgress({
+        index: 0,
+        phase: 'inspected',
+        item: { ...item, durationSeconds: 100 },
+      });
+      finishPrevious([item]);
     });
+    expect(
+      within(screen.getByRole('list', { name: '媒体检查进度' })).getByText('已收到 · 正在发现'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('执行前清单')).toHaveTextContent('0 个媒体');
+    expect(start).toBeDisabled();
+
+    await act(async () => finishCurrent([item]));
     expect(within(source).getByRole('status')).toHaveTextContent('添加本地媒体');
-    expect(screen.getByLabelText('执行前清单')).toHaveTextContent('3 个媒体');
+    expect(screen.getByLabelText('执行前清单')).toHaveTextContent('1 个媒体');
     expect(start).toBeEnabled();
-    await user.click(screen.getByRole('button', { name: '清除任务清单中的 3 个媒体文件' }));
+    await user.click(screen.getByRole('button', { name: '清除任务清单中的 1 个媒体文件' }));
+    cancel.mockRestore();
     inspect.mockRestore();
   });
 

@@ -11,6 +11,9 @@ RELEASE_TOOLS = PROJECT_ROOT / "tools" / "release"
 SOURCE_ROOT = PROJECT_ROOT / "src"
 
 datas = collect_data_files("whisper_subtitle")
+worker_build_stamp = os.environ.get("WHISPER_SUBTITLE_WORKER_BUILD_STAMP")
+if worker_build_stamp:
+    datas.append((worker_build_stamp, "whisper_subtitle/worker"))
 binaries = []
 # pynvml is imported dynamically by the performance sampler. PyInstaller cannot
 # discover that import from static analysis, so the frozen Worker must declare it.

@@ -78,7 +78,7 @@ def test_timed_out_dispatcher_keeps_monitor_alive_until_final_close(monkeypatch)
         assert release.wait(2)
 
     monkeypatch.setattr(runtime, "_execute_task", execute)
-    task = SimpleNamespace(cancel=threading.Event(), output_plans=())
+    task = SimpleNamespace(cancel=threading.Event(), output_plans=(), queued_at_monotonic=None)
     with runtime._condition:
         runtime._queue.append(task)
         runtime._condition.notify_all()

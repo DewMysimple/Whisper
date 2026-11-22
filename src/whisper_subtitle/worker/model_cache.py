@@ -5,6 +5,7 @@ from __future__ import annotations
 import gc
 import logging
 import threading
+from time import monotonic
 from collections.abc import Mapping
 from contextlib import contextmanager
 from typing import Any
@@ -127,6 +128,7 @@ class ModelCache:
         execution: Mapping[str, Any] | None = None,
         request_id: str | None = None,
     ) -> tuple[Any, HardwareInfo, bool]:
+        resolution_started = monotonic()
         try:
             resolved_hardware = hardware or self._task_hardware(model_id, execution)
         except Exception as exc:
@@ -140,7 +142,11 @@ class ModelCache:
             and self._model_id == model_id
             and self._hardware == resolved_hardware
         ):
+            self._logger.info("[MODEL-TIMING] request_id=%s model=%s hardware_ms=%.2f cache=hit",
+                              request_id, model_id, (monotonic() - resolution_started) * 1000)
             return self._engine, self._hardware, False
+        self._logger.info("[MODEL-TIMING] request_id=%s model=%s hardware_ms=%.2f cache=miss",
+                          request_id, model_id, (monotonic() - resolution_started) * 1000)
         if self._active_users:
             raise WorkerCommandError(
                 ErrorCode.WORKER_BUSY,
@@ -157,9 +163,14 @@ class ModelCache:
             )
         )
         try:
+            config_started = monotonic()
             location = self._configure_runtime()
             hardware = resolved_hardware
+            load_started = monotonic()
             engine = self._load_engine(hardware, location, model_id)
+            self._logger.info("[MODEL-TIMING] request_id=%s model=%s runtime_config_ms=%.2f engine_load_ms=%.2f",
+                              request_id, model_id, (load_started - config_started) * 1000,
+                              (monotonic() - load_started) * 1000)
         except Exception as exc:
             raise WorkerCommandError(
                 ErrorCode.MODEL_LOAD_FAILED,

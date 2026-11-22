@@ -32,7 +32,7 @@ from whisper_subtitle.domain.presets import derive_preset
 from whisper_subtitle.domain.subtitles import SubtitleOptions
 from whisper_subtitle.paths import AppPaths
 from whisper_subtitle.protocol import parse_protocol_line
-from whisper_subtitle.worker.media import default_media_duration_probe
+from whisper_subtitle.infrastructure.media_probe import probe_container
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -89,7 +89,7 @@ def run_sample(args, sample: dict, model: str, output: Path, gpu) -> dict:
                 "reason": "Missing authorized corpus media"}
     reference = sample.get("reference_text")
     preset = derive_preset(sample["preset_id"], {}, model_id=model)
-    _valid_media, duration, _duration_error = default_media_duration_probe(media)
+    duration = probe_container(media).duration
     result = {"sample_id": sample["id"], "model_id": model, "category": sample["category"],
               "input_sha256": digest(media), "reference_sha256": hashlib.sha256(
                   json.dumps([reference, sample.get("reference_spans", [])], ensure_ascii=False).encode()).hexdigest(),

@@ -33,7 +33,10 @@ mod models;
 mod option_validation;
 mod process;
 use self::logs::{worker_log_summary, worker_quality_diagnostic_log_lines};
-pub use self::media::{apply_media_inspections, inspect_input_paths};
+pub use self::media::InputInspectionProgress;
+use self::media::InspectionUpdate;
+#[cfg(test)]
+use self::media::{apply_media_inspections, inspect_input_paths};
 use self::model_catalog::DEFAULT_MODEL_ID;
 use self::models::{inspect_local_models, model_directory_target, packaged_worker_environment};
 use self::process::WorkerProcess;
@@ -182,16 +185,21 @@ pub struct InspectedInput {
     pub duration_seconds: Option<f64>,
     pub unknown_duration_count: Option<usize>,
     pub detail: Option<String>,
+    pub error_code: Option<String>,
     #[serde(skip)]
     pub media_paths: Vec<PathBuf>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
 pub struct MediaInspectionItem {
     pub path: String,
     pub readable: bool,
     pub duration_seconds: Option<f64>,
     pub error: Option<String>,
+    pub error_code: Option<String>,
+    pub cache_hit: Option<bool>,
+    pub queue_ms: Option<f64>,
+    pub elapsed_ms: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -223,6 +231,10 @@ pub struct WorkerManager {
     child: Mutex<Option<WorkerProcess>>,
     stdin: Mutex<Option<ChildStdin>>,
     pending: Mutex<HashMap<String, mpsc::SyncSender<PendingResult>>>,
+    pending_imports: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    inspection_updates: Mutex<HashMap<String, InspectionUpdate>>,
+    media_inspection_version: Mutex<Option<(u64, bool)>>,
+    start_cancellation_generation: AtomicU64,
     active_tasks: Mutex<HashMap<String, String>>,
     logs: Mutex<VecDeque<String>>,
     request_sequence: AtomicU64,
@@ -241,6 +253,10 @@ impl WorkerManager {
             child: Mutex::new(None),
             stdin: Mutex::new(None),
             pending: Mutex::new(HashMap::new()),
+            pending_imports: Mutex::new(HashMap::new()),
+            inspection_updates: Mutex::new(HashMap::new()),
+            media_inspection_version: Mutex::new(None),
+            start_cancellation_generation: AtomicU64::new(0),
             active_tasks: Mutex::new(HashMap::new()),
             logs: Mutex::new(VecDeque::new()),
             request_sequence: AtomicU64::new(1),
@@ -304,6 +320,7 @@ impl WorkerManager {
             return Ok(current);
         }
 
+        let began = Instant::now();
         let launch = self.resolve_launch()?;
         self.stopping.store(false, Ordering::SeqCst);
         if let Ok(mut active_tasks) = self.active_tasks.lock() {
@@ -384,7 +401,17 @@ impl WorkerManager {
             .map_err(|error| HostError::new("host.thread_failed", error.to_string()))?;
 
         drop(lifecycle);
-        self.wait_until_ready(READY_TIMEOUT)
+        let ready = self.wait_until_ready(READY_TIMEOUT);
+        self.push_log(format!(
+            "[HOST] worker generation {generation} · {} · {:.2} ms",
+            if ready.is_ok() {
+                "launch to ready"
+            } else {
+                "launch failed"
+            },
+            began.elapsed().as_secs_f64() * 1000.0,
+        ));
+        ready
     }
 
     pub fn restart(self: &Arc<Self>) -> Result<HostStatus, HostError> {
@@ -408,7 +435,24 @@ impl WorkerManager {
     }
 
     pub fn health(&self) -> Result<Value, HostError> {
-        self.send_generated_command("system.health", json!({}), COMMAND_TIMEOUT)
+        let generation = self.generation.load(Ordering::SeqCst);
+        let response = self.send_generated_command("system.health", json!({}), COMMAND_TIMEOUT)?;
+        if response
+            .pointer("/data/result/start_cancellation_version")
+            .and_then(Value::as_u64)
+            == Some(1)
+        {
+            self.start_cancellation_generation
+                .fetch_max(generation, Ordering::SeqCst);
+        }
+        if let Ok(mut version) = self.media_inspection_version.lock() {
+            let supports_progress = response
+                .pointer("/data/result/media_inspection_version")
+                .and_then(Value::as_u64)
+                == Some(1);
+            *version = Some((generation, supports_progress));
+        }
+        Ok(response)
     }
 
     pub fn has_active_tasks(&self) -> bool {
@@ -420,39 +464,6 @@ impl WorkerManager {
 
     pub fn metrics(&self) -> Result<Value, HostError> {
         self.send_generated_command("system.metrics", json!({}), COMMAND_TIMEOUT)
-    }
-
-    pub fn inspect_media(&self, paths: &[PathBuf]) -> Result<Vec<MediaInspectionItem>, HostError> {
-        if paths.is_empty() {
-            return Ok(Vec::new());
-        }
-        let response = self.send_generated_command(
-            "media.inspect",
-            json!({"paths": paths}),
-            MEDIA_INSPECT_TIMEOUT,
-        )?;
-        let items = response
-            .pointer("/data/result/items")
-            .cloned()
-            .ok_or_else(|| {
-                HostError::new(
-                    "host.protocol_mismatch",
-                    "media.inspect result has no items",
-                )
-            })?;
-        let items: Vec<MediaInspectionItem> = serde_json::from_value(items).map_err(|error| {
-            HostError::new(
-                "host.protocol_mismatch",
-                format!("media.inspect returned invalid items: {error}"),
-            )
-        })?;
-        if items.len() != paths.len() {
-            return Err(HostError::new(
-                "host.protocol_mismatch",
-                "media.inspect result does not align with requested paths",
-            ));
-        }
-        Ok(items)
     }
 
     pub fn model_root(&self) -> PathBuf {
@@ -474,11 +485,19 @@ impl WorkerManager {
     }
 
     pub fn start_transcription(&self, draft: StartDraft) -> Result<StartResult, HostError> {
+        let began = Instant::now();
         validate_start_draft(&draft)?;
         let request_id = draft.request_id.clone();
         let params = draft_to_protocol_params(draft);
-        let response =
-            self.send_command(&request_id, "transcription.start", params, START_TIMEOUT)?;
+        let sent = Instant::now();
+        let result = self.send_command(&request_id, "transcription.start", params, START_TIMEOUT);
+        self.push_log(format!(
+            "[START] {request_id} · host draft={:.2} ms · worker round trip={:.2} ms · {}",
+            (sent - began).as_secs_f64() * 1000.0,
+            sent.elapsed().as_secs_f64() * 1000.0,
+            if result.is_ok() { "queued" } else { "failed" }
+        ));
+        let response = result?;
         if event_code(&response) != Some("task.queued") {
             return Err(HostError::new(
                 "host.protocol_mismatch",
@@ -507,6 +526,28 @@ impl WorkerManager {
             COMMAND_TIMEOUT,
         )?;
         Ok(())
+    }
+
+    pub fn cancel_start(&self, start_request_id: &str) -> Result<bool, HostError> {
+        if !valid_identifier(start_request_id) {
+            return Err(HostError::new(
+                "request.invalid",
+                "start_request_id is invalid",
+            ));
+        }
+        let supported = self.start_cancellation_generation.load(Ordering::SeqCst);
+        if supported == 0 || supported != self.generation.load(Ordering::SeqCst) {
+            return Ok(false);
+        }
+        let response = self.send_generated_command(
+            "transcription.cancel_start",
+            json!({"start_request_id": start_request_id}),
+            COMMAND_TIMEOUT,
+        )?;
+        Ok(response
+            .pointer("/data/result/accepted")
+            .and_then(Value::as_bool)
+            == Some(true))
     }
 
     pub fn shutdown(&self, timeout: Duration) {
@@ -594,6 +635,17 @@ impl WorkerManager {
         params: Value,
         timeout: Duration,
     ) -> Result<Value, HostError> {
+        self.send_command_waiting(request_id, method, params, timeout, None)
+    }
+
+    fn send_command_waiting(
+        &self,
+        request_id: &str,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+        progressive_cancel: Option<&AtomicBool>,
+    ) -> Result<Value, HostError> {
         let state = self.status().state;
         let shutting_down =
             method == "worker.shutdown" && matches!(state.as_str(), "ready" | "stopping");
@@ -643,20 +695,51 @@ impl WorkerManager {
             ));
         }
 
-        match receiver.recv_timeout(timeout) {
-            Ok(result) => result,
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                self.remove_pending(request_id);
-                Err(HostError::new(
-                    "host.worker_timeout",
-                    format!("Worker did not complete {method} before timeout"),
-                ))
+        let deadline = Instant::now() + timeout;
+        let mut cancellation_sent = false;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            let wait = if progressive_cancel.is_some() {
+                remaining.min(Duration::from_millis(40))
+            } else {
+                remaining
+            };
+            match receiver.recv_timeout(wait) {
+                Ok(result) => return result,
+                Err(mpsc::RecvTimeoutError::Timeout) if Instant::now() < deadline => {
+                    if progressive_cancel.is_some_and(|cancel| cancel.load(Ordering::Acquire))
+                        && !cancellation_sent
+                    {
+                        cancellation_sent = true;
+                        self.request_media_cancellation(request_id);
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    self.remove_pending(request_id);
+                    if progressive_cancel.is_some() && !cancellation_sent {
+                        self.request_media_cancellation(request_id);
+                    }
+                    return Err(HostError::new(
+                        "host.worker_timeout",
+                        format!("Worker did not complete {method} before timeout"),
+                    ));
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err(HostError::new(
+                        "host.worker_disconnected",
+                        "Worker response channel disconnected",
+                    ));
+                }
             }
-            Err(mpsc::RecvTimeoutError::Disconnected) => Err(HostError::new(
-                "host.worker_disconnected",
-                "Worker response channel disconnected",
-            )),
         }
+    }
+
+    fn request_media_cancellation(&self, inspection_request_id: &str) {
+        let _ = self.send_generated_command(
+            "media.cancel_inspection",
+            json!({ "inspection_request_id": inspection_request_id }),
+            Duration::from_secs(3),
+        );
     }
 
     fn resolve_launch(&self) -> Result<WorkerLaunch, HostError> {
@@ -814,6 +897,14 @@ impl WorkerManager {
 
     fn handle_worker_message(&self, message: Value, generation: u64) {
         if generation != self.generation.load(Ordering::SeqCst) {
+            return;
+        }
+        if event_code(&message) == Some("media.inspection_progress") {
+            let update = request_id(&message)
+                .and_then(|id| self.inspection_updates.lock().ok()?.get(id).cloned());
+            if let Some(update) = update {
+                update(&message["data"]);
+            }
             return;
         }
         if event_code(&message) == Some("worker.ready") {
@@ -1449,12 +1540,14 @@ mod tests {
                     readable: true,
                     duration_seconds: Some(12.25),
                     error: None,
+                    ..MediaInspectionItem::default()
                 },
                 MediaInspectionItem {
                     path: media_paths[1].to_string_lossy().into_owned(),
                     readable: true,
                     duration_seconds: None,
                     error: None,
+                    ..MediaInspectionItem::default()
                 },
             ],
         )

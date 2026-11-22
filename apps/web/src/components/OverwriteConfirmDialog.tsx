@@ -2,10 +2,12 @@ import { AlertTriangle, FileWarning } from 'lucide-react';
 
 import { useWorkspace } from '../state/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useStartPreparation } from './useStartPreparation';
 
 export function OverwriteConfirmDialog() {
   const pending = useWorkspace((state) => state.pendingOverwrite);
   const startingTask = useWorkspace((state) => state.startingTask);
+  const preparation = useStartPreparation();
   const confirmOverwrite = useWorkspace((state) => state.confirmOverwrite);
   const cancelOverwrite = useWorkspace((state) => state.cancelOverwrite);
   const skipMode = pending?.mode === 'skip';
@@ -22,6 +24,8 @@ export function OverwriteConfirmDialog() {
       onConfirm={() => void confirmOverwrite()}
       open={pending !== null}
       pending={startingTask}
+      pendingLabel={`${preparation.label}…`}
+      onPendingCancel={preparation.cancel}
       title={skipMode ? '确认跳过同名媒体' : '确认覆盖同名输出文件'}
       tone={skipMode ? undefined : 'danger'}
     >

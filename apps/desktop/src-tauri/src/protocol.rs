@@ -12,16 +12,19 @@ pub const COMMAND_METHODS: &[&str] = &[
     "system.environment",
     "system.metrics",
     "media.inspect",
+    "media.cancel_inspection",
     "model.load",
     "model.unload",
     "transcription.start",
     "transcription.cancel",
+    "transcription.cancel_start",
     "worker.shutdown",
 ];
 
 pub const EVENT_CODES: &[&str] = &[
     "worker.ready",
     "command.completed",
+    "media.inspection_progress",
     "model.loading",
     "model.ready",
     "task.queued",
@@ -131,6 +134,27 @@ fn validate_event(message: &Map<String, Value>) -> Result<(), ProtocolError> {
                     .ok_or_else(|| invalid("command.completed result is required"))?,
                 "command.completed result",
             )?;
+        }
+        "media.inspection_progress" => {
+            require_identifier_field(message, "request_id")?;
+            exact_fields(
+                data,
+                &["items", "worker_wait_ms"],
+                &[],
+                "media inspection progress",
+            )?;
+            require_nonnegative_number(data, "worker_wait_ms")?;
+            let items = data
+                .get("items")
+                .and_then(Value::as_array)
+                .filter(|items| !items.is_empty() && items.len() <= 32)
+                .ok_or_else(|| invalid("inspection progress requires 1–32 items"))?;
+            for entry in items {
+                let entry = require_object(entry, "inspection progress entry")?;
+                exact_fields(entry, &["index", "item"], &[], "inspection progress entry")?;
+                require_nonnegative_integer(entry, "index")?;
+                require_object(&entry["item"], "inspection progress item")?;
+            }
         }
         "model.loading" => {
             exact_fields(data, &["model_id"], &[], "model.loading data")?;

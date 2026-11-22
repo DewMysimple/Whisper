@@ -2,6 +2,7 @@ import type {
   DesktopBridge,
   DesktopEvent,
   HostStatus,
+  InputInspectionOptions,
   InputOrigin,
   InputSource,
   LocalModelDescriptor,
@@ -79,6 +80,10 @@ export class MockDesktopBridge implements DesktopBridge {
     return [structuredClone(SAMPLE_DIRECTORY)];
   }
 
+  async pickInputPaths(kind: InputSource['kind']): Promise<string[]> {
+    return (kind === 'file' ? SAMPLE_FILES : [SAMPLE_DIRECTORY]).map(({ path }) => path);
+  }
+
   async selectOutputDirectory(): Promise<string | null> {
     return 'D:\\字幕项目\\2026-07';
   }
@@ -87,16 +92,39 @@ export class MockDesktopBridge implements DesktopBridge {
     return '"C:\\Media\\剪贴板课程 01.mp4"\r\n"C:\\Media\\剪贴板课程 02.wav"';
   }
 
-  async inspectPaths(paths: string[], origin: InputOrigin): Promise<InputSource[]> {
-    return paths.map((path, index) => ({
-      id: `mock-inspected-${index}-${path}`,
-      path,
-      kind: 'file',
-      origin,
-      valid: true,
-      mediaCount: 1,
-      durationSeconds: 240 + index * 95,
-    }));
+  async inspectPaths(
+    paths: string[],
+    origin: InputOrigin,
+    options?: InputInspectionOptions,
+  ): Promise<InputSource[]> {
+    return paths.map((path, index) => {
+      const sample = [...SAMPLE_FILES, SAMPLE_DIRECTORY].find((source) => source.path === path);
+      const item: InputSource = sample
+        ? { ...sample, origin }
+        : {
+            id: `mock-inspected-${index}-${path}`,
+            path,
+            kind: 'file',
+            origin,
+            valid: true,
+            mediaCount: 1,
+            durationSeconds: 240 + index * 95,
+          };
+      options?.onProgress({ index, phase: 'inspected', item });
+      return item;
+    });
+  }
+
+  async cancelInputInspection(): Promise<void> {
+    // Mock inspections finish synchronously.
+  }
+
+  async cancelStart(): Promise<boolean> {
+    return false;
+  }
+
+  async runtimeDiagnostics(): Promise<Record<string, unknown>> {
+    return { mode: 'mock' };
   }
 
   async inspectOutputPaths(paths: string[]): Promise<OutputPathStatus[]> {

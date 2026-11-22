@@ -566,7 +566,10 @@ describe('workspace terminal event notifications', () => {
     await useWorkspace.getState().startTask();
     await useWorkspace.getState().confirmShutdownStart();
     expect(start).toHaveBeenCalledOnce();
-    expect(start).toHaveBeenCalledWith(frozen, { finishAction: 'shutdown' });
+    expect(start).toHaveBeenCalledWith(
+      frozen,
+      expect.objectContaining({ finishAction: 'shutdown' }),
+    );
     expect(useWorkspace.getState()).toMatchObject({
       pendingShutdownStart: null,
       inputs: [],
@@ -634,7 +637,7 @@ describe('workspace terminal event notifications', () => {
     await useWorkspace.getState().confirmOverwrite();
     expect(start).toHaveBeenCalledTimes(2);
     expect(start.mock.calls[1]?.[0]).toEqual(pending?.draft);
-    expect(start.mock.calls[1]?.[1]).toEqual({
+    expect(start.mock.calls[1]?.[1]).toMatchObject({
       allowOverwrite: true,
       skipConflicts: false,
       finishAction: 'none',
@@ -869,7 +872,9 @@ describe('workspace terminal event notifications', () => {
     expect(start.mock.calls[0]?.[0].inputs).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ path: completedPath })]),
     );
-    expect(start.mock.calls[0]?.[1]).toBeUndefined();
+    expect(start.mock.calls[0]?.[1]?.allowOverwrite).toBeUndefined();
+    expect(start.mock.calls[0]?.[1]?.skipConflicts).toBeUndefined();
+    expect(start.mock.calls[0]?.[1]?.finishAction).toBeUndefined();
     expect(start.mock.calls[0]?.[0].recognitionStrategy).toBe('stable_primary');
     expect(useWorkspace.getState()).toMatchObject({
       activeView: 'performance',

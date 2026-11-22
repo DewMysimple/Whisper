@@ -30,6 +30,7 @@ class ReleasePrerequisiteTests(unittest.TestCase):
             "buildStart.cmd", "package.json", "pyproject.toml",
             "apps/desktop/src-tauri/tauri.conf.json", "apps/desktop/src-tauri/Cargo.toml",
             "tools/release/build.ps1", "tools/release/prerequisites.ps1",
+            "tools/release/build_identity.ps1",
             "tools/release/stage_models.py", "tools/maintenance/generated_paths.ps1",
         ):
             target = self.root / relative

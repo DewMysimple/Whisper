@@ -4955,6 +4955,7 @@ output,
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr);
+  align-self: stretch;
 }
 
 .preflight-key {
@@ -4969,18 +4970,26 @@ output,
 .preflight-copy strong {
   grid-column: 1;
   grid-row: 2;
-  overflow: visible;
   margin-top: 4px;
   font-size: var(--font-body);
   font-weight: 700;
   line-height: 1.45;
-  white-space: normal;
+}
+
+.preflight-key,
+.preflight-copy strong,
+.preflight-finish-action {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .preflight-copy small {
+  min-block-size: 1lh;
   grid-column: 1;
   grid-row: 3;
   margin-top: 6px;
+  container: preflight-caption / size;
   color: var(--text-muted) !important;
   font-size: var(--font-caption);
   line-height: 1.45;
@@ -4988,19 +4997,46 @@ output,
   white-space: normal;
 }
 
-.preflight-copy small.preflight-path {
-  overflow-wrap: anywhere;
-  white-space: normal;
+.preflight-multiline {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+@supports (-webkit-line-clamp: round(down, 100cqh / 1lh, 1)) {
+  .preflight-multiline {
+    -webkit-line-clamp: max(
+      1,
+      round(down, calc((100cqh - var(--preflight-reserved-detail, 0px)) / 1lh), 1)
+    );
+  }
 }
 
 .preflight-detail-lines {
+  --preflight-reserved-detail: calc(1lh + 2px);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
 }
 
-.preflight-detail-lines > span {
-  display: block;
-  min-width: 0;
+.preflight-conflict-policy {
+  white-space: nowrap;
+}
+
+/* The smallest preset has room for one detail line within the unchanged card. */
+@container preflight-caption (block-size < calc(2lh + 2px)) {
+  .preflight-detail-lines {
+    --preflight-reserved-detail: 0px;
+  }
+
+  .preflight-output-details {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .preflight-execution-details {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
 }
 
 .launch-action-dock {

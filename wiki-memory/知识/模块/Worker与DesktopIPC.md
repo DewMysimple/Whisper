@@ -6,6 +6,7 @@ importance: high
 updated: 2026-09-20
 topic: worker-desktop-ipc
 source_logs:
+  - "[[日志/2026-11-22-渐进媒体导入与转录计时]]"
   - "[[日志/2026-09-20-硬件优化与工作台统一及便携版更新]]"
   - "[[日志/2026-08-23-项目记忆重建]]"
   - "[[日志/2026-08-24-架构瘦身实施]]"
@@ -17,6 +18,8 @@ supersedes: null
 ---
 
 # Worker 与 Desktop IPC
+
+媒体检查与启动取消由 `system.health` 协商可选能力。既有 `worker.ready` 列表保持兼容。Host 负责路径发现与归并，Worker 管理有界 PyAV 子进程与共用时长缓存。启动取消使用请求 ID，受理后仍以 `task.queued` 或带 `StartCancelled` 的终态结束原请求。Windows 模型初始化保留主命令线程，管道读端避免与初始化同时阻塞在 stdin 读取中。阶段定义、对照及发布证据见 [[日志/2026-11-22-渐进媒体导入与转录计时]]。
 
 - `worker/runtime.py` 管理命令、单 dispatcher、任务取消、生命周期和事件；`worker/media.py` 负责输入路径归一化、展开和时长探测；`worker/task_execution.py` 负责单任务执行与输出适配；`worker/runtime_types.py` 保存共享类型和稳定错误；`worker/model_cache.py` 管理模型复用/释放，`worker/task.py` 定义队列任务数据。
 - `worker/stdio.py` 负责 UTF-8 JSON-lines 输入输出；stdout 只能发送协议消息。

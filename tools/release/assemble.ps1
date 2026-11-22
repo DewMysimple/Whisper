@@ -40,6 +40,7 @@ $Version = [string]$package.version
 
 . (Join-Path $RepositoryRoot "tools\maintenance\generated_paths.ps1")
 . (Join-Path $PSScriptRoot "prerequisites.ps1")
+. (Join-Path $PSScriptRoot "build_identity.ps1")
 $BuildRoot = Assert-GeneratedPath -Path $BuildRoot -RepositoryRoot $RepositoryRoot -AllowedRoots @((Join-Path $RepositoryRoot "build"))
 $PortableStage = Join-Path $BuildRoot "portable"
 
@@ -118,10 +119,20 @@ try {
         $CargoExecutable = Resolve-ReleaseCargo
         $env:PATH = "$(Split-Path -Parent $CargoExecutable);$env:PATH"
     }
-    corepack pnpm --filter @whisper-subtitle/web build
-    Assert-LastExitCode "React production build"
-    corepack pnpm --filter @whisper-subtitle/desktop tauri build --no-bundle --config $ReleaseConfig
-    Assert-LastExitCode "Tauri portable executable build"
+    $PreviousBuildRevision = $env:WHISPER_SUBTITLE_BUILD_REVISION
+    $PreviousBuildTime = $env:WHISPER_SUBTITLE_BUILD_TIME
+    try {
+        $env:WHISPER_SUBTITLE_BUILD_REVISION = Get-ReleaseBuildRevision
+        $env:WHISPER_SUBTITLE_BUILD_TIME = Get-ReleaseBuildTime
+        corepack pnpm --filter @whisper-subtitle/web build
+        Assert-LastExitCode "React production build"
+        $env:WHISPER_SUBTITLE_BUILD_TIME = Get-ReleaseBuildTime
+        corepack pnpm --filter @whisper-subtitle/desktop tauri build --no-bundle --config $ReleaseConfig
+        Assert-LastExitCode "Tauri portable executable build"
+    } finally {
+        $env:WHISPER_SUBTITLE_BUILD_REVISION = $PreviousBuildRevision
+        $env:WHISPER_SUBTITLE_BUILD_TIME = $PreviousBuildTime
+    }
     $DesktopExe = Join-Path $RepositoryRoot "apps\desktop\src-tauri\target\release\whisper-subtitle-desktop.exe"
 
     New-Item -ItemType Directory -Force -Path $PortableStage | Out-Null

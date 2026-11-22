@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from math import isfinite
 from pathlib import Path
 import time
 from typing import Any
@@ -81,12 +82,14 @@ class TranscriptionService:
         hardware_detector: HardwareProbe | None = None,
         engine_loader: EngineLoader | None = None,
         cancelled: CancellationProbe | None = None,
+        timing: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._progress = progress or _ignore_progress
         self._configure_runtime = runtime_configurer or configure_runtime
         self._detect_hardware = hardware_detector or HardwareDetector().detect
         self._load_engine = engine_loader or FasterWhisperEngine.load
         self._cancelled = cancelled or _not_cancelled
+        self._timing = timing
 
     def _check_cancelled(self) -> None:
         if self._cancelled():
@@ -175,6 +178,7 @@ class TranscriptionService:
         model_id: str = DEFAULT_MODEL_ID,
     ) -> TranscriptionResult:
         """Transcribe one discovered file, propagating operational failures."""
+        file_started_at = time.monotonic()
         preset = preset or resolve_preset(request.preset_id)
         media_path = request.input_path
         self._check_cancelled()
@@ -208,12 +212,14 @@ class TranscriptionService:
             # Whisper segment. Stable-primary tasks keep their existing cost.
             params["word_timestamps"] = True
         media_started_at = time.monotonic()
+        first_segment_seconds = None
         if mixed_recognition and model_id not in SECONDARY_RECOGNITION_MODEL_IDS:
             raise ValueError("mixed_zh_en requires a Large V3 or Large V3 Turbo model")
         if isinstance(engine, CancellableTranscriptionEngine):
             segments, info = engine.transcribe_cancellable(str(media_path), cancelled=self._cancelled, **params)
         else:
             segments, info = engine.transcribe(str(media_path), **params)
+        engine_return_seconds = time.monotonic() - media_started_at
         probability = getattr(info, "language_probability", None)
         if probability is None:
             language_message = f"🌐 识别语言: {info.language or '未识别到语音'}"
@@ -249,6 +255,8 @@ class TranscriptionService:
                 break
             self._check_cancelled()
             segment_list.append(segment)
+            if first_segment_seconds is None and str(getattr(segment, "text", "") or "").strip():
+                first_segment_seconds = time.monotonic() - media_started_at
             segment_end = getattr(segment, "end", None)
             if (
                 isinstance(media_duration, (int, float))
@@ -311,6 +319,7 @@ class TranscriptionService:
                     media_started_at=media_started_at,
                 )
             )
+        postprocess_started_at = time.monotonic()
         quality_diagnostics = dict(
             build_recognition_quality_diagnostics(
                 quality_source_segments, info, params, model_id=model_id
@@ -422,12 +431,14 @@ class TranscriptionService:
                 subtitle_options,
                 word_segments=segment_list,
             )
+        output_started_at = time.monotonic()
         write_primary_outputs(
             output_plan,
             txt_content,
             markdown_content=markdown_content,
             srt_content=srt_content,
         )
+        output_seconds = time.monotonic() - output_started_at
         suffix = f" ({len(lines)} 句)" if show_line_count else ""
         output_message = "✅ 完成输出: " + " + ".join(
             str(path) for path in output_plan.content_paths
@@ -446,11 +457,13 @@ class TranscriptionService:
         )
 
         if request.desktop:
+            desktop_started_at = time.monotonic()
             write_desktop_outputs(
                 output_plan,
                 txt_content,
                 markdown_content=markdown_content,
             )
+            output_seconds += time.monotonic() - desktop_started_at
             self._emit(
                 "desktop_output_written",
                 f"📁 桌面保存: {output_plan.desktop_txt} + {output_plan.desktop_md}",
@@ -459,6 +472,30 @@ class TranscriptionService:
                 preset_id=preset.id,
                 input_path=media_path,
             )
+        if self._timing is not None:
+            duration = media_duration if (
+                isinstance(media_duration, (int, float)) and isfinite(media_duration) and media_duration > 0
+            ) else None
+            inference_seconds = postprocess_started_at - media_started_at
+            inference_timings = getattr(info, "inference_timings", None)
+            self._timing({
+                "file_index": current,
+                "file_count": total,
+                "model_id": model_id,
+                "media_seconds": duration,
+                "segment_count": len(segment_list),
+                "vad_filter": bool(params.get("vad_filter")),
+                "word_timestamps": bool(params.get("word_timestamps")),
+                "output_prepare_seconds": media_started_at - file_started_at,
+                "first_nonempty_segment_seconds": first_segment_seconds,
+                "engine_return_seconds": engine_return_seconds,
+                "inference_seconds": inference_seconds,
+                "postprocess_seconds": output_started_at - postprocess_started_at,
+                "output_write_seconds": output_seconds,
+                "file_end_to_end_seconds": time.monotonic() - file_started_at,
+                "inference_rtf": inference_seconds / duration if duration else None,
+                "engine": inference_timings.report() if inference_timings is not None else None,
+            })
         return TranscriptionResult(request, True, output_plan.result_path)
 
     def _run_mixed_second_pass(

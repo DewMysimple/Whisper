@@ -61,7 +61,7 @@ def test_runner_reads_probe_contract_and_actual_output_formats(monkeypatch, tmp_
     monkeypatch.setattr(runner.subprocess, "Popen", launch)
     monkeypatch.setattr(runner, "parse_protocol_line", lambda _: None)
     monkeypatch.setattr(runner, "wait_for_exit", lambda *args: True)
-    monkeypatch.setattr(runner, "default_media_duration_probe", lambda _: (True, 1., None))
+    monkeypatch.setattr(runner, "probe_container", lambda _: SimpleNamespace(duration=1.0))
     media = tmp_path / "source.wav"
     media.write_bytes(b"unit test only")
     result = runner.run_sample(SimpleNamespace(model_dir=tmp_path, worker_executable=None, timeout=10),

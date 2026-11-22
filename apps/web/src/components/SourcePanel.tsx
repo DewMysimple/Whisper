@@ -1,10 +1,12 @@
 import { WorkspaceEntryCard } from './WorkspaceEntryCard';
-import { useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 
 import { ClipboardPaste, FileAudio, FolderOpen, LoaderCircle } from 'lucide-react';
 
 import { desktopBridge } from '../bridge';
+import { formatMediaDuration } from '../state/mediaDuration';
 import { useWorkspace } from '../state/workspace';
+import './source-import-list.css';
 
 export function SourcePanel() {
   const inputs = useWorkspace((state) => state.inputs);
@@ -12,10 +14,14 @@ export function SourcePanel() {
   const addDirectory = useWorkspace((state) => state.addDirectory);
   const addClipboardPaths = useWorkspace((state) => state.addClipboardPaths);
   const dragActive = useWorkspace((state) => state.draggingMedia);
-  const pendingCount = useWorkspace((state) =>
-    state.pendingDrops.reduce((count, paths) => count + paths.length, 0),
-  );
+  const pending = useWorkspace((state) => state.pendingImports);
+  const markImportsVisible = useWorkspace((state) => state.markImportsVisible);
+  const pendingCount = pending.reduce((count, batch) => count + batch.paths.length, 0);
   const [clipboardBusy, setClipboardBusy] = useState(false);
+
+  useLayoutEffect(() => {
+    markImportsVisible();
+  }, [markImportsVisible, pending]);
 
   const pasteClipboardPaths = async () => {
     if (clipboardBusy) return;
@@ -48,7 +54,7 @@ export function SourcePanel() {
             {dragActive
               ? '松开以添加本地媒体'
               : pendingCount > 0
-                ? `正在检查 ${pendingCount} 项拖入内容…`
+                ? `正在检查 ${pendingCount} 项媒体来源…`
                 : '添加本地媒体'}
           </strong>
           <span>
@@ -76,6 +82,33 @@ export function SourcePanel() {
           </button>
         </div>
       </div>
+
+      {pending.length > 0 && (
+        <ul className="source-import-list" aria-label="媒体检查进度">
+          {pending.flatMap((batch) =>
+            batch.paths.map((path, index) => {
+              const update = batch.items[index];
+              const item = update?.item;
+              const label =
+                update?.phase === 'inspected' && item
+                  ? item.valid
+                    ? `可转录 · ${item.durationSeconds === undefined ? '时长未知' : formatMediaDuration(item.durationSeconds)}`
+                    : (item.detail ?? '检查失败')
+                  : item?.kind === 'directory'
+                    ? `检查中 · ${update?.checkedCount ?? 0}/${item.mediaCount ?? 0}`
+                    : update
+                      ? '检查中 · 读取时长'
+                      : '已收到 · 正在发现';
+              return (
+                <li key={`${batch.id}-${index}`}>
+                  <span title={path}>{path.split(/[\\/]/).filter(Boolean).at(-1) ?? path}</span>
+                  <small title={label}>{label}</small>
+                </li>
+              );
+            }),
+          )}
+        </ul>
+      )}
 
       <WorkspaceEntryCard
         className="clipboard-intake"

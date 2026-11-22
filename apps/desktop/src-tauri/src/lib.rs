@@ -22,8 +22,8 @@ use tauri::{Emitter, Manager, State};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use worker_host::{
-    EventSink, HostError, HostStatus, InspectedInput, LocalModelDescriptor, StartDraft,
-    StartResult, WorkerManager, apply_media_inspections, inspect_input_paths,
+    EventSink, HostError, HostStatus, InputInspectionProgress, InspectedInput,
+    LocalModelDescriptor, StartDraft, StartResult, WorkerManager,
 };
 
 struct HostState(Arc<WorkerManager>);
@@ -51,6 +51,16 @@ struct OutputPathStatus {
 #[tauri::command]
 fn get_host_status(state: State<'_, HostState>) -> HostStatus {
     state.0.status()
+}
+
+#[tauri::command]
+fn get_host_build() -> Value {
+    serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "revision": option_env!("WHISPER_SUBTITLE_BUILD_REVISION"),
+        "builtAt": option_env!("WHISPER_SUBTITLE_BUILD_TIME"),
+        "ipcVersion": protocol::SCHEMA_VERSION,
+    })
 }
 
 #[tauri::command]
@@ -193,37 +203,28 @@ fn confirm_close_with_active_tasks(_window: &tauri::Window) -> bool {
 #[tauri::command]
 async fn inspect_inputs(
     state: State<'_, HostState>,
+    webview: tauri::Webview,
     paths: Vec<String>,
     origin: String,
+    import_id: Option<String>,
+    on_progress: Option<tauri::ipc::JavaScriptChannelId>,
 ) -> Result<Vec<InspectedInput>, HostError> {
     let manager = Arc::clone(&state.0);
+    let on_progress = on_progress.map(|id| id.channel_on::<_, InputInspectionProgress>(webview));
     tauri::async_runtime::spawn_blocking(move || {
-        let mut inputs = inspect_input_paths(paths, origin);
-        let media_paths = inputs
-            .iter()
-            .flat_map(|input| input.media_paths.iter().cloned())
-            .collect::<Vec<_>>();
-        if media_paths.is_empty() {
-            return Ok(inputs);
-        }
-        match manager.inspect_media(&media_paths) {
-            Ok(inspections) => apply_media_inspections(&mut inputs, &inspections)?,
-            Err(_) => {
-                for input in &mut inputs {
-                    if input.valid {
-                        input.unknown_duration_count = input.media_count;
-                        input.detail = Some(match input.detail.take() {
-                            Some(detail) => format!("{detail} · 时长暂时无法读取"),
-                            None => "时长暂时无法读取".to_owned(),
-                        });
-                    }
-                }
+        manager.inspect_import(paths, origin, import_id, move |progress| {
+            if let Some(channel) = &on_progress {
+                let _ = channel.send(progress);
             }
-        }
-        Ok(inputs)
+        })
     })
     .await
     .map_err(|error| HostError::new("host.task_failed", error.to_string()))?
+}
+
+#[tauri::command]
+fn cancel_input_inspection(state: State<'_, HostState>, import_id: String) -> bool {
+    state.0.cancel_import(&import_id)
 }
 
 #[tauri::command]
@@ -440,6 +441,17 @@ async fn cancel_transcription(
         .map_err(|error| HostError::new("host.task_failed", error.to_string()))?
 }
 
+#[tauri::command]
+async fn cancel_start(
+    state: State<'_, HostState>,
+    start_request_id: String,
+) -> Result<bool, HostError> {
+    let manager = Arc::clone(&state.0);
+    tauri::async_runtime::spawn_blocking(move || manager.cancel_start(&start_request_id))
+        .await
+        .map_err(|error| HostError::new("host.task_failed", error.to_string()))?
+}
+
 fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
@@ -478,6 +490,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_host_status,
             get_worker_logs,
+            get_host_build,
             clear_worker_logs,
             get_power_capabilities,
             get_power_action_status,
@@ -485,6 +498,7 @@ pub fn run() {
             write_worker_log_export,
             show_app_notification,
             inspect_inputs,
+            cancel_input_inspection,
             inspect_output_paths,
             reveal_output,
             open_output_directory,
@@ -497,6 +511,7 @@ pub fn run() {
             open_model_directory,
             start_transcription,
             cancel_transcription,
+            cancel_start,
         ])
         .setup(|app| {
             #[cfg(windows)]

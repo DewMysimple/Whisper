@@ -72,6 +72,19 @@ export interface InputSource {
   durationSeconds?: number;
   unknownDurationCount?: number;
   detail?: string;
+  errorCode?: string;
+}
+
+export interface InputInspectionProgress {
+  index: number;
+  phase: 'discovered' | 'inspected';
+  item: InputSource;
+  checkedCount?: number;
+}
+
+export interface InputInspectionOptions {
+  importId: string;
+  onProgress: (progress: InputInspectionProgress) => void;
 }
 
 export interface SubtitleParameters {
@@ -319,6 +332,8 @@ export interface StartTranscriptionOptions {
   allowOverwrite?: boolean;
   skipConflicts?: boolean;
   finishAction?: FinishAction;
+  clickedAt?: number;
+  onPreparation?: (requestId: string, phase: 'checking' | 'loading', canCancel: boolean) => void;
 }
 
 export interface PowerCapabilities {
@@ -385,9 +400,15 @@ export interface DesktopBridge {
   readonly mode: 'mock' | 'tauri';
   selectFiles(): Promise<InputSource[]>;
   selectDirectory(): Promise<InputSource[]>;
+  pickInputPaths(kind: InputSource['kind']): Promise<string[]>;
   selectOutputDirectory(): Promise<string | null>;
   readClipboardText(): Promise<string>;
-  inspectPaths(paths: string[], origin: InputOrigin): Promise<InputSource[]>;
+  inspectPaths(
+    paths: string[],
+    origin: InputOrigin,
+    options?: InputInspectionOptions,
+  ): Promise<InputSource[]>;
+  cancelInputInspection(importId: string): Promise<void>;
   inspectOutputPaths(paths: string[]): Promise<OutputPathStatus[]>;
   revealOutput(path: string): Promise<void>;
   openOutputDirectory(path: string): Promise<void>;
@@ -395,6 +416,7 @@ export interface DesktopBridge {
   copyWorkerLogs(content: string): Promise<void>;
   exportWorkerLogs(content: string): Promise<string | null>;
   clearWorkerLogs(): Promise<void>;
+  runtimeDiagnostics(): Promise<Record<string, unknown>>;
   getHostStatus(): Promise<HostStatus>;
   restartWorker(): Promise<HostStatus>;
   listLocalModels(): Promise<LocalModelDescriptor[]>;
@@ -410,6 +432,7 @@ export interface DesktopBridge {
     options?: StartTranscriptionOptions,
   ): Promise<{ taskId: string }>;
   cancelTask(taskId: string): Promise<void>;
+  cancelStart(requestId: string): Promise<boolean>;
   subscribe(listener: (event: DesktopEvent) => void): Unlisten;
   dispose(): void;
 }

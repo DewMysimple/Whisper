@@ -31,6 +31,26 @@ class FakeEngine:
         return iter(segments), info
 
 
+@pytest.mark.parametrize("duration", [4.0, None])
+def test_file_timings_report_first_result_without_paths_or_fabricated_rtf(tmp_path, duration):
+    class FakeTimingEngine:
+        def transcribe(self, media_path, **options):
+            segments = [SimpleNamespace(text="", start=0, end=1), SimpleNamespace(text="hello", start=1, end=2)]
+            return iter(segments), SimpleNamespace(language="en", duration=duration)
+
+    timing = []
+    plan = OutputPlan(primary_txt=tmp_path / "private # output.txt")
+    request = TranscriptionRequest(tmp_path / "private # input.wav", "en_v1")
+    result = TranscriptionService(timing=timing.append).transcribe_file(request, FakeTimingEngine(), output_plan=plan)
+    assert result.success
+    assert len(timing) == 1
+    assert timing[0]["media_seconds"] == duration
+    assert timing[0]["segment_count"] == 2
+    assert 0 <= timing[0]["first_nonempty_segment_seconds"] <= timing[0]["inference_seconds"]
+    assert timing[0]["inference_rtf"] == (timing[0]["inference_seconds"] / duration if duration else None)
+    assert "private" not in str(timing)
+
+
 class FakeMixedEngine(FakeEngine):
     def detect_language_regions(
         self,

@@ -404,6 +404,7 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
         _require_fields(
             params,
             required={"paths"},
+            optional={"progressive"},
             field_name="params",
             code=ErrorCode.REQUEST_INVALID,
         )
@@ -412,6 +413,16 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
                 ErrorCode.REQUEST_INVALID,
                 "params.paths must contain at least one media path",
             )
+        if "progressive" in params:
+            _require_bool(params["progressive"], "params.progressive")
+    elif method is CommandMethod.MEDIA_CANCEL_INSPECTION:
+        _require_fields(
+            params,
+            required={"inspection_request_id"},
+            field_name="params",
+            code=ErrorCode.REQUEST_INVALID,
+        )
+        _require_identifier(params["inspection_request_id"], "params.inspection_request_id")
     elif method is CommandMethod.TRANSCRIPTION_CANCEL:
         _require_fields(
             params,
@@ -420,6 +431,14 @@ def _validate_command_params(method: CommandMethod, value: Any) -> FrozenJson:
             code=ErrorCode.REQUEST_INVALID,
         )
         _require_identifier(params["task_id"], "params.task_id")
+    elif method is CommandMethod.TRANSCRIPTION_CANCEL_START:
+        _require_fields(
+            params,
+            required={"start_request_id"},
+            field_name="params",
+            code=ErrorCode.REQUEST_INVALID,
+        )
+        _require_identifier(params["start_request_id"], "params.start_request_id")
     elif method is CommandMethod.TRANSCRIPTION_START:
         _validate_transcription_start_params(params)
     return _freeze_json(params, "params")
@@ -477,6 +496,26 @@ def _validate_event_data(event: EventCode, value: Any) -> FrozenJson:
                 "data.method is unsupported",
             ) from exc
         _require_object(data["result"], "data.result")
+    elif event is EventCode.MEDIA_INSPECTION_PROGRESS:
+        _require_fields(data, required={"items", "worker_wait_ms"}, field_name="data")
+        if (
+            type(data["worker_wait_ms"]) not in {float, int}
+            or not math.isfinite(data["worker_wait_ms"])
+            or data["worker_wait_ms"] < 0
+        ):
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE, "data.worker_wait_ms must be nonnegative"
+            )
+        items = data["items"]
+        if not isinstance(items, list) or not 1 <= len(items) <= 32:
+            raise ProtocolValidationError(
+                ErrorCode.PROTOCOL_INVALID_MESSAGE, "data.items must contain 1–32 inspections"
+            )
+        for entry in items:
+            entry = _require_object(entry, "data.items entry")
+            _require_fields(entry, required={"index", "item"}, field_name="data.items entry")
+            _require_nonnegative_int(entry["index"], "data.items entry.index")
+            _require_object(entry["item"], "data.items entry.item")
     elif event is EventCode.MODEL_LOADING:
         _require_fields(data, required={"model_id"}, field_name="data")
         _require_nonempty_string(

@@ -10,6 +10,8 @@ import type {
   ExecutionOptions,
   FinishAction,
   HostStatus,
+  InputInspectionProgress,
+  InputOrigin,
   InputSource,
   ModelId,
   ModelStatus,
@@ -23,6 +25,7 @@ import type {
   PresetId,
   RecognitionStrategy,
   SubtitleParameters,
+  StartTranscriptionOptions,
   TaskSnapshot,
   TranscriptionDraft,
   WorkerEnvironment,
@@ -91,6 +94,15 @@ export { canResumeTask, isAbnormalTask } from './workspaceTaskState';
 
 let outputPreviewRequest = 0;
 let hydrated = false;
+let importSequence = 0;
+
+interface PendingImport {
+  id: string;
+  paths: string[];
+  receivedAt: number;
+  visible: boolean;
+  items: Record<number, InputInspectionProgress>;
+}
 
 const INITIAL_PERFORMANCE: PerformanceSample = {
   source: desktopBridge.mode === 'mock' ? 'mock' : 'worker',
@@ -246,7 +258,7 @@ export interface WorkspaceState {
   setExecutionOptions(options: ExecutionOptions): void;
   inputs: InputSource[];
   draggingMedia: boolean;
-  pendingDrops: string[][];
+  pendingImports: PendingImport[];
   selectedModelId: ModelId;
   selectedPresetId: PresetId;
   profileMode: ProfileMode;
@@ -276,6 +288,11 @@ export interface WorkspaceState {
   clippedLogLines: number;
   lastError: string | null;
   startingTask: boolean;
+  startPreparation: {
+    id: string;
+    phase: 'checking' | 'loading' | 'cancelling';
+    canCancel: boolean;
+  } | null;
   activeView: WorkspaceViewId;
   configurationTab: 'models' | 'parameters';
   openConfiguration(tab: 'models' | 'parameters'): void;
@@ -331,6 +348,8 @@ export interface WorkspaceState {
   addDirectory(): Promise<void>;
   addClipboardPaths(): Promise<void>;
   addDroppedPaths(paths: string[]): Promise<void>;
+  importPaths(paths: string[], origin: InputOrigin): Promise<void>;
+  markImportsVisible(): void;
   chooseOutputDirectory(): Promise<void>;
   selectOutputLocation(mode: 'source' | 'folders'): void;
   removeInput(id: string): void;
@@ -346,6 +365,8 @@ export interface WorkspaceState {
   restorePreset(): void;
   setOutput(patch: Partial<OutputPolicy>): void;
   startTask(): Promise<void>;
+  submitDraft(draft: TranscriptionDraft, options?: StartTranscriptionOptions): Promise<void>;
+  cancelStartPreparation(): Promise<void>;
   cancelTask(taskId: string): Promise<void>;
   revealPath(path: string): Promise<void>;
   revealTaskOutput(taskId: string): Promise<void>;
@@ -378,7 +399,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
   inputs: [],
   draggingMedia: false,
-  pendingDrops: [],
+  pendingImports: [],
   selectedModelId: DEFAULT_MODEL_ID,
   selectedPresetId: 'en_v1',
   profileMode: 'transcript',
@@ -434,6 +455,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   clippedLogLines: 0,
   lastError: null,
   startingTask: false,
+  startPreparation: null,
   activeView: 'workspace',
   configurationTab: 'models',
   openConfiguration: (configurationTab) => set({ configurationTab, activeView: 'configuration' }),
@@ -601,16 +623,14 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   setTaskWorkspaceMode: (taskWorkspaceMode) => set({ taskWorkspaceMode }),
   addFiles: async () => {
     try {
-      const sources = await desktopBridge.selectFiles();
-      set((state) => ({ inputs: mergeUniqueInputs(state.inputs, sources), lastError: null }));
+      await get().importPaths(await desktopBridge.pickInputPaths('file'), 'dialog');
     } catch (error) {
       set({ lastError: errorMessage(error) });
     }
   },
   addDirectory: async () => {
     try {
-      const sources = await desktopBridge.selectDirectory();
-      set((state) => ({ inputs: mergeUniqueInputs(state.inputs, sources), lastError: null }));
+      await get().importPaths(await desktopBridge.pickInputPaths('directory'), 'dialog');
     } catch (error) {
       set({ lastError: errorMessage(error) });
     }
@@ -622,45 +642,79 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       if (paths.length === 0) {
         throw new Error('剪贴板中没有可识别的 Windows 文件或文件夹路径。');
       }
-      const sources = await desktopBridge.inspectPaths(paths, 'paste');
-      set((state) => ({ inputs: mergeUniqueInputs(state.inputs, sources), lastError: null }));
+      await get().importPaths(paths, 'paste');
     } catch (error) {
       set({ lastError: errorMessage(error) });
     }
   },
-  addDroppedPaths: async (paths) => {
-    const { inputs, pendingDrops } = get();
+  addDroppedPaths: async (paths) => get().importPaths(paths, 'drop'),
+  importPaths: async (paths, origin) => {
+    const receivedAt = performance.now();
+    const { inputs, pendingImports } = get();
     const knownPaths = new Set([
       ...inputs.map((input) => input.path.toLocaleLowerCase()),
-      ...pendingDrops.flat().map((path) => path.toLocaleLowerCase()),
+      ...pendingImports.flatMap((batch) => batch.paths.map((path) => path.toLocaleLowerCase())),
     ]);
-    const batch = paths.filter((path) => {
+    const uniquePaths = paths.filter((path) => {
       const key = path.toLocaleLowerCase();
       if (!key || knownPaths.has(key)) return false;
       knownPaths.add(key);
       return true;
     });
-    if (!batch.length) {
-      set({ draggingMedia: false });
+    if (!uniquePaths.length) {
+      if (origin === 'drop') set({ draggingMedia: false });
       return;
     }
-    set({ draggingMedia: false, pendingDrops: [...pendingDrops, batch], lastError: null });
+    const id = `import-${Date.now().toString(36)}-${++importSequence}`;
+    const batch: PendingImport = { id, paths: uniquePaths, receivedAt, visible: false, items: {} };
+    set({ draggingMedia: false, pendingImports: [...pendingImports, batch], lastError: null });
 
     let inspected: InputSource[] = [];
     let failure: string | undefined;
     try {
-      inspected = await desktopBridge.inspectPaths(batch, 'drop');
+      inspected = await desktopBridge.inspectPaths(uniquePaths, origin, {
+        importId: id,
+        onProgress: (progress) =>
+          set((state) => ({
+            pendingImports: state.pendingImports.map((pending) =>
+              pending.id === id
+                ? { ...pending, items: { ...pending.items, [progress.index]: progress } }
+                : pending,
+            ),
+          })),
+      });
     } catch (error) {
-      failure = `无法添加拖入的媒体：${errorMessage(error)}`;
+      failure = `无法检查媒体：${errorMessage(error)}`;
     }
+    const pending = get().pendingImports.find((entry) => entry.id === id);
+    if (!pending) return;
+    get().handleEvent({
+      type: 'worker.log',
+      line: `[IMPORT] ${id} · web complete · ${Math.round(performance.now() - receivedAt)} ms · ${inspected.filter((item) => item.valid).length}/${inspected.length} · ${failure ? 'failed' : origin}`,
+    });
     set((state) => {
-      if (!state.pendingDrops.includes(batch)) return state;
       return {
-        pendingDrops: state.pendingDrops.filter((pending) => pending !== batch),
+        pendingImports: state.pendingImports.filter((entry) => entry.id !== id),
         inputs: mergeUniqueInputs(state.inputs, inspected),
         ...(failure === undefined ? {} : { lastError: failure }),
       };
     });
+  },
+  markImportsVisible: () => {
+    const committed = get().pendingImports.filter((batch) => !batch.visible);
+    if (committed.length === 0) return;
+    const now = performance.now();
+    set((state) => ({
+      pendingImports: state.pendingImports.map((batch) =>
+        batch.visible ? batch : { ...batch, visible: true },
+      ),
+    }));
+    for (const batch of committed) {
+      get().handleEvent({
+        type: 'worker.log',
+        line: `[IMPORT] ${batch.id} · web feedback commit · ${Math.round(now - batch.receivedAt)} ms · ${batch.paths.length} inputs`,
+      });
+    }
   },
   chooseOutputDirectory: async () => {
     try {
@@ -696,7 +750,22 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     persistLater(get);
   },
   removeInput: (id) => set((state) => ({ inputs: state.inputs.filter((item) => item.id !== id) })),
-  clearInputs: () => set({ inputs: [], pendingDrops: [] }),
+  clearInputs: () => {
+    const batches = get().pendingImports;
+    set({ inputs: [], pendingImports: [] });
+    for (const { id, receivedAt } of batches) {
+      get().handleEvent({
+        type: 'worker.log',
+        line: `[IMPORT] ${id} · web removed/requested cancellation · ${Math.round(performance.now() - receivedAt)} ms`,
+      });
+      void desktopBridge.cancelInputInspection(id).catch((error: unknown) => {
+        get().handleEvent({
+          type: 'worker.log',
+          line: `[IMPORT] ${id} · cancel command failed · ${errorMessage(error)}`,
+        });
+      });
+    }
+  },
   selectModel: (modelId) => {
     const state = get();
     set({
@@ -846,11 +915,34 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }));
     persistLater(get);
   },
+  submitDraft: async (draft, options = {}) => {
+    try {
+      await desktopBridge.startTranscription(draft, {
+        ...options,
+        onPreparation: (id, phase, canCancel) =>
+          set({ startPreparation: { id, phase, canCancel } }),
+      });
+    } finally {
+      set({ startPreparation: null });
+    }
+  },
+  cancelStartPreparation: async () => {
+    const preparation = get().startPreparation;
+    if (!preparation?.canCancel || preparation.phase === 'cancelling') return;
+    set({ startPreparation: { ...preparation, phase: 'cancelling' } });
+    try {
+      if (await desktopBridge.cancelStart(preparation.id)) return;
+    } catch (error) {
+      if (get().startPreparation?.id === preparation.id) set({ lastError: errorMessage(error) });
+    }
+    if (get().startPreparation?.id === preparation.id) set({ startPreparation: preparation });
+  },
   startTask: async () => {
+    const clickedAt = performance.now();
     const state = get();
     if (
       state.inputs.length === 0 ||
-      state.pendingDrops.length > 0 ||
+      state.pendingImports.length > 0 ||
       state.startingTask ||
       state.pendingOverwrite ||
       state.pendingShutdownStart
@@ -909,7 +1001,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         set({ pendingShutdownStart: { draft }, lastError: null });
         return;
       }
-      await desktopBridge.startTranscription(draft);
+      await get().submitDraft(draft, { clickedAt });
       set((current) => ({
         inputs: current.inputs.filter((input) => !draft.inputs.includes(input)),
         finishAction: current.finishAction === state.finishAction ? 'none' : current.finishAction,
@@ -937,11 +1029,12 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
   },
   confirmShutdownStart: async () => {
+    const clickedAt = performance.now();
     const pending = get().pendingShutdownStart;
     if (pending === null || get().startingTask) return;
     set({ startingTask: true, shutdownArmed: true, lastError: null });
     try {
-      await desktopBridge.startTranscription(pending.draft, { finishAction: 'shutdown' });
+      await get().submitDraft(pending.draft, { finishAction: 'shutdown', clickedAt });
       set({
         pendingShutdownStart: null,
         inputs: get().inputs.filter((input) => !pending.draft.inputs.includes(input)),
@@ -977,6 +1070,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
   cancelShutdownStart: () => set({ pendingShutdownStart: null }),
   confirmOverwrite: async () => {
+    const clickedAt = performance.now();
     const pending = get().pendingOverwrite;
     if (pending === null || get().startingTask) return;
     const armsShutdown = pending.finishAction === 'shutdown';
@@ -986,10 +1080,11 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       lastError: null,
     });
     try {
-      await desktopBridge.startTranscription(pending.draft, {
+      await get().submitDraft(pending.draft, {
         allowOverwrite: pending.mode === 'overwrite',
         skipConflicts: pending.mode === 'skip',
         finishAction: pending.finishAction,
+        clickedAt,
       });
       set({
         pendingOverwrite: null,
@@ -1220,6 +1315,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
   },
   resumeTask: async (taskId) => {
+    const clickedAt = performance.now();
     if (get().startingTask || get().pendingOverwrite || get().pendingShutdownStart) return;
     const task = get().tasks.find((item) => item.id === taskId);
     if (task?.draft === undefined || !canResumeTask(task)) {
@@ -1273,7 +1369,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         throw new Error('待继续媒体中的一个或多个输入路径已失效。');
       }
       resumeDraft = { ...resumeDraftSnapshot, inputs };
-      await desktopBridge.startTranscription(resumeDraft);
+      await get().submitDraft(resumeDraft, { clickedAt });
       set({ activeView: 'performance', selectedTaskId: null, finishAction: 'none' });
     } catch (error) {
       const conflict = outputConflictDetails(error);

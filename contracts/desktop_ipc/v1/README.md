@@ -67,6 +67,25 @@ Schema source of truth: [`desktop_ipc.schema.json`](desktop_ipc.schema.json).
 - `transcription.cancel`
 - `worker.shutdown`
 
+`transcription.cancel_start` is an optional preparation control. The Host uses it only after `system.health` reports `start_cancellation_version: 1`. It takes `start_request_id` and acknowledges whether the Worker registered cancellation. The original start request still resolves with `task.queued` if it has already been admitted, or a `request.invalid` error with `data.exception: "StartCancelled"` once an accepted cancellation reaches a safe boundary. Older Workers continue the original start flow. This capability is advertised in the extensible health result so older strict `worker.ready` decoders can connect to newer Workers.
+
+`system.health` may report `media_inspection_version: 1`. A matching Host may
+then send `media.inspect` with `progressive: true`. That request yields
+`media.inspection_progress` events containing indexed items in completion
+order, followed by the existing `command.completed` with items in input
+order. Diagnostics on these items include `error_code`, `cache_hit`,
+`queue_ms` (relative to the start of media inspection in the Worker) and
+`elapsed_ms` (including file identity checks and container probing). The
+Worker also reports its queue wait and total inspection time separately.
+
+`media.cancel_inspection` takes `inspection_request_id` and acknowledges
+whether cancellation was registered. The original request still completes
+after its active checks stop. Timeout and cancellation discard the running
+probe child before that slot can start another child. The optional command
+and event are absent from the strict legacy `worker.ready` capabilities.
+Hosts that do not negotiate this capability keep the original
+`media.inspect` shape and final-only response.
+
 ### `system.metrics` result
 
 `system.metrics` remains a read-only command with empty parameters. Its

@@ -23,10 +23,12 @@
         "system.environment",
         "system.metrics",
         "media.inspect",
+        "media.cancel_inspection",
         "model.load",
         "model.unload",
         "transcription.start",
         "transcription.cancel",
+        "transcription.cancel_start",
         "worker.shutdown"
       ]
     },
@@ -35,6 +37,7 @@
       "enum": [
         "worker.ready",
         "command.completed",
+        "media.inspection_progress",
         "model.loading",
         "model.ready",
         "task.queued",
@@ -787,7 +790,16 @@
           "type": "array",
           "minItems": 1,
           "items": { "type": "string", "minLength": 1 }
-        }
+        },
+        "progressive": { "type": "boolean" }
+      }
+    },
+    "MediaCancelInspectionParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inspection_request_id"],
+      "properties": {
+        "inspection_request_id": { "$ref": "#/$defs/Identifier" }
       }
     },
     "ModelLoadParams": {
@@ -845,12 +857,29 @@
           "then": { "properties": { "params": { "$ref": "#/$defs/MediaInspectParams" } } }
         },
         {
+          "if": { "properties": { "method": { "const": "media.cancel_inspection" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/MediaCancelInspectionParams" } } }
+        },
+        {
           "if": { "properties": { "method": { "const": "transcription.start" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/TranscriptionStartParams" } } }
         },
         {
           "if": { "properties": { "method": { "const": "transcription.cancel" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/TranscriptionCancelParams" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "transcription.cancel_start" } } },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["start_request_id"],
+                "properties": { "start_request_id": { "$ref": "#/$defs/Identifier" } }
+              }
+            }
+          }
         }
       ]
     },
@@ -893,6 +922,28 @@
           "then": { "properties": { "result": { "$ref": "#/$defs/EnvironmentResult" } } }
         }
       ]
+    },
+    "MediaInspectionProgressData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "worker_wait_ms"],
+      "properties": {
+        "worker_wait_ms": { "type": "number", "minimum": 0 },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["index", "item"],
+            "properties": {
+              "index": { "type": "integer", "minimum": 0 },
+              "item": { "type": "object" }
+            }
+          }
+        }
+      }
     },
     "ModelLoadingData": {
       "type": "object",
@@ -1228,6 +1279,13 @@
           "then": {
             "required": ["request_id"],
             "properties": { "data": { "$ref": "#/$defs/CommandCompletedData" } }
+          }
+        },
+        {
+          "if": { "properties": { "event": { "const": "media.inspection_progress" } } },
+          "then": {
+            "required": ["request_id"],
+            "properties": { "data": { "$ref": "#/$defs/MediaInspectionProgressData" } }
           }
         },
         {

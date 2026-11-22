@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from typing import TYPE_CHECKING
 
@@ -15,9 +16,22 @@ from .task import WorkerTask
 if TYPE_CHECKING:
     from .runtime import WorkerRuntime
 
+
 def execute_task(runtime: "WorkerRuntime", task: WorkerTask) -> None:
     task.state = "running"
     task.started_at_monotonic = time.monotonic()
+
+    def report_timing(timing: dict) -> None:
+        runtime._logger.info("timing %s", json.dumps({
+            "stage": "transcription.file",
+            "request_id": task.request_id,
+            "task_id": task.task_id,
+            "device": task.hardware.device,
+            "device_index": task.hardware.device_index,
+            "compute_type": task.hardware.compute_type,
+            **timing,
+        }, separators=(",", ":")))
+
     try:
         runtime._emit_progress(
             task,
@@ -54,6 +68,7 @@ def execute_task(runtime: "WorkerRuntime", task: WorkerTask) -> None:
             service = TranscriptionService(
                 progress=runtime._progress_adapter(task),
                 cancelled=task.cancel.is_set,
+                timing=report_timing,
             )
             success_count = 0
             failure_count = 0
@@ -146,3 +161,12 @@ def execute_task(runtime: "WorkerRuntime", task: WorkerTask) -> None:
     except Exception as exc:
         runtime._logger.exception("unhandled task failure for %s", task.task_id)
         runtime._emit_failed(task, ErrorCode.TRANSCRIPTION_FAILED, exc)
+    finally:
+        runtime._logger.info("timing %s", json.dumps({
+            "stage": "transcription.task",
+            "request_id": task.request_id,
+            "task_id": task.task_id,
+            "state": task.state,
+            "file_count": len(task.media_paths),
+            "execution_seconds": time.monotonic() - task.started_at_monotonic,
+        }, separators=(",", ":")))

@@ -135,8 +135,14 @@ describe('workspace task integrity', () => {
 
     const stale = useWorkspace.getState().addDroppedPaths([source.path, source.path.toLowerCase()]);
     await useWorkspace.getState().addDroppedPaths([source.path.toUpperCase()]);
-    expect(inspect).toHaveBeenCalledExactlyOnceWith([source.path], 'drop');
-    expect(useWorkspace.getState().pendingDrops).toEqual([[source.path]]);
+    expect(inspect).toHaveBeenCalledExactlyOnceWith(
+      [source.path],
+      'drop',
+      expect.objectContaining({ importId: expect.any(String) }),
+    );
+    expect(useWorkspace.getState().pendingImports.map((batch) => batch.paths)).toEqual([
+      [source.path],
+    ]);
     useWorkspace.getState().clearInputs();
     const current = useWorkspace.getState().addDroppedPaths([source.path]);
     currentCheck.resolve([source]);
@@ -145,8 +151,50 @@ describe('workspace task integrity', () => {
     await stale;
     await useWorkspace.getState().addDroppedPaths([source.path]);
     expect(inspect).toHaveBeenCalledTimes(2);
-    expect(useWorkspace.getState().pendingDrops).toEqual([]);
+    expect(useWorkspace.getState().pendingImports).toEqual([]);
     expect(useWorkspace.getState().inputs).toEqual([source]);
+  });
+
+  it('keeps a cancelled preparation out of the task history and retains its draft', async () => {
+    const state = useWorkspace.getState();
+    const source = {
+      id: 'pending',
+      path: 'C:\\Media\\待转录 #.wav',
+      kind: 'file' as const,
+      origin: 'drop' as const,
+      valid: true,
+    };
+    const worker = deferred<void>();
+    const registered = deferred<void>();
+    vi.spyOn(desktopBridge, 'listLocalModels').mockResolvedValue([
+      { id: state.selectedModelId, installed: true } as LocalModelDescriptor,
+    ]);
+    vi.spyOn(desktopBridge, 'startTranscription').mockImplementation(async (_draft, options) => {
+      options?.onPreparation?.('start-test', 'loading', true);
+      registered.resolve();
+      await worker.promise;
+      throw new Error('启动准备已取消。');
+    });
+    const cancel = vi.spyOn(desktopBridge, 'cancelStart').mockResolvedValue(true);
+    useWorkspace.setState({
+      inputs: [source],
+      hostStatus: { state: 'ready', pid: 1, launchKind: 'mock', error: null },
+    });
+    const start = useWorkspace.getState().startTask();
+    await registered.promise;
+    await useWorkspace.getState().cancelStartPreparation();
+    expect(cancel).toHaveBeenCalledWith('start-test');
+    expect(useWorkspace.getState().startPreparation).toMatchObject({ phase: 'cancelling' });
+    expect(useWorkspace.getState().startingTask).toBe(true);
+    worker.resolve();
+    await start;
+    expect(useWorkspace.getState()).toMatchObject({
+      startPreparation: null,
+      startingTask: false,
+      inputs: [source],
+      tasks: [TASK],
+      lastError: '启动准备已取消。',
+    });
   });
 
   it('does not let duplicate queue or late progress events resurrect or select a terminal task', () => {

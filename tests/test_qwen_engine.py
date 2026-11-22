@@ -8,10 +8,11 @@ import pytest
 
 from whisper_subtitle.domain.backend_parameters import qwen_defaults
 from whisper_subtitle.domain.execution import HardwareInfo
-from whisper_subtitle.domain.transcription import TranscriptionInfo
-from whisper_subtitle.infrastructure.qwen_engine import QwenASREngine
+from whisper_subtitle.domain.transcription import InferenceTimings, TranscriptionInfo
+from whisper_subtitle.infrastructure.qwen_engine import QwenASREngine, QwenTokenLimitError
 from whisper_subtitle.infrastructure import torch_hardware
 from whisper_subtitle.domain.transcription import TranscriptionCancelled
+from tests.benchmark.run_qwen_window_benchmark import QwenMicrobatchExperiment
 
 
 def test_torch_loader_initializes_shared_cuda_before_import(monkeypatch):
@@ -31,7 +32,7 @@ class Inputs(dict):
         return self
 
 
-def make_engine(*, generated=(11, 2), language="Chinese", cpu_threads=2):
+def make_engine(*, generated=(11, 2), language="Chinese", cpu_threads=2, engine_type=QwenASREngine):
     threads = SimpleNamespace(value=8)
     torch = SimpleNamespace(
         get_num_threads=lambda: threads.value,
@@ -47,7 +48,7 @@ def make_engine(*, generated=(11, 2), language="Chinese", cpu_threads=2):
         generation_config=SimpleNamespace(eos_token_id=2),
         generate=lambda **kw: np.array([[1, 3, *generated]]),
     )
-    engine = QwenASREngine(
+    engine = engine_type(
         model, processor, hardware=HardwareInfo("cpu", "float32", False, None, None, cpu_threads),
         location=None, model_name="qwen3-asr-0.6b", torch=torch, transformers=None,
     )
@@ -66,6 +67,58 @@ def test_generation_truncation_is_not_silently_accepted():
     engine, _ = make_engine(generated=(11, 12))
     with pytest.raises(ValueError, match="token"):
         engine._recognize_chunk([], dict(qwen_defaults(), max_new_tokens=2), None)
+
+
+def test_microbatch_keeps_only_valid_rows_when_another_hits_the_budget():
+    class DeviceTensor(np.ndarray):
+        def cpu(self):
+            return self
+
+    engine, _ = make_engine(engine_type=QwenMicrobatchExperiment)
+    engine._processor.apply_transcription_request = lambda **kwargs: Inputs(input_ids=np.array([[0, 1], [1, 3]]))
+    engine._model.generate = lambda **kwargs: np.array([[0, 1, 11, 2, 2], [1, 3, 12, 13, 14]]).view(DeviceTensor)
+    engine._processor.decode = lambda generated, **kwargs: [{
+        "transcription": "valid" if generated.tolist() == [[11, 2]] else "unexpected", "language": "English",
+    }]
+    timings = InferenceTimings()
+    good, truncated = engine._recognize_batch([np.zeros(3), np.zeros(7)],
+                                               dict(qwen_defaults(), max_new_tokens=3), None,
+                                               cancelled=None, timings=timings)
+    assert good == ("valid", "English", "en")
+    assert isinstance(truncated, QwenTokenLimitError)
+    assert timings.generation_calls == 1
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_microbatch_cancellation_or_oom_preserves_serial_fallback_boundary(monkeypatch, cancelled):
+    engine, _ = make_engine(engine_type=QwenMicrobatchExperiment)
+    engine.batch_size = 2
+    monkeypatch.setattr(engine, "_speech_windows", lambda *args: iter([(0, 16000), (16000, 48000)]))
+
+    def fail_batch(*args, **kwargs):
+        if cancelled:
+            raise TranscriptionCancelled("cancelled")
+        raise RuntimeError("simulated CUDA allocation failure")
+
+    monkeypatch.setattr(engine, "_recognize_batch", fail_batch)
+    serial = []
+    original = engine._recognize_chunk
+
+    def observe_serial(chunk, *args, **kwargs):
+        serial.append(len(chunk))
+        return original(chunk, *args, **kwargs)
+
+    monkeypatch.setattr(engine, "_recognize_chunk", observe_serial)
+    segments = engine._segments(np.zeros(48000), qwen_defaults(), TranscriptionInfo(3, inference_timings=InferenceTimings()))
+    if cancelled:
+        with pytest.raises(TranscriptionCancelled):
+            next(segments)
+        assert serial == []
+        assert engine.fallback_count == 0
+    else:
+        assert [(segment.start, segment.end) for segment in segments] == [(0, 1), (1, 3)]
+        assert serial == [16000, 32000]
+        assert engine.fallback_count == 1
 
 
 @pytest.mark.parametrize("failure", [None, "recognition", "alignment"])
@@ -203,7 +256,8 @@ def test_token_retry_preserves_samples_order_offsets_alignment_and_prompt(monkey
         return (TranscribedWord(offset, offset + duration, text),)
 
     monkeypatch.setattr(engine, "_align_chunk", align)
-    info = TranscriptionInfo(end / 16000)
+    timings = InferenceTimings()
+    info = TranscriptionInfo(end / 16000, inference_timings=timings)
     params = dict(qwen_defaults(), max_new_tokens=3, word_timestamps=True,
                   initial_prompt="context", hotwords="Kojima")
     iterator = engine._segments(np.arange(end), params, info)
@@ -222,6 +276,15 @@ def test_token_retry_preserves_samples_order_offsets_alignment_and_prompt(monkey
         (s.start, s.end - s.start) for s in segments]
     np.testing.assert_array_equal(np.concatenate([chunk for chunk, _, _ in aligned]), np.arange(start, end))
     assert [(s.words[0].start, s.words[0].end) for s in segments] == [(s.start, s.end) for s in segments]
+    assert timings.window_count == 1
+    assert timings.selected_window_seconds == (end - start) / 16000
+    assert timings.generation_calls == 3
+    assert timings.token_retry_count == 1
+    assert timings.alignment_retry_count == 0
+    assert set(timings.stage_seconds) == {
+        "vad_and_window_selection", "prepare_inputs", "first_generate_host", "later_generate_host",
+        "decode_generated", "alignment", "retry_attempts",
+    }
     assert threads.value == 8
 
 

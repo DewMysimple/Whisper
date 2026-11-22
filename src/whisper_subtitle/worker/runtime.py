@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import platform
@@ -50,14 +51,15 @@ from .runtime_types import (
     _default_engine_loader,
 )
 from .media import (
-    default_media_duration_probe,
     expand_input_sources,
     normalize_input_path,
     path_key,
 )
+from .media_inspector import Inspection, MediaInspector
 from .model_cache import ModelCache
 from .task import WorkerTask
 from .task_execution import execute_task
+from .build_identity import WORKER_BUILD
 
 
 _PROGRESS_STAGE_MAP = {
@@ -99,7 +101,7 @@ class WorkerRuntime:
         hardware_capabilities_probe: HardwareCapabilitiesProbe | None = None,
         engine_loader: EngineLoader = _default_engine_loader,
         performance_sampler: PerformanceSampler | None = None,
-        media_duration_probe: MediaDurationProbe = default_media_duration_probe,
+        media_duration_probe: MediaDurationProbe | None = None,
     ) -> None:
         self._emit = emit
         self._check_environment = environment_checker
@@ -113,15 +115,13 @@ class WorkerRuntime:
         self._performance_sampler = (
             self._performance_monitor if performance_sampler is None else performance_sampler
         )
-        self._media_duration_probe = media_duration_probe
-        self._media_duration_cache: dict[
-            str, tuple[int, int, tuple[bool, float | None, str | None]]
-        ] = {}
+        self._media_inspector = MediaInspector(media_duration_probe)
         self._hardware_capabilities = hardware_capabilities_probe
         self._condition = threading.Condition()
         self._queue: deque[WorkerTask] = deque()
         self._tasks: dict[str, WorkerTask] = {}
         self._request_ids: set[str] = set()
+        self._preparing: dict[str, tuple[threading.Event, float]] = {}
         self._reserved_output_paths: dict[str, int] = {}
         self._active_task: WorkerTask | None = None
         self._stopping = False
@@ -178,11 +178,14 @@ class WorkerRuntime:
         hardware = self._model_cache.hardware
         return {
             "status": "ok",
+            "start_cancellation_version": 1,
+            "worker_build": WORKER_BUILD,
             "worker_state": state,
             "active_task_id": active_task_id,
             "queued_count": queued_count,
             "model_loaded": self._model_cache.loaded,
             "model_id": self._model_cache.model_id,
+            "media_inspection_version": 1,
             "hardware": (
                 {
                     "device": hardware.device,
@@ -221,23 +224,20 @@ class WorkerRuntime:
             return False
         if command.method is CommandMethod.MEDIA_INSPECT:
             paths = tuple(Path(str(value)) for value in command.params["paths"])
-            inspections = self._inspect_media_paths(paths)
-            self._complete_command(
-                command,
-                {
+            if command.params.get("progressive") is True:
+                self._inspect_media_progressively(command, paths)
+            else:
+                inspections = self._media_inspector.inspect(paths)
+                self._complete_command(command, {
                     "items": [
-                        {
-                            "path": str(path),
-                            "readable": readable,
-                            "duration_seconds": duration,
-                            "error": error,
-                        }
-                        for path, (readable, duration, error) in zip(
-                            paths, inspections, strict=True
-                        )
-                    ]
-                },
-            )
+                        inspection.payload(path, diagnostics=False)
+                        for path, inspection in zip(paths, inspections, strict=True)
+                    ],
+                })
+            return False
+        if command.method is CommandMethod.MEDIA_CANCEL_INSPECTION:
+            accepted = self._media_inspector.cancel(str(command.params["inspection_request_id"]))
+            self._complete_command(command, {"accepted": accepted})
             return False
 
         with self._condition:
@@ -263,7 +263,15 @@ class WorkerRuntime:
             self._complete_command(command, {"unloaded": unloaded})
             return False
         if command.method is CommandMethod.TRANSCRIPTION_START:
-            self._start_task(command)
+            cancel, received_at = self.register_start(command.request_id)
+            try:
+                self._start_task(command, cancel, received_at)
+            finally:
+                with self._condition:
+                    self._preparing.pop(command.request_id, None)
+            return False
+        if command.method is CommandMethod.TRANSCRIPTION_CANCEL_START:
+            self.cancel_start(command)
             return False
         if command.method is CommandMethod.TRANSCRIPTION_CANCEL:
             self._cancel_task(command)
@@ -277,32 +285,100 @@ class WorkerRuntime:
             f"unsupported worker command: {command.method.value}",
         )
 
-    def _inspect_media_paths(
-        self, paths: Sequence[Path]
-    ) -> tuple[tuple[bool, float | None, str | None], ...]:
-        inspections: list[tuple[bool, float | None, str | None]] = []
-        for path in paths:
-            try:
-                resolved = path.resolve(strict=True)
-                stat = resolved.stat()
-            except OSError as exc:
-                inspections.append((False, None, str(exc)))
-                continue
-            key = str(resolved).casefold()
-            cached = self._media_duration_cache.get(key)
-            if cached is not None and cached[0] == stat.st_size and cached[1] == stat.st_mtime_ns:
-                inspections.append(cached[2])
-                continue
-            result = self._media_duration_probe(resolved)
-            readable, duration, error = result
-            if duration is not None:
-                duration = max(0.0, float(duration))
-            normalized = (bool(readable), duration, error)
-            self._media_duration_cache[key] = (stat.st_size, stat.st_mtime_ns, normalized)
-            inspections.append(normalized)
-        return tuple(inspections)
+    def _inspect_media_progressively(self, command: CommandMessage, paths: tuple[Path, ...]) -> None:
+        received = time.monotonic()
 
-    def _start_task(self, command: CommandMessage) -> None:
+        def inspect(cancel: threading.Event) -> None:
+            began = time.monotonic()
+            wait_ms = (began - received) * 1000
+            batch: list[dict[str, Any]] = []
+            last_update = 0.0
+
+            def flush(now: float) -> None:
+                nonlocal last_update
+                self._emit(EventMessage(
+                    EventCode.MEDIA_INSPECTION_PROGRESS,
+                    {"items": batch, "worker_wait_ms": wait_ms},
+                    request_id=command.request_id,
+                ))
+                batch.clear()
+                last_update = now
+
+            def progress(index: int, entry: Inspection) -> None:
+                batch.append({"index": index, "item": entry.payload(paths[index], diagnostics=True)})
+                now = time.monotonic()
+                if now - last_update >= 0.04 or len(batch) >= 32:
+                    flush(now)
+
+            def flush_pending() -> None:
+                if batch:
+                    flush(time.monotonic())
+
+            try:
+                inspected = self._media_inspector.inspect(paths, cancel, progress, flush_pending)
+                if not cancel.is_set():
+                    flush_pending()
+                self._complete_command(command, {
+                    "items": [
+                        event.payload(path, diagnostics=True)
+                        for path, event in zip(paths, inspected, strict=True)
+                    ],
+                    "worker_wait_ms": wait_ms,
+                    "worker_elapsed_ms": (time.monotonic() - began) * 1000,
+                    "cancelled": cancel.is_set(),
+                })
+            except Exception as exc:
+                self._logger.exception("media inspection failed")
+                self._emit(ErrorMessage(
+                    ErrorCode.WORKER_INTERNAL,
+                    request_id=command.request_id,
+                    message=str(exc) or type(exc).__name__,
+                ))
+
+        if not self._media_inspector.submit(command.request_id, inspect):
+            raise WorkerCommandError(ErrorCode.WORKER_BUSY, "too many pending media inspections")
+
+    def _inspect_media_paths(
+        self, paths: Sequence[Path], cancel: threading.Event | None = None
+    ) -> tuple[tuple[bool, float | None, str | None], ...]:
+        return tuple(
+            (entry.result.readable, entry.result.duration, entry.result.error)
+            for entry in self._media_inspector.inspect(paths, cancel)
+        )
+
+    def register_start(self, request_id: str) -> tuple[threading.Event, float]:
+        with self._condition:
+            pending = self._preparing.get(request_id)
+            if pending is None:
+                pending = (threading.Event(), time.monotonic())
+                self._preparing[request_id] = pending
+            return pending
+
+    def cancel_start(self, command: CommandMessage) -> None:
+        target = str(command.params["start_request_id"])
+        with self._condition:
+            pending = self._preparing.get(target)
+            accepted = pending is not None and target not in self._request_ids
+            if accepted and pending is not None:
+                pending[0].set()
+        self._complete_command(command, {"accepted": accepted, "start_request_id": target})
+
+    @staticmethod
+    def _check_start_cancel(cancel: threading.Event) -> None:
+        if cancel.is_set():
+            raise WorkerCommandError(
+                ErrorCode.REQUEST_INVALID,
+                "启动准备已取消。",
+                data={"exception": "StartCancelled"},
+            )
+
+    def _log_start(self, request_id: str, phase: str, **details: Any) -> None:
+        self._logger.info("[START] %s", json.dumps({"request_id": request_id, "phase": phase, **details}))
+
+    def _start_task(self, command: CommandMessage, cancel: threading.Event, received_at: float) -> None:
+        self._check_start_cancel(cancel)
+        began = time.monotonic()
+        self._log_start(command.request_id, "worker_validation", command_wait_ms=round((began - received_at) * 1000, 2))
         model_id = str(command.params.get("model_id") or DEFAULT_MODEL_NAME)
         profile = command.params["profile"]
         try:
@@ -369,7 +445,11 @@ class WorkerRuntime:
                 data={"exception": type(exc).__name__},
             ) from exc
 
-        media_inspections = self._inspect_media_paths(media_paths)
+        self._check_start_cancel(cancel)
+        planning_finished = time.monotonic()
+        media_inspections = self._inspect_media_paths(media_paths, cancel)
+        self._check_start_cancel(cancel)
+        inspected_at = time.monotonic()
         unreadable = [
             (path, error)
             for path, (readable, _duration, error) in zip(
@@ -393,7 +473,7 @@ class WorkerRuntime:
         )
 
         # The Windows process must perform the first faster-whisper/CTranslate2
-        # lazy import and model initialization on the stdin command thread.
+        # lazy import and model initialization on the main command thread.
         # Loading a model for the first time from the dispatcher while this
         # thread blocks on the next stdin line can deadlock some runtimes.
         with self._condition:
@@ -429,6 +509,7 @@ class WorkerRuntime:
             skipped_media=skipped_media,
         )
         with self._condition:
+            self._check_start_cancel(cancel)
             if command.request_id in self._request_ids:
                 raise WorkerCommandError(
                     ErrorCode.TASK_CONFLICT,
@@ -442,6 +523,7 @@ class WorkerRuntime:
             position = len(self._queue) + (1 if self._active_task else 0)
             self._request_ids.add(command.request_id)
             self._tasks[task.task_id] = task
+            task.queued_at_monotonic = time.monotonic()
             self._queue.append(task)
             for plan in task.output_plans:
                 for path in plan.content_paths:
@@ -449,6 +531,20 @@ class WorkerRuntime:
                     self._reserved_output_paths[key] = (
                         self._reserved_output_paths.get(key, 0) + 1
                     )
+            self._log_start(
+                command.request_id, "queued", task_id=task.task_id,
+                planning_ms=round((planning_finished - began) * 1000, 2),
+                input_inspection_ms=round((inspected_at - planning_finished) * 1000, 2),
+                model_preparation_ms=round((task.queued_at_monotonic - inspected_at) * 1000, 2),
+                worker_preparation_ms=round((task.queued_at_monotonic - received_at) * 1000, 2),
+                files=len(task.media_paths),
+                known_media_seconds=sum(d for d in media_durations_seconds if d is not None),
+                unknown_duration_count=media_durations_seconds.count(None),
+                model=model_id, device=hardware.device, compute_type=hardware.compute_type,
+                device_index=hardware.device_index, cpu_threads=hardware.cpu_threads,
+                parameters={k: v for k, v in task.preset.transcription_options().items()
+                            if k not in {"hotwords", "initial_prompt", "prefix"}},
+            )
             self._emit(
                 EventMessage(
                     EventCode.TASK_QUEUED,
@@ -626,6 +722,9 @@ class WorkerRuntime:
                 task = self._queue.popleft()
                 self._active_task = task
             try:
+                if task.queued_at_monotonic is not None:
+                    self._log_start(task.request_id, "execution", task_id=task.task_id,
+                                    queue_ms=round((time.monotonic() - task.queued_at_monotonic) * 1000, 2))
                 self._execute_task(task)
             finally:
                 with self._condition:
@@ -660,6 +759,7 @@ class WorkerRuntime:
             self._condition.notify_all()
         for task in queued:
             self._emit_cancelled(task, reason)
+        self._media_inspector.stop()
 
     def wait_until_idle(self, timeout: float = 5.0) -> bool:
         deadline = time.monotonic() + timeout
@@ -679,8 +779,11 @@ class WorkerRuntime:
             try:
                 self._model_cache.close()
             finally:
-                if self._performance_monitor is not None:
-                    self._performance_monitor.close()
+                try:
+                    self._media_inspector.close()
+                finally:
+                    if self._performance_monitor is not None:
+                        self._performance_monitor.close()
         return stopped
 
     def command_error(
@@ -703,8 +806,16 @@ def worker_ready_event() -> EventMessage:
         {
             "pid": os.getpid(),
             "capabilities": {
-                "methods": [method.value for method in CommandMethod],
-                "events": [event.value for event in EventCode],
+                # Older strict v1 readers can still start this Worker. Optional
+                # inspection features are negotiated via system.health.
+                "methods": [
+                    method.value for method in CommandMethod
+                    if method not in {CommandMethod.MEDIA_CANCEL_INSPECTION, CommandMethod.TRANSCRIPTION_CANCEL_START}
+                ],
+                "events": [
+                    event.value for event in EventCode
+                    if event is not EventCode.MEDIA_INSPECTION_PROGRESS
+                ],
             },
         },
         message="Worker ready",

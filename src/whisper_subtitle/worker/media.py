@@ -11,32 +11,6 @@ from ..protocol import ErrorCode
 from .runtime_types import WorkerCommandError
 
 
-def default_media_duration_probe(
-    path: Path,
-) -> tuple[bool, float | None, str | None]:
-    """Read container metadata through the PyAV runtime bundled with the Worker."""
-    try:
-        import av
-
-        with av.open(str(path), mode="r") as container:
-            duration: float | None = None
-            if container.duration is not None and container.duration > 0:
-                duration = float(container.duration) / float(av.time_base)
-            if duration is None:
-                stream_durations = [
-                    float(stream.duration * stream.time_base)
-                    for stream in container.streams
-                    if stream.duration is not None
-                    and stream.time_base is not None
-                    and stream.duration > 0
-                ]
-                if stream_durations:
-                    duration = max(stream_durations)
-        return True, duration, None
-    except Exception as exc:
-        return False, None, str(exc) or type(exc).__name__
-
-
 def normalize_input_path(value: str) -> Path:
     """Normalize one structured path without shell parsing or tokenization."""
     normalized = value.strip()

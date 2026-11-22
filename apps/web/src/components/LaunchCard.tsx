@@ -17,6 +17,7 @@ import { useWorkspace } from '../state/workspace';
 import { CardButton } from './CardButton';
 import { Button } from './Button';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useStartPreparation } from './useStartPreparation';
 
 function durationChecklistLabel(knownSeconds: number, unknownCount: number): string {
   const roundedSeconds = Math.max(0, Math.round(knownSeconds));
@@ -51,7 +52,7 @@ function focusChecklistTarget(panelSelector: string, controlSelector: string): v
 
 export function LaunchCard() {
   const inputs = useWorkspace((state) => state.inputs);
-  const checkingDroppedMedia = useWorkspace((state) => state.pendingDrops.length > 0);
+  const checkingMedia = useWorkspace((state) => state.pendingImports.length > 0);
   const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
   const overrides = useWorkspace((state) => state.overrides);
   const parameters = useWorkspace((state) => state.parameters);
@@ -59,6 +60,7 @@ export function LaunchCard() {
   const clearInputs = useWorkspace((state) => state.clearInputs);
   const hostStatus = useWorkspace((state) => state.hostStatus);
   const startingTask = useWorkspace((state) => state.startingTask);
+  const preparation = useStartPreparation();
   const output = useWorkspace((state) => state.output);
   const profileMode = useWorkspace((state) => state.profileMode);
   const activeView = useWorkspace((state) => state.activeView);
@@ -83,7 +85,7 @@ export function LaunchCard() {
     !needsOutputRoot &&
     hasOutputTarget &&
     hostStatus.state === 'ready' &&
-    !checkingDroppedMedia &&
+    !checkingMedia &&
     !startingTask &&
     pendingOverwrite === null &&
     pendingShutdownStart === null;
@@ -101,25 +103,34 @@ export function LaunchCard() {
     : output.mode === 'source'
       ? '跟随每个媒体文件'
       : '媒体旁的分类文件夹';
+  const presetSummary = `${preset.label}${Object.keys(overrides).length > 0 ? ' · 自定义参数' : ''}`;
+  const modelSummary = `${getModelLabel(selectedModelId)} · 本地离线处理`;
+  const mediaSummary = `${inputs.length} 项输入来源 · ${durationChecklist}`;
+  const conflictPolicyLabel = CONFLICT_POLICY_LABEL[output.conflictPolicy];
+  const executionLabel = transcriptionTaskLabel(parameters.task);
+  const finishActionLabel = finishAction === 'shutdown' ? '完成后关机' : '完成后无操作';
   const checklistPending = pendingOverwrite !== null || pendingShutdownStart !== null;
   const checklistStatus = startingTask
-    ? '正在准备'
-    : checkingDroppedMedia
+    ? preparation.label
+    : checkingMedia
       ? '正在检查媒体'
       : checklistPending
         ? '等待确认'
         : canStart
           ? '可以执行'
           : '待补充';
-  const readinessMessage = needsOutputRoot
-    ? '还需选择真实输出目录，完成后即可执行。'
-    : hasInvalidInput
-      ? '输入中存在无效路径，请先在清单中处理。'
-      : inputs.length === 0
-        ? null
-        : hostStatus.state !== 'ready'
-          ? `${HOST_STATUS_LABEL[hostStatus.state]}，暂时无法执行任务。`
-          : null;
+  const readinessMessage =
+    startingTask || checkingMedia
+      ? null
+      : needsOutputRoot
+        ? '还需选择真实输出目录，完成后即可执行。'
+        : hasInvalidInput
+          ? '输入中存在无效路径，请先在清单中处理。'
+          : inputs.length === 0
+            ? null
+            : hostStatus.state !== 'ready'
+              ? `${HOST_STATUS_LABEL[hostStatus.state]}，暂时无法执行任务。`
+              : null;
 
   const requestStart = useCallback(() => {
     if (!canStart) return;
@@ -179,20 +190,33 @@ export function LaunchCard() {
         <div className="panel-heading launch-heading">
           <p className="step-label">PRE-FLIGHT</p>
           <div className="launch-heading-actions">
-            {(inputs.length > 0 || checkingDroppedMedia) && (
+            {preparation?.canCancel ? (
               <button
-                aria-label={
-                  checkingDroppedMedia
-                    ? '清除任务清单和正在检查的媒体'
-                    : `清除任务清单中的 ${mediaCount} 个媒体文件`
-                }
+                aria-label="取消转录准备"
                 className="preflight-clear"
-                onClick={clearInputs}
-                title="只清空当前任务清单，不删除本机媒体文件"
+                disabled={preparation.cancelling}
+                onClick={preparation.cancel}
+                title="取消请求在模型加载结束后的安全边界处理"
                 type="button"
               >
-                <Trash2 size={14} /> 清除
+                <Trash2 size={14} /> 取消
               </button>
+            ) : (
+              (inputs.length > 0 || checkingMedia) && (
+                <button
+                  aria-label={
+                    checkingMedia
+                      ? '清除任务清单和正在检查的媒体'
+                      : `清除任务清单中的 ${mediaCount} 个媒体文件`
+                  }
+                  className="preflight-clear"
+                  onClick={clearInputs}
+                  title="只清空当前任务清单，不删除本机媒体文件"
+                  type="button"
+                >
+                  <Trash2 size={14} /> 清除
+                </button>
+              )
             )}
             <span className={`preflight-status ${canStart ? 'is-ready' : ''}`}>
               {canStart ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
@@ -200,15 +224,16 @@ export function LaunchCard() {
             </span>
           </div>
           <h2 id="launch-title">
-            {checkingDroppedMedia
-              ? '任务清单'
-              : inputs.length > 0
-                ? '任务清单已就绪'
+            {canStart
+              ? '任务清单已就绪'
+              : inputs.length > 0 || checkingMedia
+                ? '任务清单'
                 : '等待输入来源'}
           </h2>
         </div>
         <div aria-label="执行前清单" className="preflight-list">
           <CardButton
+            aria-description={`${presetSummary}，${modelSummary}`}
             aria-label="前往版本与模型配置"
             className="preflight-item"
             onClick={openProfileConfiguration}
@@ -219,15 +244,15 @@ export function LaunchCard() {
             </span>
             <div className="preflight-copy">
               <span className="preflight-key">版本与模型</span>
-              <strong>
-                {preset.label}
-                {Object.keys(overrides).length > 0 ? ' · 自定义参数' : ''}
-              </strong>
-              <small>{getModelLabel(selectedModelId)} · 本地离线处理</small>
+              <strong>{presetSummary}</strong>
+              <small>
+                <span className="preflight-multiline">{modelSummary}</span>
+              </small>
             </div>
           </CardButton>
 
           <CardButton
+            aria-description={`${mediaCount} 个媒体，${mediaSummary}`}
             aria-label="前往输入来源配置"
             className={`preflight-item ${inputs.length === 0 || hasInvalidInput ? 'needs-attention' : ''}`}
             onClick={() =>
@@ -242,12 +267,13 @@ export function LaunchCard() {
               <span className="preflight-key">媒体信息</span>
               <strong>{mediaCount} 个媒体</strong>
               <small>
-                {inputs.length} 项输入来源 · {durationChecklist}
+                <span className="preflight-multiline">{mediaSummary}</span>
               </small>
             </div>
           </CardButton>
 
           <CardButton
+            aria-description={`${outputSummary || '尚未选择输出格式'}，${outputLocationLabel}，${conflictPolicyLabel}`}
             aria-label="前往输出策略配置"
             className={`preflight-item ${needsOutputRoot || !hasOutputTarget ? 'needs-attention' : ''}`}
             onClick={() =>
@@ -264,16 +290,26 @@ export function LaunchCard() {
             <div className="preflight-copy">
               <span className="preflight-key">输出策略</span>
               <strong>{outputSummary || '尚未选择输出格式'}</strong>
-              <small
-                className={`preflight-detail-lines ${usesCustomOutput ? 'preflight-path' : ''}`}
-              >
-                <span>{outputLocationLabel}</span>
-                <span>{CONFLICT_POLICY_LABEL[output.conflictPolicy]}</span>
+              <small>
+                <span className="preflight-detail-lines preflight-output-details">
+                  <span
+                    className="preflight-multiline"
+                    title={
+                      output.rootDirectory !== null && usesCustomOutput
+                        ? outputLocationLabel
+                        : undefined
+                    }
+                  >
+                    {outputLocationLabel}
+                  </span>
+                  <span className="preflight-conflict-policy">{conflictPolicyLabel}</span>
+                </span>
               </small>
             </div>
           </CardButton>
 
           <CardButton
+            aria-description={`${executionLabel}，${finishActionLabel}，${HOST_STATUS_LABEL[hostStatus.state]}`}
             aria-label="前往执行方式配置"
             className={`preflight-item ${hostStatus.state !== 'ready' ? 'needs-attention' : ''}`}
             onClick={() =>
@@ -293,10 +329,12 @@ export function LaunchCard() {
             </span>
             <div className="preflight-copy">
               <span className="preflight-key">执行方式</span>
-              <strong>{transcriptionTaskLabel(parameters.task)}</strong>
-              <small className="preflight-detail-lines">
-                <span>{finishAction === 'shutdown' ? '完成后关机' : '完成后无操作'}</span>
-                <span>{HOST_STATUS_LABEL[hostStatus.state]}</span>
+              <strong>{executionLabel}</strong>
+              <small>
+                <span className="preflight-detail-lines preflight-execution-details">
+                  <span className="preflight-finish-action">{finishActionLabel}</span>
+                  <span className="preflight-multiline">{HOST_STATUS_LABEL[hostStatus.state]}</span>
+                </span>
               </small>
             </div>
           </CardButton>
@@ -335,7 +373,7 @@ export function LaunchCard() {
                 <Play fill="currentColor" size={15} />
               </span>
               {startingTask
-                ? '正在准备本地模型…'
+                ? `${preparation.label}…`
                 : profileMode === 'subtitle'
                   ? `开始生成 ${outputSummary}`
                   : '开始本地转录'}
@@ -361,6 +399,8 @@ export function LaunchCard() {
         onConfirm={() => void confirmPresetStart()}
         open={presetConfirmationOpen}
         pending={startingTask}
+        pendingLabel={`${preparation.label}…`}
+        onPendingCancel={preparation.cancel}
         title="确认使用标准转录版本"
       >
         <dl>

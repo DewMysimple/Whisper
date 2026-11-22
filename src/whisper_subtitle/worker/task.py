@@ -29,4 +29,5 @@ class WorkerTask:
     recognition_strategy: str = "stable_primary"
     cancel: threading.Event = field(default_factory=threading.Event)
     state: str = "queued"
+    queued_at_monotonic: float | None = None
     started_at_monotonic: float | None = None

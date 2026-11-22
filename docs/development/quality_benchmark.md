@@ -35,6 +35,24 @@ Windows 控制台运行既有后端验收时先设置 `$env:PYTHONIOENCODING='ut
 
 ## 独立性能探测
 
+`python -m tests.benchmark.run_media_inspection_benchmark --baseline-worker <旧Worker.exe> --worker-executable <新Worker.exe>`
+交替测量两版 Worker 的 stdio 往返。每版启动 30 个新进程，每次使用 5.32263 秒中文 WAV 及 32 份不同路径的副本。采集 Worker 就绪、首个容器检查、同进程缓存命中、批内首项和整批完成时间。两版共享操作系统文件缓存。记录原始样本，按 30 次门槛报告 P95。省略候选 EXE 参数可测源码，结果需注明物料类型。指令也测量探测子进程已启动时一个与两个并发槽的耗时。该基准的时钟从发出 Worker 命令起算，窗口反馈与 Host 路径发现需要分别测量。
+
+使用相同中文夹具测相邻任务的准备、首段进度和完整交付。每轮运行会启动一个新 Worker，默认由首任务加载模型，随后任务验证驻留复用及相同 golden。可加 `--preload` 单独计时预先加载同一模型的成本。支持启动取消的 Worker 可用 `--cancel-first-start` 核对取消确认、加载安全边界和后续模型复用。使用 `--worker-executable` 指定保留的基线 Worker，在同一台机器上交替测量基线和候选，每次使用新的输出目录。
+
+```powershell
+python -m tests.benchmark.run_worker_gpu_validation --model-dir models/huggingface --model-id qwen3-asr-1.7b --repeat-cn 2 --output-dir tests/benchmark/runs/task-timing-after
+```
+
+`request_to_observed_event_seconds` 从发送启动命令算起，包含调用方至 Worker 的传输时间。`task.queued` 表示真实受理，`first_segment_progress` 是首次收到非零媒体片段进度。新 Worker 另在 stderr 中记录每个成功文件的 `transcription.file`，以请求和任务 ID 关联。`first_nonempty_segment_seconds` 从调用推理引擎到第一段非空文本交给应用层，`inference_seconds` 包含解码、VAD、推理、对齐和实际执行的二次识别。`inference_rtf` 用该值除以已知媒体时长。`retry_attempts` 与生成、对齐耗时重叠，`audio_decode` 和 `alignment` 分别含调用内触发的依赖或对齐模型首次加载。Qwen 的 `first_generate_host` 和 `later_generate_host` 是生成调用的主机墙钟时间，生成结果的解析与剩余回读计入 `decode_generated`。`selected_window_seconds` 含 VAD 留白，关闭 VAD 时覆盖整个媒体。
+
+小批量试验以同一个驻留 Qwen 实例交替运行 1／2／4，在每次完整文件测量的两端同步 CUDA，记录显存峰值、文本参考误差和输出哈希。生成语料来自仓库原有 WAV 的重复组合，`--srt` 打开真实对齐并汇总字幕结构。桌面和 CLI 使用串行窗。
+
+```powershell
+python -m tests.benchmark.run_qwen_window_benchmark --model-dir models/huggingface --output-dir tests/benchmark/runs/qwen-windows-txt
+python -m tests.benchmark.run_qwen_window_benchmark --model-dir models/huggingface --fixture mandarin --repeat-fixture 8 --runs-per-batch 1 --srt --output-dir tests/benchmark/runs/qwen-windows-srt
+```
+
 `python -m tests.benchmark.run_decode_benchmark --output-dir tests/benchmark/runs/<new-decode-run>`
 生成30／60／180分钟零PCM，在独立进程测生产解码的数组大小和峰值RSS；不加载识别模型，不能代替真实长语音、VAD或时间轴验收。
 

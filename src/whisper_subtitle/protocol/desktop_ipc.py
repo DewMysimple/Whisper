@@ -28,16 +28,19 @@ class CommandMethod(str, Enum):
     SYSTEM_ENVIRONMENT = "system.environment"
     SYSTEM_METRICS = "system.metrics"
     MEDIA_INSPECT = "media.inspect"
+    MEDIA_CANCEL_INSPECTION = "media.cancel_inspection"
     MODEL_LOAD = "model.load"
     MODEL_UNLOAD = "model.unload"
     TRANSCRIPTION_START = "transcription.start"
     TRANSCRIPTION_CANCEL = "transcription.cancel"
+    TRANSCRIPTION_CANCEL_START = "transcription.cancel_start"
     WORKER_SHUTDOWN = "worker.shutdown"
 
 
 class EventCode(str, Enum):
     WORKER_READY = "worker.ready"
     COMMAND_COMPLETED = "command.completed"
+    MEDIA_INSPECTION_PROGRESS = "media.inspection_progress"
     MODEL_LOADING = "model.loading"
     MODEL_READY = "model.ready"
     TASK_QUEUED = "task.queued"
@@ -255,10 +258,10 @@ class EventMessage:
                 ErrorCode.PROTOCOL_INVALID_MESSAGE,
                 "task.queued requires request_id",
             )
-        if event is EventCode.COMMAND_COMPLETED and request_id is None:
+        if event in {EventCode.COMMAND_COMPLETED, EventCode.MEDIA_INSPECTION_PROGRESS} and request_id is None:
             raise ProtocolValidationError(
                 ErrorCode.PROTOCOL_INVALID_MESSAGE,
-                "command.completed requires request_id",
+                f"{event.value} requires request_id",
             )
         object.__setattr__(self, "request_id", request_id)
         object.__setattr__(self, "task_id", task_id)
