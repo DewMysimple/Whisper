@@ -38,6 +38,8 @@ Windows 控制台运行既有后端验收时先设置 `$env:PYTHONIOENCODING='ut
 `python -m tests.benchmark.run_media_inspection_benchmark --baseline-worker <旧Worker.exe> --worker-executable <新Worker.exe>`
 交替测量两版 Worker 的 stdio 往返。每版启动 30 个新进程，每次使用 5.32263 秒中文 WAV 及 32 份不同路径的副本。采集 Worker 就绪、首个容器检查、同进程缓存命中、批内首项和整批完成时间。两版共享操作系统文件缓存。记录原始样本，按 30 次门槛报告 P95。省略候选 EXE 参数可测源码，结果需注明物料类型。指令也测量探测子进程已启动时一个与两个并发槽的耗时。该基准的时钟从发出 Worker 命令起算，窗口反馈与 Host 路径发现需要分别测量。
 
+桌面日志以导入 ID 关联 Host 和 Worker。Host 的 `path_check_ms` 累计顶层路径元数据检查，`directory_walk_ms` 累计递归遍历，`directory_sort_ms` 累计各目录的排序。`discovery_ms` 还包括准备来源数据和发出进度事件。`worker_elapsed_ms` 记录 Worker 批次检查时钟，`max_probe_ms` 记录最慢单项，两者与 Host 的 `ipc_ms` 所覆盖的时间重叠。
+
 使用相同中文夹具测相邻任务的准备、首段进度和完整交付。每轮运行会启动一个新 Worker，默认由首任务加载模型，随后任务验证驻留复用及相同 golden。可加 `--preload` 单独计时预先加载同一模型的成本。支持启动取消的 Worker 可用 `--cancel-first-start` 核对取消确认、加载安全边界和后续模型复用。使用 `--worker-executable` 指定保留的基线 Worker，在同一台机器上交替测量基线和候选，每次使用新的输出目录。
 
 ```powershell

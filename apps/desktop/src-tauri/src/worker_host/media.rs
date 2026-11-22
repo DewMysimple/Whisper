@@ -5,7 +5,7 @@ use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -71,7 +71,26 @@ fn collect_directory_media(
 
 #[cfg(test)]
 pub fn inspect_input_paths(paths: Vec<String>, origin: String) -> Vec<InspectedInput> {
-    discover_input_paths(paths, origin, &AtomicBool::new(false), |_, _| {})
+    discover_input_paths(paths, origin, &AtomicBool::new(false), |_, _| {}).0
+}
+
+#[derive(Default)]
+struct DiscoveryTimings {
+    path_check: Duration,
+    directory_walk: Duration,
+    directory_sort: Duration,
+}
+
+impl DiscoveryTimings {
+    fn log_fields(&self, total: Duration) -> String {
+        format!(
+            "discovery_ms={:.2} path_check_ms={:.2} directory_walk_ms={:.2} directory_sort_ms={:.2}",
+            total.as_secs_f64() * 1000.0,
+            self.path_check.as_secs_f64() * 1000.0,
+            self.directory_walk.as_secs_f64() * 1000.0,
+            self.directory_sort.as_secs_f64() * 1000.0,
+        )
+    }
 }
 
 fn discover_input_paths(
@@ -79,29 +98,36 @@ fn discover_input_paths(
     origin: String,
     cancelled: &AtomicBool,
     mut progress: impl FnMut(usize, &InspectedInput),
-) -> Vec<InspectedInput> {
+) -> (Vec<InspectedInput>, DiscoveryTimings) {
     let normalized_origin = if matches!(origin.as_str(), "dialog" | "drop" | "paste" | "manual") {
         origin
     } else {
         "manual".to_owned()
     };
-    paths
+    let mut timings = DiscoveryTimings::default();
+    let inputs = paths
         .into_iter()
         .enumerate()
         .take_while(|_| !cancelled.load(Ordering::Acquire))
         .map(|(index, raw)| {
             let path = strip_one_pair_of_quotes(raw.trim());
             let target = Path::new(path);
-            let input = match std::fs::metadata(target) {
+            let path_check = Instant::now();
+            let metadata = std::fs::metadata(target);
+            timings.path_check += path_check.elapsed();
+            let input = match metadata {
                 Ok(metadata) if metadata.is_dir() || metadata.is_file() => {
                     let mut media_paths = Vec::new();
                     let (kind, result) = if metadata.is_dir() {
-                        let result = collect_directory_media(target, &mut media_paths, cancelled)
-                            .map(|()| {
-                                media_paths.sort_by_cached_key(|entry| {
-                                    entry.to_string_lossy().to_lowercase()
-                                });
-                            });
+                        let walk = Instant::now();
+                        let result = collect_directory_media(target, &mut media_paths, cancelled);
+                        timings.directory_walk += walk.elapsed();
+                        if result.is_ok() {
+                            let sort = Instant::now();
+                            media_paths
+                                .sort_by_cached_key(|entry| entry.to_string_lossy().to_lowercase());
+                            timings.directory_sort += sort.elapsed();
+                        }
                         ("directory", result)
                     } else {
                         if is_supported_media(target) {
@@ -184,7 +210,8 @@ fn discover_input_paths(
             progress(index, &input);
             input
         })
-        .collect()
+        .collect();
+    (inputs, timings)
 }
 
 fn discovery_error_code(error: &Error) -> &'static str {
@@ -370,10 +397,10 @@ impl WorkerManager {
         let began = Instant::now();
         let send = Arc::new(send);
         let discover = Arc::clone(&send);
-        let mut inputs = discover_input_paths(paths, origin, &cancel, |index, input| {
+        let (mut inputs, timings) = discover_input_paths(paths, origin, &cancel, |index, input| {
             emit_progress(&*discover, index, input, 0, !input.valid);
         });
-        let discovery_ms = began.elapsed().as_secs_f64() * 1000.0;
+        let discovery = timings.log_fields(began.elapsed());
         let media_paths = inputs
             .iter()
             .flat_map(|input| input.media_paths.iter().cloned())
@@ -385,7 +412,7 @@ impl WorkerManager {
                 "no_media"
             };
             self.push_log(format!(
-                "[IMPORT {import_id}] {status} · request_id={request_id} discovery_ms={discovery_ms:.2}"
+                "[IMPORT {import_id}] {status} · request_id={request_id} {discovery}"
             ));
             return Ok(inputs);
         }
@@ -393,7 +420,7 @@ impl WorkerManager {
         let ipc_began = Instant::now();
         if cancel.load(Ordering::Acquire) {
             self.push_log(format!(
-                "[IMPORT {import_id}] cancelled · request_id={request_id} discovery_ms={discovery_ms:.2}"
+                "[IMPORT {import_id}] cancelled · request_id={request_id} {discovery}"
             ));
             return Ok(inputs);
         }
@@ -482,7 +509,7 @@ impl WorkerManager {
             let worker_wait = data["worker_wait_ms"].as_f64();
             let worker_elapsed = data["worker_elapsed_ms"].as_f64();
             self.push_log(format!(
-                "[IMPORT {import_id}] {} · request_id={request_id} files={} hits={hits} errors={errors} discovery_ms={discovery_ms:.2} ipc_ms={ipc_ms:.2} total_ms={total_ms:.2} worker_wait_ms={worker_wait:?} worker_elapsed_ms={worker_elapsed:?} max_probe_ms={slowest:.2} max_probe_queue_ms={latest_start:.2}",
+                "[IMPORT {import_id}] {} · request_id={request_id} files={} hits={hits} errors={errors} {discovery} ipc_ms={ipc_ms:.2} total_ms={total_ms:.2} worker_wait_ms={worker_wait:?} worker_elapsed_ms={worker_elapsed:?} max_probe_ms={slowest:.2} max_probe_queue_ms={latest_start:.2}",
                 if cancel.load(Ordering::Acquire) { "cancelled" } else { "complete" },
                 items.len(),
             ));
@@ -490,7 +517,7 @@ impl WorkerManager {
         });
         if let Err(error) = report {
             self.push_log(format!(
-                "[IMPORT {import_id}] {} · request_id={request_id} discovery_ms={discovery_ms:.2} ipc_ms={ipc_ms:.2} total_ms={total_ms:.2}",
+                "[IMPORT {import_id}] {} · request_id={request_id} {discovery} ipc_ms={ipc_ms:.2} total_ms={total_ms:.2}",
                 error.code,
             ));
             for input in &mut inputs {

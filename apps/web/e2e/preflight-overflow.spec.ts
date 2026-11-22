@@ -1,14 +1,32 @@
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { INTERFACE_SIZE_PRESETS } from '../src/state/appearancePreferences';
+
+test.use({ launchOptions: { ignoreDefaultArgs: ['--hide-scrollbars'] } });
 
 const longChinesePath = `D:\\字幕项目\\${'同一访谈项目的归档和转录输出\\'.repeat(14)}校对稿`;
 const longEnglishPath = `D:\\${'UnbrokenEnglishDirectoryName'.repeat(15)}`;
 
-function readGeometry(panel: Locator) {
-  return panel.evaluate((element) => {
+async function selectCustomOutput(page: Page) {
+  await page.getByRole('button', { name: '自定义', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem('whisper-subtitle.preview-state.v1') ?? '{}').preferences
+            ?.output.mode,
+      ),
+    )
+    .toBe('custom');
+}
+
+function readGeometry(panel: Locator, showNativeScrollbar = false) {
+  return panel.evaluate((element, showScrollbar) => {
+    const scroller = element.querySelector<HTMLElement>('.launch-unified')!;
+    const previousOverflow = scroller.style.overflowY;
+    if (showScrollbar) scroller.style.overflowY = 'scroll';
     const origin = element.getBoundingClientRect();
-    return Array.from(
+    const geometry = Array.from(
       element.querySelectorAll(
         '.launch-heading, .preflight-status, .preflight-item, .preflight-icon, .preflight-key, .launch-action-dock, .preflight-sources-link, .launch-submit',
       ),
@@ -19,7 +37,9 @@ function readGeometry(panel: Locator) {
         );
       },
     );
-  });
+    scroller.style.overflowY = previousOverflow;
+    return geometry;
+  }, showNativeScrollbar);
 }
 
 const configurations = [
@@ -61,16 +81,7 @@ for (const { name, fonts, width, localWidth, path, minLines } of configurations)
   test(`fits preflight text within the fixed cards (${name})`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: '自定义', exact: true }).click();
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () =>
-            JSON.parse(localStorage.getItem('whisper-subtitle.preview-state.v1') ?? '{}')
-              .preferences?.output.mode,
-        ),
-      )
-      .toBe('custom');
+    await selectCustomOutput(page);
 
     const panel = page.locator('.launch-card');
     const checklist = page.getByLabel('执行前清单');
@@ -102,8 +113,9 @@ for (const { name, fonts, width, localWidth, path, minLines } of configurations)
 
     await applyPath('D:\\字幕');
     const before = await readGeometry(panel);
+    const beforeWithScrollbar = await readGeometry(panel, true);
     await applyPath(path);
-    expect(await readGeometry(panel)).toEqual(before);
+    expect([before, beforeWithScrollbar]).toContainEqual(await readGeometry(panel));
     await expect(outputPath).toHaveAttribute('title', path);
     await expect(output).toHaveAccessibleDescription(`TXT，${path}，覆盖`);
     const pathLayout = await outputPath.evaluate((element) => {
@@ -170,3 +182,50 @@ for (const { name, fonts, width, localWidth, path, minLines } of configurations)
     });
   });
 }
+
+test('keeps the scrollbar width only where the former wrapping needed it', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.route('**/*.css', async (route) => {
+    const response = await route.fetch();
+    // Give the headless browser a non-overlay scrollbar like the packaged WebView.
+    const classicScrollbar = `
+      .launch-unified { scrollbar-width: auto; }
+      .launch-unified::-webkit-scrollbar { width: 10px; }
+    `;
+    await route.fulfill({ response, body: (await response.text()) + classicScrollbar });
+  });
+  await page.goto('/');
+  await selectCustomOutput(page);
+  const panel = page.locator('.launch-card');
+  const scroller = panel.locator('.launch-unified');
+  const pathText = panel.locator('.preflight-output-details .preflight-multiline');
+  const readOverflow = () => scroller.evaluate((item) => item.scrollHeight - item.clientHeight);
+  const showPath = async (directory: string) => {
+    await page.evaluate((path) => {
+      const key = 'whisper-subtitle.preview-state.v1';
+      const saved = JSON.parse(localStorage.getItem(key)!);
+      saved.preferences.output.rootDirectory = path;
+      localStorage.setItem(key, JSON.stringify(saved));
+    }, directory);
+    await page.reload();
+    await expect(pathText).toHaveText(directory);
+  };
+
+  const normalGeometry = await readGeometry(panel);
+  const previousOverflowGeometry = await readGeometry(panel, true);
+  expect(previousOverflowGeometry).not.toEqual(normalGeometry);
+  await showPath(`D:\\${'UnbrokenEnglishDirectoryName'.repeat(3)}`);
+  expect(await readGeometry(panel)).toEqual(normalGeometry);
+  expect(await pathText.evaluate((item) => item.scrollHeight > item.clientHeight)).toBe(true);
+
+  await showPath(longChinesePath);
+  await expect(scroller).toHaveCSS('scrollbar-gutter', 'stable');
+  expect(await readGeometry(panel)).toEqual(previousOverflowGeometry);
+  expect(await readOverflow()).toBe(0);
+  await expect(panel.locator('.preflight-conflict-policy')).toBeVisible();
+
+  await page.getByRole('button', { name: '跟随', exact: true }).click();
+  await expect(scroller).toHaveCSS('scrollbar-gutter', 'auto');
+  expect(await readGeometry(panel)).toEqual(normalGeometry);
+  expect(await readOverflow()).toBe(0);
+});

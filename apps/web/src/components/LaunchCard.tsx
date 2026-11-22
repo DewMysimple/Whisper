@@ -8,7 +8,7 @@ import {
   Settings2,
   Trash2,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { getPreset, transcriptionTaskLabel } from '../data/presets';
 import { getModelLabel } from '../data/models';
@@ -50,7 +50,38 @@ function focusChecklistTarget(panelSelector: string, controlSelector: string): v
   panel.querySelector<HTMLElement>(controlSelector)?.focus({ preventScroll: true });
 }
 
+function preserveChecklistScrollbarSpace(panel: HTMLDivElement): void {
+  const { width, height } = panel.getBoundingClientRect();
+  if (!width || !height) return;
+
+  const text = panel.querySelectorAll(
+    '.preflight-key, .preflight-copy strong, .preflight-multiline',
+  );
+  const isClamped = Array.from(text).some(
+    (item) => item.scrollWidth > item.clientWidth || item.scrollHeight > item.clientHeight,
+  );
+  if (!isClamped) {
+    panel.removeAttribute('data-checklist-scrollbar');
+    return;
+  }
+
+  // Let the native scrollbar measure the original wrapping at the full panel width.
+  const probe = panel.cloneNode(true) as HTMLDivElement;
+  probe.inert = true;
+  probe.setAttribute('aria-hidden', 'true');
+  probe.removeAttribute('data-checklist-scrollbar');
+  probe.classList.add('preflight-overflow-measure');
+  probe.style.inlineSize = `${width}px`;
+  probe.style.blockSize = `${height}px`;
+  probe.querySelectorAll('[id]').forEach((element) => element.removeAttribute('id'));
+  panel.after(probe);
+  const needsSpace = probe.offsetWidth > probe.clientWidth;
+  probe.remove();
+  panel.toggleAttribute('data-checklist-scrollbar', needsSpace);
+}
+
 export function LaunchCard() {
+  const launchPanel = useRef<HTMLDivElement>(null);
   const inputs = useWorkspace((state) => state.inputs);
   const checkingMedia = useWorkspace((state) => state.pendingImports.length > 0);
   const selectedPresetId = useWorkspace((state) => state.selectedPresetId);
@@ -132,6 +163,22 @@ export function LaunchCard() {
               ? `${HOST_STATUS_LABEL[hostStatus.state]}，暂时无法执行任务。`
               : null;
 
+  useLayoutEffect(() => {
+    const panel = launchPanel.current;
+    if (panel === null || typeof ResizeObserver === 'undefined') return;
+    const update = () => preserveChecklistScrollbarSpace(panel);
+    update();
+    const size = new ResizeObserver(update);
+    const text = new MutationObserver(update);
+    size.observe(panel, { box: 'border-box' });
+    text.observe(panel, { childList: true, characterData: true, subtree: true });
+    text.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    return () => {
+      size.disconnect();
+      text.disconnect();
+    };
+  }, []);
+
   const requestStart = useCallback(() => {
     if (!canStart) return;
     if (needsPresetConfirmation) {
@@ -186,7 +233,7 @@ export function LaunchCard() {
 
   return (
     <section className="launch-card" aria-labelledby="launch-title">
-      <div className="launch-unified">
+      <div className="launch-unified" ref={launchPanel}>
         <div className="panel-heading launch-heading">
           <p className="step-label">PRE-FLIGHT</p>
           <div className="launch-heading-actions">

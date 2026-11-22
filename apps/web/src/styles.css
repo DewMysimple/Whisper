@@ -4841,6 +4841,18 @@ output,
   scrollbar-width: thin;
 }
 
+.launch-unified[data-checklist-scrollbar] {
+  scrollbar-gutter: stable;
+}
+
+.preflight-overflow-measure {
+  position: absolute;
+  inset: 0 auto auto 0;
+  min-height: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .view-content:not(.is-home) .launch-card .launch-heading {
   margin-bottom: 0;
 }
@@ -5022,6 +5034,28 @@ output,
 
 .preflight-conflict-policy {
   white-space: nowrap;
+}
+
+.preflight-overflow-measure .preflight-copy {
+  align-self: start;
+}
+
+.preflight-overflow-measure .preflight-key,
+.preflight-overflow-measure .preflight-copy strong,
+.preflight-overflow-measure .preflight-finish-action {
+  overflow: visible;
+  white-space: normal;
+}
+
+.preflight-overflow-measure .preflight-copy small {
+  min-block-size: 0;
+  container: none;
+}
+
+.preflight-overflow-measure .preflight-multiline {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
 }
 
 /* The smallest preset has room for one detail line within the unchanged card. */
