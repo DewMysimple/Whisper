@@ -49,66 +49,67 @@ export function SourcePanel() {
         }`}
         role="group"
       >
-        <div className="source-intake-copy">
-          <strong role="status">
-            {dragActive
-              ? '松开以添加本地媒体'
-              : pendingCount > 0
-                ? `正在检查 ${pendingCount} 项媒体来源…`
-                : '添加本地媒体'}
-          </strong>
-          <span>
-            {desktopBridge.mode === 'tauri'
-              ? '可选择文件、递归扫描文件夹，或直接拖入窗口'
-              : '可选择文件或递归扫描文件夹'}
-          </span>
+        <div className="source-intake">
+          <div className="source-intake-copy">
+            <strong role="status">
+              {dragActive
+                ? '松开以添加本地媒体'
+                : pendingCount > 0
+                  ? `正在检查 ${pendingCount} 项媒体来源…`
+                  : '添加本地媒体'}
+            </strong>
+            <span>
+              {desktopBridge.mode === 'tauri'
+                ? '可选择文件、递归扫描文件夹，或直接拖入窗口'
+                : '可选择文件或递归扫描文件夹'}
+            </span>
+          </div>
+          <div className="source-actions" aria-label="添加输入来源">
+            <button
+              className="source-action-button is-primary"
+              onClick={() => void addFiles()}
+              type="button"
+            >
+              <FileAudio aria-hidden="true" size={17} />
+              <span>选择媒体文件</span>
+            </button>
+            <button
+              className="source-action-button"
+              onClick={() => void addDirectory()}
+              type="button"
+            >
+              <FolderOpen aria-hidden="true" size={17} />
+              <span>添加文件夹</span>
+            </button>
+          </div>
         </div>
-        <div className="source-actions" aria-label="添加输入来源">
-          <button
-            className="source-action-button is-primary"
-            onClick={() => void addFiles()}
-            type="button"
-          >
-            <FileAudio aria-hidden="true" size={17} />
-            <span>选择媒体文件</span>
-          </button>
-          <button
-            className="source-action-button"
-            onClick={() => void addDirectory()}
-            type="button"
-          >
-            <FolderOpen aria-hidden="true" size={17} />
-            <span>添加文件夹</span>
-          </button>
-        </div>
+        {pending.length > 0 && (
+          <ul className="source-import-list" aria-label="媒体检查进度">
+            {pending.flatMap((batch) =>
+              batch.paths.map((path, index) => {
+                const update = batch.items[index];
+                const item = update?.item;
+                const label =
+                  update?.phase === 'inspected' && item
+                    ? item.valid
+                      ? `可转录 · ${item.durationSeconds === undefined ? '时长未知' : formatMediaDuration(item.durationSeconds)}`
+                      : (item.detail ?? '检查失败')
+                    : item?.kind === 'directory'
+                      ? `检查中 · ${update?.checkedCount ?? 0}/${item.mediaCount ?? 0}`
+                      : update
+                        ? '检查中 · 读取时长'
+                        : '已收到 · 正在发现';
+                return (
+                  <li key={`${batch.id}-${index}`}>
+                    <span title={path}>{path.split(/[\\/]/).filter(Boolean).at(-1) ?? path}</span>
+                    <small title={label}>{label}</small>
+                  </li>
+                );
+              }),
+            )}
+          </ul>
+        )}
       </div>
-
-      {pending.length > 0 && (
-        <ul className="source-import-list" aria-label="媒体检查进度">
-          {pending.flatMap((batch) =>
-            batch.paths.map((path, index) => {
-              const update = batch.items[index];
-              const item = update?.item;
-              const label =
-                update?.phase === 'inspected' && item
-                  ? item.valid
-                    ? `可转录 · ${item.durationSeconds === undefined ? '时长未知' : formatMediaDuration(item.durationSeconds)}`
-                    : (item.detail ?? '检查失败')
-                  : item?.kind === 'directory'
-                    ? `检查中 · ${update?.checkedCount ?? 0}/${item.mediaCount ?? 0}`
-                    : update
-                      ? '检查中 · 读取时长'
-                      : '已收到 · 正在发现';
-              return (
-                <li key={`${batch.id}-${index}`}>
-                  <span title={path}>{path.split(/[\\/]/).filter(Boolean).at(-1) ?? path}</span>
-                  <small title={label}>{label}</small>
-                </li>
-              );
-            }),
-          )}
-        </ul>
-      )}
 
       <WorkspaceEntryCard
         className="clipboard-intake"

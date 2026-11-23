@@ -3568,13 +3568,21 @@ textarea:focus {
 /* Batch 15: compact intake, guarded actions and a readable local diagnostics bench. */
 .view-content:not(.is-home) .source-panel .drop-zone,
 .view-content:not(.is-home) .source-panel .drop-zone.has-inputs {
-  display: flex;
+  display: grid;
   min-height: 124px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(22px, 1fr) auto minmax(22px, 1fr);
+  padding: 0 22px;
+  border-radius: 15px;
+}
+
+.source-intake {
+  display: flex;
+  min-width: 0;
+  grid-row: 2;
   align-items: center;
   justify-content: space-between;
   gap: 22px;
-  padding: 22px;
-  border-radius: 15px;
 }
 
 .source-panel {
@@ -3742,8 +3750,7 @@ textarea:focus {
 }
 
 @media (max-width: 760px) {
-  .view-content:not(.is-home) .source-panel .drop-zone,
-  .view-content:not(.is-home) .source-panel .drop-zone.has-inputs {
+  .source-intake {
     align-items: stretch;
     flex-direction: column;
   }
@@ -4799,7 +4806,6 @@ output,
 
 .launch-card {
   height: auto;
-  align-self: start;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--text) 8%, var(--border));
   background: var(--surface-raised);
@@ -5074,7 +5080,9 @@ output,
 .launch-action-dock {
   display: grid;
   min-width: 0;
+  flex: 1;
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
   gap: var(--space-1);
   margin-top: var(--space-3);
 }

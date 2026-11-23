@@ -135,7 +135,7 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   const transcript = await measure();
   expect(transcript.source.height).toBeCloseTo(transcript.output.height, 1);
   expect(transcript.preset.y).toBeCloseTo(transcript.launch.y, 1);
-  expect(transcript.launch.height).toBeLessThan(transcript.preset.height);
+  expect(transcript.launch.height).toBeCloseTo(transcript.preset.height, 1);
   const headingGaps = await page.evaluate(() => {
     const gap = (labelSelector: string, headingSelector: string) => {
       const label = document.querySelector(labelSelector)!.getBoundingClientRect();
@@ -333,6 +333,7 @@ test('keeps the requested desktop card and empty-path geometry', async ({ page }
   const subtitle = await measure();
   expect(subtitle.source.height).toBeCloseTo(subtitle.output.height, 1);
   expect(subtitle.preset.y).toBeCloseTo(subtitle.launch.y, 1);
+  expect(subtitle.launch.height).toBeCloseTo(subtitle.preset.height, 1);
   expect(subtitle.launch.height).toBeCloseTo(transcript.launch.height, 1);
   await expect(
     page.locator('.subtitle-parameter-field > .parameter-field-label').first(),

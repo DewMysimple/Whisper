@@ -127,19 +127,26 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     const readActionAlignment = () =>
       actionDock.evaluate((dock) => {
         const actionRect = dock.getBoundingClientRect();
+        const footerRect = dock.querySelector('.launch-action-footer')!.getBoundingClientRect();
         const progressRect = dock.querySelector('.preflight-sources-link')!.getBoundingClientRect();
         const submitRect = dock.querySelector('.launch-submit')!.getBoundingClientRect();
         const checklistRect = dock
           .parentElement!.querySelector('.preflight-list')!
           .getBoundingClientRect();
+        const launchCard = dock.closest('.launch-card')!.getBoundingClientRect();
+        const profileCard = document
+          .querySelector('.preset-panel:not(.subtitle-profile-panel)')!
+          .getBoundingClientRect();
         return {
-          compact: actionRect.height >= 96 && actionRect.height <= 112,
+          cardsAlignAtBottom: Math.abs(launchCard.bottom - profileCard.bottom) < 1,
           belowChecklist: submitRect.top > checklistRect.bottom,
           submitFillsWidth:
             Math.abs(submitRect.left - actionRect.left) < 1 &&
             Math.abs(submitRect.right - actionRect.right) < 1,
+          submitExpands: submitRect.height > 60,
           progressBelowSubmit: progressRect.top >= submitRect.bottom,
-          progressHasHitArea: progressRect.height >= 32,
+          progressKeepsHeight:
+            Math.abs(footerRect.height - 36) < 1 && Math.abs(progressRect.height - 36) < 1,
         };
       });
     await expect(sourceProgress).toBeVisible();
@@ -147,11 +154,12 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     await expect(launch).toBeDisabled();
     await expect(summary).toHaveText('尚未添加媒体');
     expect(await readActionAlignment()).toEqual({
-      compact: true,
+      cardsAlignAtBottom: true,
       belowChecklist: true,
       submitFillsWidth: true,
+      submitExpands: true,
       progressBelowSubmit: true,
-      progressHasHitArea: true,
+      progressKeepsHeight: true,
     });
     const emptyInputLayout = await readLayout();
     await page.getByRole('button', { name: '选择媒体文件', exact: true }).click();
@@ -254,6 +262,8 @@ test('keeps subtitle launch actions within the dock at a large font size on a na
   const progress = dock.getByRole('button', { name: '查看 2 个媒体文件进度' });
   await expect(launch).toBeEnabled();
   await expect(progress).toBeEnabled();
+  expect((await launch.boundingBox())!.height).toBeCloseTo(60, 1);
+  expect((await progress.boundingBox())!.height).toBeGreaterThanOrEqual(36);
   await expect(
     dock.evaluate((element) => {
       const bounds = element.getBoundingClientRect();
