@@ -3,7 +3,7 @@ type: moc
 status: active
 kind: process
 importance: high
-updated: 2026-11-22
+updated: 2026-11-23
 topic: work-log-index
 source_logs: []
 supersedes: null
@@ -15,6 +15,7 @@ supersedes: null
 
 | 时间 | 类型 | 目标 | 状态 | 主题 | 日志 |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-23 | ui | - | archived | preflight-action-dock-layout | [[日志/2026-11-23-执行前清单操作区紧凑布局.md|执行前清单操作区紧凑布局]] |
 | 2026-11-22 | feature | - | archived | progressive-import-and-transcription-timing | [[日志/2026-11-22-渐进媒体导入与转录计时.md|渐进媒体导入与转录计时]] |
 | 2026-11-22 | operations | - | archived | promote-standard-portable-and-verify | [[日志/2026-11-22-标准便携部署与验收收口.md|标准便携部署与验收收口]] |
 | 2026-11-21 | bug | - | archived | native-media-drop-feedback | [[日志/2026-11-21-修复原生媒体拖放与检查反馈.md|修复原生媒体拖放与检查反馈]] |

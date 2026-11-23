@@ -43,6 +43,9 @@ describe('desktop workspace', () => {
     expect(within(progress).getByText('可转录 · 时长未知')).toBeInTheDocument();
     expect(within(progress).getByText('慢音频.mkv')).toBeInTheDocument();
     expect(start).toBeDisabled();
+    expect(
+      within(screen.getByRole('group', { name: '媒体进度与转录操作' })).getByText('正在检查媒体'),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '清除任务清单和正在检查的媒体' }));
     expect(cancel).toHaveBeenCalledWith(previous!.importId);
@@ -374,6 +377,98 @@ describe('desktop workspace', () => {
     await user.click(within(presetPanel!).getByRole('button', { name: /英文防幻觉/ }));
     await user.keyboard('{Control>}{Enter}{/Control}');
     expect(await screen.findByRole('heading', { name: '性能监控' })).toBeInTheDocument();
+  });
+
+  it('describes the reasons that block launch while keeping the media monitor reachable', async () => {
+    const previous = useWorkspace.getState();
+    const user = userEvent.setup();
+    useWorkspace.setState({ activeView: 'workspace', inputs: [] });
+    const { unmount } = render(<App />);
+    try {
+      const actions = within(screen.getByRole('group', { name: '媒体进度与转录操作' }));
+      const start = actions.getByRole('button', { name: '开始本地转录' });
+      expect(start).toBeDisabled();
+      expect(actions.getByRole('button', { name: '查看 0 个媒体文件进度' })).toBeDisabled();
+      await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
+      const { inputs, output, hostStatus } = useWorkspace.getState();
+      expect(start).toBeEnabled();
+
+      const blockedCases = [
+        {
+          patch: { inputs: inputs.map((input) => ({ ...input, valid: false })) },
+          reason: '输入中存在无效路径，请先在清单中处理。',
+        },
+        {
+          patch: { output: { ...output, mode: 'custom', rootDirectory: null } as const },
+          reason: '还需选择真实输出目录，完成后即可执行。',
+        },
+        {
+          patch: { hostStatus: { ...hostStatus, state: 'failed' } as const },
+          reason: '本地 Worker 连接失败，暂时无法执行任务。',
+        },
+      ];
+      for (const { patch, reason } of blockedCases) {
+        act(() => useWorkspace.setState({ inputs, output, hostStatus, ...patch }));
+        expect(start).toBeDisabled();
+        expect(start).toHaveAccessibleDescription(reason);
+        expect(actions.getByRole('status')).toHaveTextContent(reason);
+        expect(actions.getByRole('button', { name: '查看 2 个媒体文件进度' })).toBeEnabled();
+      }
+    } finally {
+      unmount();
+      useWorkspace.setState(previous);
+    }
+  });
+
+  it('shows the live preparation stages, prevents duplicate launch and lets the user cancel', async () => {
+    const previous = useWorkspace.getState();
+    const user = userEvent.setup();
+    useWorkspace.setState({
+      activeView: 'workspace',
+      inputs: [],
+      selectedPresetId: 'cn2',
+      finishAction: 'none',
+    });
+    let finishPreparation: (() => void) | undefined;
+    let reportLoading: (() => void) | undefined;
+    const start = vi
+      .spyOn(desktopBridge, 'startTranscription')
+      .mockImplementation(async (_, options) => {
+        options?.onPreparation?.('prep-ui-test', 'checking', false);
+        reportLoading = () => options?.onPreparation?.('prep-ui-test', 'loading', true);
+        await new Promise<void>((resolve) => (finishPreparation = resolve));
+        throw new Error('启动准备已取消。');
+      });
+    const cancel = vi.spyOn(desktopBridge, 'cancelStart').mockResolvedValue(true);
+    const { unmount } = render(<App />);
+    try {
+      await user.click(screen.getByRole('button', { name: '选择媒体文件' }));
+      const actions = within(screen.getByRole('group', { name: '媒体进度与转录操作' }));
+      await user.click(actions.getByRole('button', { name: '开始本地转录' }));
+      expect(await actions.findByRole('button', { name: '正在检查启动条件…' })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: '取消转录准备' })).not.toBeInTheDocument();
+
+      act(() => reportLoading?.());
+      expect(actions.getByRole('button', { name: '加载模型中…' })).toBeDisabled();
+      await user.keyboard('{Control>}{Enter}{/Control}');
+      expect(start).toHaveBeenCalledTimes(1);
+      const cancelButton = screen.getByRole('button', { name: '取消转录准备' });
+      await user.click(cancelButton);
+      expect(cancel).toHaveBeenCalledWith('prep-ui-test');
+      expect(cancelButton).toBeDisabled();
+      expect(actions.getByRole('button', { name: '取消准备中…' })).toBeDisabled();
+
+      await act(async () => finishPreparation?.());
+      expect(actions.getByRole('button', { name: '开始本地转录' })).toBeEnabled();
+      expect(actions.getByRole('button', { name: '查看 2 个媒体文件进度' })).toBeEnabled();
+      expect(screen.queryByRole('button', { name: '取消转录准备' })).not.toBeInTheDocument();
+    } finally {
+      await act(async () => finishPreparation?.());
+      unmount();
+      cancel.mockRestore();
+      start.mockRestore();
+      useWorkspace.setState(previous);
+    }
   });
 
   it('maps performance, task and runtime views to real workspace state', async () => {

@@ -162,6 +162,14 @@ export function LaunchCard() {
             : hostStatus.state !== 'ready'
               ? `${HOST_STATUS_LABEL[hostStatus.state]}，暂时无法执行任务。`
               : null;
+  const actionStatus =
+    startingTask || checkingMedia || checklistPending
+      ? checklistStatus
+      : inputs.length === 0
+        ? '尚未添加媒体'
+        : canStart
+          ? '媒体已检查 · 等待执行'
+          : '媒体已检查';
 
   useLayoutEffect(() => {
     const panel = launchPanel.current;
@@ -388,24 +396,6 @@ export function LaunchCard() {
         </div>
 
         <div className="launch-action-dock" role="group" aria-label="媒体进度与转录操作">
-          <button
-            aria-label={`查看 ${mediaCount} 个媒体文件进度`}
-            className="preflight-sources-link"
-            disabled={inputs.length === 0}
-            onClick={openInputMonitor}
-            type="button"
-          >
-            <span className="preflight-sources-copy">
-              <span className="preflight-sources-icon" aria-hidden="true">
-                <Files size={15} />
-              </span>
-              <span className="preflight-sources-label">
-                <span>查看媒体进度</span>
-                <ChevronRight aria-hidden="true" size={15} />
-              </span>
-            </span>
-          </button>
-
           <Button
             variant="primary"
             surface="flat"
@@ -419,24 +409,36 @@ export function LaunchCard() {
               <span className="launch-submit-icon" aria-hidden="true">
                 <Play fill="currentColor" size={15} />
               </span>
-              {startingTask
-                ? `${preparation.label}…`
-                : profileMode === 'subtitle'
-                  ? `开始生成 ${outputSummary}`
-                  : '开始本地转录'}
+              <span>
+                {startingTask
+                  ? `${preparation.label}…`
+                  : profileMode === 'subtitle'
+                    ? `开始生成 ${outputSummary}`
+                    : '开始本地转录'}
+              </span>
             </span>
             <kbd aria-hidden="true" className="launch-shortcut">
               CTRL + ENTER
             </kbd>
           </Button>
-          <p
-            className="launch-summary"
-            id="launch-readiness"
-            role="status"
-            aria-hidden={readinessMessage === null}
-          >
-            {readinessMessage}
-          </p>
+          <div className="launch-action-footer">
+            <p className="launch-summary">
+              <span id="launch-readiness" role="status" aria-hidden={readinessMessage === null}>
+                {readinessMessage}
+              </span>
+              {readinessMessage === null && actionStatus}
+            </p>
+            <button
+              aria-label={`查看 ${mediaCount} 个媒体文件进度`}
+              className="preflight-sources-link"
+              disabled={inputs.length === 0}
+              onClick={openInputMonitor}
+              type="button"
+            >
+              <span>查看媒体进度</span>
+              <ChevronRight aria-hidden="true" size={15} />
+            </button>
+          </div>
         </div>
       </div>
       <ConfirmDialog

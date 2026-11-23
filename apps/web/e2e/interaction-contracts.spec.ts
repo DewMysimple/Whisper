@@ -99,12 +99,13 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     await expect(page.getByLabel('执行前清单')).toBeVisible();
   });
 
-  test(`launch action tiles align with the model card without duplicate format feedback (${reducedMotion})`, async ({
+  test(`launch actions prioritize the full-width start button and preserve format feedback (${reducedMotion})`, async ({
     page,
   }, testInfo) => {
     await page.emulateMedia({ reducedMotion });
     await page.goto('/');
     const launch = page.locator('.launch-submit');
+    const readiness = page.locator('#launch-readiness');
     const summary = page.locator('.launch-summary');
     const sourceProgress = page.locator('.preflight-sources-link');
     const actionDock = page.locator('.launch-action-dock');
@@ -125,36 +126,38 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
       });
     const readActionAlignment = () =>
       actionDock.evaluate((dock) => {
-        const modelEntry = document.querySelector('.preset-panel .workspace-entry-card');
-        if (modelEntry === null) throw new Error('Model and parameters entry card was not found');
         const actionRect = dock.getBoundingClientRect();
-        const modelRect = modelEntry.getBoundingClientRect();
         const progressRect = dock.querySelector('.preflight-sources-link')!.getBoundingClientRect();
         const submitRect = dock.querySelector('.launch-submit')!.getBoundingClientRect();
-        const border = getComputedStyle(dock);
+        const checklistRect = dock
+          .parentElement!.querySelector('.preflight-list')!
+          .getBoundingClientRect();
         return {
-          topDelta: Math.abs(actionRect.top - modelRect.top),
-          heightDelta: Math.abs(actionRect.height - modelRect.height),
-          actionsSideBySide:
-            Math.abs(progressRect.top - submitRect.top) < 1 && progressRect.left < submitRect.left,
-          actionsShareHeight: Math.abs(progressRect.height - submitRect.height) < 1,
-          hasOuterFrame: border.borderTopStyle === 'solid' && parseFloat(border.borderTopWidth) > 0,
+          compact: actionRect.height >= 96 && actionRect.height <= 112,
+          belowChecklist: submitRect.top > checklistRect.bottom,
+          submitFillsWidth:
+            Math.abs(submitRect.left - actionRect.left) < 1 &&
+            Math.abs(submitRect.right - actionRect.right) < 1,
+          progressBelowSubmit: progressRect.top >= submitRect.bottom,
+          progressHasHitArea: progressRect.height >= 32,
         };
       });
     await expect(sourceProgress).toBeVisible();
     await expect(sourceProgress).toBeDisabled();
     await expect(launch).toBeDisabled();
+    await expect(summary).toHaveText('尚未添加媒体');
     expect(await readActionAlignment()).toEqual({
-      topDelta: 0,
-      heightDelta: 0,
-      actionsSideBySide: true,
-      actionsShareHeight: true,
-      hasOuterFrame: true,
+      compact: true,
+      belowChecklist: true,
+      submitFillsWidth: true,
+      progressBelowSubmit: true,
+      progressHasHitArea: true,
     });
     const emptyInputLayout = await readLayout();
     await page.getByRole('button', { name: '选择媒体文件', exact: true }).click();
     await expect(sourceProgress).toBeEnabled();
     await expect(launch).toBeEnabled();
+    await expect(summary).toHaveText('媒体已检查 · 等待执行');
     expect(await readLayout()).toEqual(emptyInputLayout);
     await launch.scrollIntoViewIfNeeded();
     const iconFrame = launch.locator('.launch-submit-icon');
@@ -182,16 +185,18 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
       await expect(launch).toHaveCSS('opacity', '1');
       await expect(launch).toHaveCSS('background-image', 'none');
       await expect(launch).toHaveCSS('box-shadow', 'none');
-      await expect(summary).toBeEmpty();
-      await expect(summary).toHaveAttribute('aria-hidden', 'true');
-      await expect(summary).not.toBeVisible();
+      await expect(summary).toHaveText('媒体已检查');
+      await expect(readiness).toBeEmpty();
+      await expect(readiness).toHaveAttribute('aria-hidden', 'true');
+      await expect(readiness).not.toBeVisible();
       await expect(launch).not.toHaveAttribute('aria-describedby', 'launch-readiness');
       await expect(page.getByText('至少选择一种需要生成的文件格式。')).toBeVisible();
       expect(await readLayout()).toEqual(readyLayout);
       await txt.check();
       await expect(launch).toBeEnabled();
-      await expect(summary).toBeEmpty();
-      await expect(summary).toHaveAttribute('aria-hidden', 'true');
+      await expect(summary).toHaveText('媒体已检查 · 等待执行');
+      await expect(readiness).toBeEmpty();
+      await expect(readiness).toHaveAttribute('aria-hidden', 'true');
       expect(await readLayout()).toEqual(readyLayout);
       await launch.scrollIntoViewIfNeeded();
       await page.mouse.move(0, 0);
@@ -218,10 +223,13 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
         expect(sample.shadow).toBe('none');
       }
       await holdWithoutMoving(page, launch);
-      await page.locator('.preflight-sources-link').focus();
+      await page.getByRole('button', { name: '前往执行方式配置' }).focus();
       await page.keyboard.press('Tab');
       await expect(launch).toBeFocused();
       await expect(launch).toHaveCSS('outline-style', 'solid');
+      await page.keyboard.press('Tab');
+      await expect(sourceProgress).toBeFocused();
+      await expect(sourceProgress).toHaveCSS('outline-style', 'solid');
     }
     await page.getByRole('button', { name: /^清除任务清单中的 \d+ 个媒体文件$/ }).click();
     await expect(sourceProgress).toBeDisabled();
@@ -229,6 +237,37 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     expect(await readLayout()).toEqual(emptyInputLayout);
   });
 }
+
+test('keeps subtitle launch actions within the dock at a large font size on a narrow window', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 620, height: 900 });
+  await page.goto('/');
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty('--workspace-font-size', '18px'),
+  );
+  await page.locator('.subtitle-profile-panel .preset-card').first().click();
+  await page.getByRole('checkbox', { name: '生成 TXT 格式' }).check();
+  await page.getByRole('button', { name: '选择媒体文件' }).click();
+  const dock = page.getByRole('group', { name: '媒体进度与转录操作' });
+  const launch = dock.getByRole('button', { name: '开始生成 SRT · TXT' });
+  const progress = dock.getByRole('button', { name: '查看 2 个媒体文件进度' });
+  await expect(launch).toBeEnabled();
+  await expect(progress).toBeEnabled();
+  await expect(
+    dock.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return [...element.querySelectorAll('button, .launch-submit-label')].every((item) => {
+        const rectangle = item.getBoundingClientRect();
+        return (
+          rectangle.left >= bounds.left &&
+          rectangle.right <= bounds.right &&
+          item.scrollWidth <= item.clientWidth + 1
+        );
+      });
+    }),
+  ).resolves.toBe(true);
+});
 
 test('connected cards retain their edges through pointer and keyboard presses', async ({
   page,
